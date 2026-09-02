@@ -1,0 +1,2127 @@
+{
+  "version": 2,
+  "props": [
+    {
+      "id": "h-1",
+      "model": "garden-gate",
+      "x": 8.2,
+      "z": 5.6,
+      "rotationY": -2.8198,
+      "height": 4.5,
+      "sink": 0.12
+    },
+    {
+      "id": "h-2",
+      "model": "lotus-pond",
+      "x": -3.6,
+      "z": -6.2,
+      "rotationY": 0.4,
+      "height": 9.4,
+      "fit": "width",
+      "sink": 0.1
+    },
+    {
+      "id": "h-3",
+      "model": "timber-bridge",
+      "x": -0.9,
+      "z": -2.55,
+      "rotationY": -0.49,
+      "height": 5.4,
+      "fit": "width"
+    },
+    {
+      "id": "h-4",
+      "model": "mossy-burrow",
+      "x": -13.6,
+      "z": 0.6,
+      "rotationY": 0.62,
+      "height": 2.7,
+      "sink": 0.08
+    },
+    {
+      "id": "h-5",
+      "model": "mosslit-stones",
+      "x": 5.4,
+      "z": 2.2,
+      "rotationY": 0.9,
+      "height": 0.58,
+      "fit": "width",
+      "sink": 0.35
+    },
+    {
+      "id": "h-6",
+      "model": "rustic-bench",
+      "x": -6.4,
+      "z": -3.4,
+      "rotationY": 1.2,
+      "height": 0.82
+    },
+    {
+      "id": "h-7",
+      "model": "rustic-bench",
+      "x": 6.4,
+      "z": 3.8,
+      "rotationY": 3.6,
+      "height": 0.82
+    },
+    {
+      "id": "h-8",
+      "model": "wooden-fence",
+      "x": 6,
+      "z": 6.8,
+      "rotationY": -0.7854,
+      "height": 1.15
+    },
+    {
+      "id": "h-9",
+      "model": "wooden-fence",
+      "x": 4.9,
+      "z": 5.5,
+      "rotationY": -0.9505,
+      "height": 1.15
+    },
+    {
+      "id": "h-10",
+      "model": "wooden-fence",
+      "x": -8.3,
+      "z": -4,
+      "rotationY": -1.0122,
+      "height": 1.15
+    },
+    {
+      "id": "h-11",
+      "model": "wooden-fence",
+      "x": 10.9,
+      "z": 1.5,
+      "rotationY": 4.3906,
+      "height": 1.15
+    },
+    {
+      "id": "h-13",
+      "model": "verdant-glow",
+      "x": 11.172,
+      "z": 6.409,
+      "rotationY": 3.8302,
+      "height": 0.9
+    },
+    {
+      "id": "h-14",
+      "model": "lp_bush_bloom_01",
+      "x": 7.187,
+      "z": 7.738,
+      "rotationY": 4.6927,
+      "height": 0.92
+    },
+    {
+      "id": "h-15",
+      "model": "garden-blooms",
+      "x": 6.883,
+      "z": 6.442,
+      "rotationY": 5.1584,
+      "height": 0.72
+    },
+    {
+      "id": "h-16",
+      "model": "lp_bush_bloom_01",
+      "x": 6.794,
+      "z": 6.489,
+      "rotationY": 6.1064,
+      "height": 0.92
+    },
+    {
+      "id": "h-17",
+      "model": "garden-blooms",
+      "x": 8.345,
+      "z": 2.71,
+      "rotationY": 0.5563,
+      "height": 0.72
+    },
+    {
+      "id": "h-18",
+      "model": "verdant-glow",
+      "x": 9.173,
+      "z": 2.065,
+      "rotationY": 3.3831,
+      "height": 0.9
+    },
+    {
+      "id": "h-19",
+      "model": "lp_bush_bloom_01",
+      "x": 5.858,
+      "z": 4.644,
+      "rotationY": 5.815,
+      "height": 0.92
+    },
+    {
+      "id": "h-20",
+      "model": "garden-blooms",
+      "x": 4.746,
+      "z": 3.004,
+      "rotationY": 3.898,
+      "height": 0.72
+    },
+    {
+      "id": "h-21",
+      "model": "garden-blooms",
+      "x": -1.834,
+      "z": -1.379,
+      "rotationY": 2.8122,
+      "height": 0.72
+    },
+    {
+      "id": "h-22",
+      "model": "garden-blooms",
+      "x": -0.993,
+      "z": -4.637,
+      "rotationY": 2.9704,
+      "height": 0.72
+    },
+    {
+      "id": "h-23",
+      "model": "verdant-glow",
+      "x": -0.192,
+      "z": -5.315,
+      "rotationY": 4.3912,
+      "height": 0.9
+    },
+    {
+      "id": "h-24",
+      "model": "lp_bush_bloom_01",
+      "x": -3.398,
+      "z": -2.602,
+      "rotationY": 4.5457,
+      "height": 0.92
+    },
+    {
+      "id": "h-25",
+      "model": "garden-blooms",
+      "x": -4.698,
+      "z": -4.438,
+      "rotationY": 5.3276,
+      "height": 0.72
+    },
+    {
+      "id": "h-26",
+      "model": "lp_bush_bloom_01",
+      "x": -4.792,
+      "z": -4.403,
+      "rotationY": 6.2824,
+      "height": 0.92
+    },
+    {
+      "id": "h-27",
+      "model": "garden-blooms",
+      "x": -3.8,
+      "z": -6.6,
+      "rotationY": 1.2408,
+      "height": 0.72
+    },
+    {
+      "id": "h-28",
+      "model": "verdant-glow",
+      "x": -3.8,
+      "z": -6.6,
+      "rotationY": 3.9707,
+      "height": 0.9
+    },
+    {
+      "id": "h-29",
+      "model": "lp_tree_04",
+      "x": 27.946,
+      "z": -2.76,
+      "rotationY": 1.0793,
+      "height": 4.9
+    },
+    {
+      "id": "h-30",
+      "model": "lp_bush_01",
+      "x": 29.764,
+      "z": -1.926,
+      "rotationY": 6.1007,
+      "height": 0.95
+    },
+    {
+      "id": "h-31",
+      "model": "lp_tree_01",
+      "x": 27.384,
+      "z": 2.766,
+      "rotationY": 6.278,
+      "height": 5.1000000000000005
+    },
+    {
+      "id": "h-32",
+      "model": "lp_pine_02",
+      "x": 3.263621380247168,
+      "z": 19.653473288358562,
+      "rotationY": 2.1559,
+      "height": 7.054300000000002
+    },
+    {
+      "id": "h-33",
+      "model": "lp_tree_04",
+      "x": -1.831,
+      "z": 17.84,
+      "rotationY": 2.9893,
+      "height": 5.5
+    },
+    {
+      "id": "h-34",
+      "model": "lp_tree_01",
+      "x": -6.734,
+      "z": 18.744,
+      "rotationY": 4.3792,
+      "height": 5.7
+    },
+    {
+      "id": "h-35",
+      "model": "lp_bush_01",
+      "x": -7.906,
+      "z": 20.365,
+      "rotationY": 1.9868,
+      "height": 0.95
+    },
+    {
+      "id": "h-36",
+      "model": "lp_tree_03",
+      "x": -12.235,
+      "z": 18.925,
+      "rotationY": 1.518,
+      "height": 4.9
+    },
+    {
+      "id": "h-37",
+      "model": "lp_pine_02",
+      "x": -17.861,
+      "z": 17.588,
+      "rotationY": 4.5737,
+      "height": 5.1000000000000005
+    },
+    {
+      "id": "h-38",
+      "model": "lp_tree_04",
+      "x": -22.159,
+      "z": 13.87,
+      "rotationY": 0.2085,
+      "height": 5.300000000000001
+    },
+    {
+      "id": "h-39",
+      "model": "lp_bush_01",
+      "x": -24.034,
+      "z": 14.566,
+      "rotationY": 1.1047,
+      "height": 0.95
+    },
+    {
+      "id": "h-40",
+      "model": "lp_tree_01",
+      "x": -25.591,
+      "z": 9.282,
+      "rotationY": 3.9251,
+      "height": 5.5
+    },
+    {
+      "id": "h-41",
+      "model": "lp_tree_03",
+      "x": -30.939483601423465,
+      "z": 5.653721337103283,
+      "rotationY": 4.2892,
+      "height": 5.7
+    },
+    {
+      "id": "h-42",
+      "model": "lp_pine_02",
+      "x": -29.961009079092765,
+      "z": -1.97045542689097,
+      "rotationY": 5.6157,
+      "height": 10.503585169000008
+    },
+    {
+      "id": "h-43",
+      "model": "lp_bush_01",
+      "x": -27.534,
+      "z": -2.472,
+      "rotationY": 0.2352,
+      "height": 0.95
+    },
+    {
+      "id": "h-44",
+      "model": "lp_tree_04",
+      "x": -23.778,
+      "z": -6.906,
+      "rotationY": 5.9298,
+      "height": 5.1000000000000005
+    },
+    {
+      "id": "h-45",
+      "model": "lp_tree_01",
+      "x": -27.455705795219973,
+      "z": -14.401532752765306,
+      "rotationY": 0.4964,
+      "height": 5.300000000000001
+    },
+    {
+      "id": "h-46",
+      "model": "lp_tree_03",
+      "x": -22.174785343477847,
+      "z": -27.4422757292013,
+      "rotationY": 3.5734,
+      "height": 5.5
+    },
+    {
+      "id": "h-47",
+      "model": "lp_bush_01",
+      "x": -21.605,
+      "z": -16.818,
+      "rotationY": 1.593,
+      "height": 0.95
+    },
+    {
+      "id": "h-48",
+      "model": "lp_pine_02",
+      "x": -18.5,
+      "z": -19.628,
+      "rotationY": 3.1437,
+      "height": 5.7
+    },
+    {
+      "id": "h-49",
+      "model": "lp_tree_04",
+      "x": -16.021,
+      "z": -23.814,
+      "rotationY": 1.0404,
+      "height": 4.9
+    },
+    {
+      "id": "h-50",
+      "model": "lp_tree_01",
+      "x": -15.231450287624659,
+      "z": -36.98931967332835,
+      "rotationY": 0.8167,
+      "height": 10.932302931000008
+    },
+    {
+      "id": "h-51",
+      "model": "lp_bush_01",
+      "x": -13.402,
+      "z": -30.42,
+      "rotationY": 0.8116,
+      "height": 0.95
+    },
+    {
+      "id": "h-52",
+      "model": "lp_tree_03",
+      "x": -8.974,
+      "z": -32.756,
+      "rotationY": 0.5075,
+      "height": 5.300000000000001
+    },
+    {
+      "id": "h-53",
+      "model": "lp_pine_02",
+      "x": -3.437,
+      "z": -34.409,
+      "rotationY": 1.8804,
+      "height": 5.5
+    },
+    {
+      "id": "h-54",
+      "model": "lp_tree_04",
+      "x": 2.339,
+      "z": -34.169,
+      "rotationY": 0.4329,
+      "height": 5.7
+    },
+    {
+      "id": "h-55",
+      "model": "lp_bush_01",
+      "x": 3.172,
+      "z": -35.987,
+      "rotationY": 1.7026,
+      "height": 0.95
+    },
+    {
+      "id": "h-56",
+      "model": "lp_tree_01",
+      "x": 7.485,
+      "z": -31.391,
+      "rotationY": 2.3055,
+      "height": 7.891499000000003
+    },
+    {
+      "id": "h-57",
+      "model": "lp_tree_03",
+      "x": 11.746,
+      "z": -27.97,
+      "rotationY": 2.9067,
+      "height": 5.1000000000000005
+    },
+    {
+      "id": "h-58",
+      "model": "lp_pine_02",
+      "x": 15.02,
+      "z": -23.995,
+      "rotationY": 2.934,
+      "height": 5.300000000000001
+    },
+    {
+      "id": "h-59",
+      "model": "lp_bush_01",
+      "x": 16.723,
+      "z": -25.044,
+      "rotationY": 1.467,
+      "height": 0.95
+    },
+    {
+      "id": "h-60",
+      "model": "lp_tree_04",
+      "x": 16.765,
+      "z": -19.276,
+      "rotationY": 3.6645,
+      "height": 5.5
+    },
+    {
+      "id": "h-61",
+      "model": "lp_tree_01",
+      "x": 19.298,
+      "z": -15.77,
+      "rotationY": 3.6364,
+      "height": 5.7
+    },
+    {
+      "id": "h-62",
+      "model": "lp_tree_03",
+      "x": 22.794,
+      "z": -12.369,
+      "rotationY": 2.4881,
+      "height": 4.9
+    },
+    {
+      "id": "h-63",
+      "model": "lp_bush_01",
+      "x": 24.792,
+      "z": -12.295,
+      "rotationY": 1.4668,
+      "height": 0.95
+    },
+    {
+      "id": "h-64",
+      "model": "lp_pine_02",
+      "x": 24.976,
+      "z": -7.919,
+      "rotationY": 1.4731,
+      "height": 9.938457210000006
+    },
+    {
+      "id": "h-65",
+      "model": "sunlit-canopy",
+      "x": -16.8,
+      "z": 7.6,
+      "rotationY": 2.0635,
+      "height": 5.4
+    },
+    {
+      "id": "h-66",
+      "model": "verdant-glow",
+      "x": -15.3,
+      "z": 8.6,
+      "rotationY": 2.308,
+      "height": 0.92
+    },
+    {
+      "id": "h-67",
+      "model": "sunlit-canopy",
+      "x": -22.46600419499745,
+      "z": 4.003807867726234,
+      "rotationY": 0.7831,
+      "height": 6.655000000000001
+    },
+    {
+      "id": "h-68",
+      "model": "verdant-glow",
+      "x": -16.5,
+      "z": -2.2,
+      "rotationY": 4.4509,
+      "height": 0.92
+    },
+    {
+      "id": "h-69",
+      "model": "sunlit-canopy",
+      "x": -21.847238124606324,
+      "z": -15.081592728456855,
+      "rotationY": 0.7726,
+      "height": 6.292000000000002
+    },
+    {
+      "id": "h-70",
+      "model": "verdant-glow",
+      "x": -13.1,
+      "z": -12.8,
+      "rotationY": 1.2577,
+      "height": 0.92
+    },
+    {
+      "id": "h-71",
+      "model": "sunlit-canopy",
+      "x": -6.8,
+      "z": -19.4,
+      "rotationY": 0.5165,
+      "height": 14.006209284540015
+    },
+    {
+      "id": "h-72",
+      "model": "verdant-glow",
+      "x": -5.3,
+      "z": -18.4,
+      "rotationY": 3.29,
+      "height": 0.92
+    },
+    {
+      "id": "h-73",
+      "model": "sunlit-canopy",
+      "x": 4.2,
+      "z": -20,
+      "rotationY": 6.0636,
+      "height": 5.3
+    },
+    {
+      "id": "h-74",
+      "model": "verdant-glow",
+      "x": 5.7,
+      "z": -19,
+      "rotationY": 1.5828,
+      "height": 0.92
+    },
+    {
+      "id": "h-75",
+      "model": "sunlit-canopy",
+      "x": 13.6,
+      "z": -15.4,
+      "rotationY": 3.7108,
+      "height": 5.4
+    },
+    {
+      "id": "h-76",
+      "model": "verdant-glow",
+      "x": 15.1,
+      "z": -14.4,
+      "rotationY": 5.4971,
+      "height": 0.92
+    },
+    {
+      "id": "h-77",
+      "model": "sunlit-canopy",
+      "x": 17.8,
+      "z": -7.2,
+      "rotationY": 4.892,
+      "height": 5.2
+    },
+    {
+      "id": "h-78",
+      "model": "verdant-glow",
+      "x": 19.3,
+      "z": -6.2,
+      "rotationY": 2.0698,
+      "height": 0.92
+    },
+    {
+      "id": "h-79",
+      "model": "sunlit-canopy",
+      "x": 20.066023961865188,
+      "z": 2.5706588780085697,
+      "rotationY": 4.4366,
+      "height": 8.857805000000003
+    },
+    {
+      "id": "h-80",
+      "model": "verdant-glow",
+      "x": 19.5,
+      "z": 4.4,
+      "rotationY": 5.721,
+      "height": 0.92
+    },
+    {
+      "id": "h-81",
+      "model": "sunlit-canopy",
+      "x": -11.4,
+      "z": 12.2,
+      "rotationY": 3.3063,
+      "height": 5.3
+    },
+    {
+      "id": "h-82",
+      "model": "verdant-glow",
+      "x": -9.9,
+      "z": 13.2,
+      "rotationY": 4.0948,
+      "height": 0.92
+    },
+    {
+      "id": "h-83",
+      "model": "red-mushroom",
+      "x": -12.331,
+      "z": 2.669,
+      "rotationY": 2.9733,
+      "height": 0.28
+    },
+    {
+      "id": "h-84",
+      "model": "red-mushroom",
+      "x": -12.082,
+      "z": 2.065,
+      "rotationY": 4.2301,
+      "height": 0.28
+    },
+    {
+      "id": "h-85",
+      "model": "red-mushroom",
+      "x": -12.339,
+      "z": 2.373,
+      "rotationY": 4.4502,
+      "height": 0.28
+    },
+    {
+      "id": "h-86",
+      "model": "red-mushroom",
+      "x": 5.453,
+      "z": 2.865,
+      "rotationY": 0.083,
+      "height": 0.28
+    },
+    {
+      "id": "h-87",
+      "model": "red-mushroom",
+      "x": 6.182,
+      "z": 2.999,
+      "rotationY": 1.604,
+      "height": 0.28
+    },
+    {
+      "id": "h-88",
+      "model": "red-mushroom",
+      "x": 5.413,
+      "z": 2.938,
+      "rotationY": 3.3951,
+      "height": 0.28
+    },
+    {
+      "id": "h-89",
+      "model": "red-mushroom",
+      "x": -8.075,
+      "z": -10.625,
+      "rotationY": 2.4062,
+      "height": 0.28
+    },
+    {
+      "id": "h-90",
+      "model": "red-mushroom",
+      "x": -8.737,
+      "z": -10.902,
+      "rotationY": 4.5433,
+      "height": 0.28
+    },
+    {
+      "id": "h-91",
+      "model": "red-mushroom",
+      "x": -7.567,
+      "z": -10.964,
+      "rotationY": 2.0667,
+      "height": 0.28
+    },
+    {
+      "id": "h-92",
+      "model": "garden-blooms",
+      "x": 7.48,
+      "z": 6.922,
+      "rotationY": 5.1683,
+      "height": 0.6729085733181882
+    },
+    {
+      "id": "h-93",
+      "model": "garden-blooms",
+      "x": 8.071,
+      "z": 8.569,
+      "rotationY": 3.8411,
+      "height": 0.7427368403966255
+    },
+    {
+      "id": "h-94",
+      "model": "garden-blooms",
+      "x": 8.06,
+      "z": 8.916,
+      "rotationY": 5.3477,
+      "height": 0.7301363508443068
+    },
+    {
+      "id": "h-96",
+      "model": "garden-blooms",
+      "x": 5.465,
+      "z": 7.72,
+      "rotationY": 2.0199,
+      "height": 0.6602322858045071
+    },
+    {
+      "id": "h-98",
+      "model": "lp_bush_bloom_01",
+      "x": 7.539,
+      "z": 8.683,
+      "rotationY": 3.5192,
+      "height": 0.9000329913519889
+    },
+    {
+      "id": "h-99",
+      "model": "verdant-glow",
+      "x": 5.289,
+      "z": 8.59,
+      "rotationY": 5.2747,
+      "height": 0.8690747028213823
+    },
+    {
+      "id": "h-101",
+      "model": "garden-blooms",
+      "x": 6.942,
+      "z": 7.039,
+      "rotationY": 4.9107,
+      "height": 0.6374528484173819
+    },
+    {
+      "id": "h-102",
+      "model": "garden-blooms",
+      "x": 5.446,
+      "z": 6.265,
+      "rotationY": 4.881,
+      "height": 0.7178468212332965
+    },
+    {
+      "id": "h-103",
+      "model": "garden-blooms",
+      "x": 5.437,
+      "z": 6.209,
+      "rotationY": 0.3543,
+      "height": 0.8261076213161573
+    },
+    {
+      "id": "h-105",
+      "model": "verdant-glow",
+      "x": 4.828,
+      "z": 6.169,
+      "rotationY": 4.6379,
+      "height": 0.9680722199429644
+    },
+    {
+      "id": "h-106",
+      "model": "lp_bush_bloom_01",
+      "x": 6.173,
+      "z": 4.918,
+      "rotationY": 0.2205,
+      "height": 1.0868105575159768
+    },
+    {
+      "id": "h-107",
+      "model": "verdant-glow",
+      "x": 5.129,
+      "z": 6.423,
+      "rotationY": 6.216,
+      "height": 0.9395129232856583
+    },
+    {
+      "id": "h-108",
+      "model": "garden-blooms",
+      "x": 11.059,
+      "z": 5.534,
+      "rotationY": 4.3246,
+      "height": 0.8191260502026997
+    },
+    {
+      "id": "h-109",
+      "model": "garden-blooms",
+      "x": 10.684,
+      "z": 4.598,
+      "rotationY": 0.5981,
+      "height": 0.7722301748692549
+    },
+    {
+      "id": "h-110",
+      "model": "garden-blooms",
+      "x": 9.437,
+      "z": 4.722,
+      "rotationY": 5.7507,
+      "height": 0.8055712833018202
+    },
+    {
+      "id": "h-111",
+      "model": "garden-blooms",
+      "x": 11.021,
+      "z": 3.461,
+      "rotationY": 0.3908,
+      "height": 0.7466283427190512
+    },
+    {
+      "id": "h-113",
+      "model": "lp_bush_bloom_01",
+      "x": 10.557,
+      "z": 4.249,
+      "rotationY": 0.7129,
+      "height": 1.0810852025938498
+    },
+    {
+      "id": "h-116",
+      "model": "garden-blooms",
+      "x": 12.309,
+      "z": 7.304,
+      "rotationY": 3.1511,
+      "height": 0.6713364604673688
+    },
+    {
+      "id": "h-120",
+      "model": "verdant-glow",
+      "x": 11.096,
+      "z": 8.73,
+      "rotationY": 0.1182,
+      "height": 0.8676875349798272
+    },
+    {
+      "id": "h-121",
+      "model": "garden-blooms",
+      "x": 6.743,
+      "z": 3.222,
+      "rotationY": 3.2069,
+      "height": 0.8132138550582798
+    },
+    {
+      "id": "h-123",
+      "model": "garden-blooms",
+      "x": 5.551,
+      "z": 3.555,
+      "rotationY": 4.3685,
+      "height": 0.72743033868936
+    },
+    {
+      "id": "h-125",
+      "model": "verdant-glow",
+      "x": 6.385,
+      "z": 5.156,
+      "rotationY": 5.391,
+      "height": 1.068000840556137
+    },
+    {
+      "id": "h-126",
+      "model": "lp_bush_bloom_01",
+      "x": 5.311,
+      "z": 4.989,
+      "rotationY": 6.0957,
+      "height": 1.043967411818084
+    },
+    {
+      "id": "h-127",
+      "model": "verdant-glow",
+      "x": 6.479,
+      "z": 0.202,
+      "rotationY": 4.7076,
+      "height": 0.969518147753592
+    },
+    {
+      "id": "h-128",
+      "model": "garden-blooms",
+      "x": 4.041,
+      "z": 0.985,
+      "rotationY": 2.5159,
+      "height": 0.7309514309286116
+    },
+    {
+      "id": "h-129",
+      "model": "garden-blooms",
+      "x": 4.482,
+      "z": 1.461,
+      "rotationY": 3.5303,
+      "height": 0.7842382086260863
+    },
+    {
+      "id": "h-130",
+      "model": "garden-blooms",
+      "x": 3.561,
+      "z": 1.338,
+      "rotationY": 4.242,
+      "height": 0.6373557142938738
+    },
+    {
+      "id": "h-131",
+      "model": "verdant-glow",
+      "x": 4.687,
+      "z": 3.344,
+      "rotationY": 0.3079,
+      "height": 1.0453887803406148
+    },
+    {
+      "id": "h-134",
+      "model": "garden-blooms",
+      "x": 0.901,
+      "z": -1.519,
+      "rotationY": 1.0113,
+      "height": 0.6796064403262402
+    },
+    {
+      "id": "h-137",
+      "model": "verdant-glow",
+      "x": 0.164,
+      "z": 0.348,
+      "rotationY": 0.2963,
+      "height": 1.0622132126336625
+    },
+    {
+      "id": "h-139",
+      "model": "garden-blooms",
+      "x": 5.509,
+      "z": -1.022,
+      "rotationY": 0.1977,
+      "height": 0.6210077818043939
+    },
+    {
+      "id": "h-140",
+      "model": "garden-blooms",
+      "x": 5.289,
+      "z": -1.053,
+      "rotationY": 5.0729,
+      "height": 0.7926851776249136
+    },
+    {
+      "id": "h-141",
+      "model": "garden-blooms",
+      "x": 5.982,
+      "z": -2.33,
+      "rotationY": 5.1836,
+      "height": 0.7592978557900543
+    },
+    {
+      "id": "h-143",
+      "model": "lp_bush_bloom_01",
+      "x": 6.696,
+      "z": -0.691,
+      "rotationY": 1.1206,
+      "height": 1.0286911265394554
+    },
+    {
+      "id": "h-145",
+      "model": "garden-blooms",
+      "x": -7.49,
+      "z": -4.463,
+      "rotationY": 5.9049,
+      "height": 0.7470306017693722
+    },
+    {
+      "id": "h-146",
+      "model": "garden-blooms",
+      "x": -7.901,
+      "z": -3.649,
+      "rotationY": 1.2291,
+      "height": 0.7424786626726569
+    },
+    {
+      "id": "h-147",
+      "model": "garden-blooms",
+      "x": -7.044,
+      "z": -5.297,
+      "rotationY": 6.246,
+      "height": 0.7550524916077247
+    },
+    {
+      "id": "h-148",
+      "model": "garden-blooms",
+      "x": -7.313,
+      "z": -3.223,
+      "rotationY": 4.048,
+      "height": 0.6947070162912791
+    },
+    {
+      "id": "h-149",
+      "model": "garden-blooms",
+      "x": -6.367,
+      "z": -3.48,
+      "rotationY": 1.3395,
+      "height": 0.7926852825387032
+    },
+    {
+      "id": "h-150",
+      "model": "verdant-glow",
+      "x": -7.537,
+      "z": -3.645,
+      "rotationY": 4.2108,
+      "height": 0.8895252990438298
+    },
+    {
+      "id": "h-151",
+      "model": "lp_bush_bloom_01",
+      "x": -5.945,
+      "z": -6.125,
+      "rotationY": 1.9004,
+      "height": 0.9617394478850705
+    },
+    {
+      "id": "h-152",
+      "model": "verdant-glow",
+      "x": -6.633,
+      "z": -2.109,
+      "rotationY": 4.2836,
+      "height": 0.9699629075595116
+    },
+    {
+      "id": "h-153",
+      "model": "lp_bush_01",
+      "x": -7.002,
+      "z": -3.507,
+      "rotationY": 1.859,
+      "height": 0.8523049133078658
+    },
+    {
+      "id": "h-154",
+      "model": "garden-blooms",
+      "x": -2.478,
+      "z": -7.799,
+      "rotationY": 4.3433,
+      "height": 0.7556803574630742
+    },
+    {
+      "id": "h-155",
+      "model": "garden-blooms",
+      "x": -0.198,
+      "z": -9.578,
+      "rotationY": 5.0566,
+      "height": 0.7711498909955434
+    },
+    {
+      "id": "h-156",
+      "model": "garden-blooms",
+      "x": -2.517,
+      "z": -8.7,
+      "rotationY": 5.6148,
+      "height": 0.8213439569189571
+    },
+    {
+      "id": "h-157",
+      "model": "garden-blooms",
+      "x": -2.748,
+      "z": -7.226,
+      "rotationY": 4.7233,
+      "height": 0.7145106406103431
+    },
+    {
+      "id": "h-158",
+      "model": "verdant-glow",
+      "x": 0.449,
+      "z": -8.117,
+      "rotationY": 2.7561,
+      "height": 1.0867013176608584
+    },
+    {
+      "id": "h-159",
+      "model": "lp_bush_bloom_01",
+      "x": -0.007,
+      "z": -9.87,
+      "rotationY": 0.4806,
+      "height": 0.8551079738445257
+    },
+    {
+      "id": "h-160",
+      "model": "verdant-glow",
+      "x": -2.636,
+      "z": -6.171,
+      "rotationY": 3.7558,
+      "height": 1.0142468259964936
+    },
+    {
+      "id": "h-161",
+      "model": "garden-blooms",
+      "x": -5.588,
+      "z": -9.54,
+      "rotationY": 2.8009,
+      "height": 0.6521542542211305
+    },
+    {
+      "id": "h-162",
+      "model": "garden-blooms",
+      "x": -5.643,
+      "z": -9.163,
+      "rotationY": 1.8476,
+      "height": 0.7284186885280051
+    },
+    {
+      "id": "h-163",
+      "model": "garden-blooms",
+      "x": -6.542,
+      "z": -8.372,
+      "rotationY": 1.6081,
+      "height": 0.8195914347908863
+    },
+    {
+      "id": "h-164",
+      "model": "garden-blooms",
+      "x": -6.035,
+      "z": -9.456,
+      "rotationY": 0.1534,
+      "height": 0.7138123362762798
+    },
+    {
+      "id": "h-165",
+      "model": "verdant-glow",
+      "x": -7.659,
+      "z": -9.706,
+      "rotationY": 1.2591,
+      "height": 0.9579143755727477
+    },
+    {
+      "id": "h-166",
+      "model": "lp_bush_bloom_01",
+      "x": -6.758,
+      "z": -9.46,
+      "rotationY": 3.0342,
+      "height": 1.0833479615519643
+    },
+    {
+      "id": "h-167",
+      "model": "verdant-glow",
+      "x": -7.399,
+      "z": -9.804,
+      "rotationY": 0.1887,
+      "height": 0.8554551141165356
+    },
+    {
+      "id": "h-168",
+      "model": "garden-blooms",
+      "x": -0.38,
+      "z": -6.365,
+      "rotationY": 3.3786,
+      "height": 0.6811318217908497
+    },
+    {
+      "id": "h-169",
+      "model": "garden-blooms",
+      "x": 0.638,
+      "z": -6.081,
+      "rotationY": 3.671,
+      "height": 0.7340286911333397
+    },
+    {
+      "id": "h-170",
+      "model": "garden-blooms",
+      "x": 0.116,
+      "z": -5.521,
+      "rotationY": 3.6213,
+      "height": 0.7659229279653508
+    },
+    {
+      "id": "h-171",
+      "model": "verdant-glow",
+      "x": -0.431,
+      "z": -6.272,
+      "rotationY": 4.9863,
+      "height": 1.057186193317421
+    },
+    {
+      "id": "h-172",
+      "model": "lp_bush_bloom_01",
+      "x": -0.629,
+      "z": -2.73,
+      "rotationY": 3.4269,
+      "height": 0.8631399235538595
+    },
+    {
+      "id": "h-173",
+      "model": "verdant-glow",
+      "x": 0.775,
+      "z": -4.611,
+      "rotationY": 4.4323,
+      "height": 1.0096004766413549
+    },
+    {
+      "id": "h-174",
+      "model": "garden-blooms",
+      "x": -12.986,
+      "z": 2.303,
+      "rotationY": 2.8177,
+      "height": 0.7399020910672144
+    },
+    {
+      "id": "h-175",
+      "model": "garden-blooms",
+      "x": -12.986,
+      "z": 2.906,
+      "rotationY": 2.3233,
+      "height": 0.7216713380899321
+    },
+    {
+      "id": "h-176",
+      "model": "garden-blooms",
+      "x": -11.341,
+      "z": 3.031,
+      "rotationY": 4.9823,
+      "height": 0.6824567064448056
+    },
+    {
+      "id": "h-177",
+      "model": "garden-blooms",
+      "x": -10.669,
+      "z": 1.76,
+      "rotationY": 2.9947,
+      "height": 0.6925574477537018
+    },
+    {
+      "id": "h-178",
+      "model": "verdant-glow",
+      "x": -12.283,
+      "z": 0.991,
+      "rotationY": 0.2771,
+      "height": 1.049848722721629
+    },
+    {
+      "id": "h-179",
+      "model": "lp_bush_bloom_01",
+      "x": -10.434,
+      "z": 1.837,
+      "rotationY": 3.7729,
+      "height": 1.0433650858072419
+    },
+    {
+      "id": "h-180",
+      "model": "verdant-glow",
+      "x": -11.289,
+      "z": 0.931,
+      "rotationY": 1.294,
+      "height": 0.8727571706269271
+    },
+    {
+      "id": "h-181",
+      "model": "garden-blooms",
+      "x": -11.449,
+      "z": -3.173,
+      "rotationY": 3.0589,
+      "height": 0.6701733697384802
+    },
+    {
+      "id": "h-182",
+      "model": "garden-blooms",
+      "x": -11.229,
+      "z": -2.071,
+      "rotationY": 4.8016,
+      "height": 0.6718159139414578
+    },
+    {
+      "id": "h-183",
+      "model": "garden-blooms",
+      "x": -10.706,
+      "z": -0.575,
+      "rotationY": 3.1214,
+      "height": 0.7508092962722712
+    },
+    {
+      "id": "h-184",
+      "model": "verdant-glow",
+      "x": -9.815,
+      "z": -1.728,
+      "rotationY": 1.1772,
+      "height": 0.9522881775195076
+    },
+    {
+      "id": "h-185",
+      "model": "lp_bush_bloom_01",
+      "x": -11.04,
+      "z": -2.014,
+      "rotationY": 2.2963,
+      "height": 0.8539997845391226
+    },
+    {
+      "id": "h-186",
+      "model": "verdant-glow",
+      "x": -10.975,
+      "z": -2.385,
+      "rotationY": 0.5719,
+      "height": 0.9669920349653558
+    },
+    {
+      "id": "h-187",
+      "model": "garden-blooms",
+      "x": 11.846,
+      "z": 3.27,
+      "rotationY": 0.6022,
+      "height": 0.8091193802649003
+    },
+    {
+      "id": "h-188",
+      "model": "garden-blooms",
+      "x": 13.305,
+      "z": 1.082,
+      "rotationY": 2.308,
+      "height": 0.6498289004238926
+    },
+    {
+      "id": "h-189",
+      "model": "garden-blooms",
+      "x": 12.873,
+      "z": 1.235,
+      "rotationY": 5.8819,
+      "height": 0.7876709589054326
+    },
+    {
+      "id": "h-190",
+      "model": "garden-blooms",
+      "x": 13.586,
+      "z": 0.583,
+      "rotationY": 0.7204,
+      "height": 0.8231443429261228
+    },
+    {
+      "id": "h-191",
+      "model": "verdant-glow",
+      "x": 11.342,
+      "z": -0.983,
+      "rotationY": 0.0963,
+      "height": 0.9804143467127682
+    },
+    {
+      "id": "h-192",
+      "model": "lp_bush_bloom_01",
+      "x": 11.803,
+      "z": 2.945,
+      "rotationY": 4.5504,
+      "height": 0.953175614501304
+    },
+    {
+      "id": "h-193",
+      "model": "verdant-glow",
+      "x": 12.574,
+      "z": 2.121,
+      "rotationY": 6.2061,
+      "height": 1.0145354831627056
+    },
+    {
+      "id": "h-194",
+      "model": "garden-blooms",
+      "x": 10.119,
+      "z": -6.046,
+      "rotationY": 4.2168,
+      "height": 0.7762147012162486
+    },
+    {
+      "id": "h-195",
+      "model": "garden-blooms",
+      "x": 11.723,
+      "z": -6.631,
+      "rotationY": 2.7375,
+      "height": 0.7747185363978275
+    },
+    {
+      "id": "h-196",
+      "model": "garden-blooms",
+      "x": 10.327,
+      "z": -5.096,
+      "rotationY": 5.7825,
+      "height": 0.6484887597498287
+    },
+    {
+      "id": "h-197",
+      "model": "verdant-glow",
+      "x": 12.474,
+      "z": -8.329,
+      "rotationY": 1.3715,
+      "height": 1.0797797599975418
+    },
+    {
+      "id": "h-198",
+      "model": "lp_bush_bloom_01",
+      "x": 9.581,
+      "z": -7.549,
+      "rotationY": 4.2817,
+      "height": 0.98586875288205
+    },
+    {
+      "id": "h-199",
+      "model": "verdant-glow",
+      "x": 13.185,
+      "z": -4.977,
+      "rotationY": 3.2211,
+      "height": 0.8564547939543908
+    },
+    {
+      "id": "h-200",
+      "model": "garden-blooms",
+      "x": -9.52,
+      "z": 6.953,
+      "rotationY": 1.7283,
+      "height": 0.6441383579288628
+    },
+    {
+      "id": "h-201",
+      "model": "garden-blooms",
+      "x": -9.372,
+      "z": 7.88,
+      "rotationY": 4.8628,
+      "height": 0.7359666710587124
+    },
+    {
+      "id": "h-202",
+      "model": "garden-blooms",
+      "x": -9.827,
+      "z": 5.375,
+      "rotationY": 3.2797,
+      "height": 0.752760302733728
+    },
+    {
+      "id": "h-203",
+      "model": "garden-blooms",
+      "x": -10.26,
+      "z": 5.718,
+      "rotationY": 2.4971,
+      "height": 0.703681527051084
+    },
+    {
+      "id": "h-204",
+      "model": "verdant-glow",
+      "x": -9.238,
+      "z": 6.983,
+      "rotationY": 2.467,
+      "height": 1.0055049087967176
+    },
+    {
+      "id": "h-205",
+      "model": "lp_bush_bloom_01",
+      "x": -11.271,
+      "z": 7.232,
+      "rotationY": 5.4967,
+      "height": 0.8883671364260668
+    },
+    {
+      "id": "h-206",
+      "model": "verdant-glow",
+      "x": -9.95,
+      "z": 5.427,
+      "rotationY": 3.591,
+      "height": 1.0788701580921374
+    },
+    {
+      "id": "h-207",
+      "model": "garden-blooms",
+      "x": 1.795,
+      "z": 7.955,
+      "rotationY": 2.8465,
+      "height": 0.8304933251918667
+    },
+    {
+      "id": "h-208",
+      "model": "garden-blooms",
+      "x": 2.128,
+      "z": 8.986,
+      "rotationY": 0.0064,
+      "height": 0.6339115722162575
+    },
+    {
+      "id": "h-209",
+      "model": "garden-blooms",
+      "x": 2.08,
+      "z": 6.953,
+      "rotationY": 1.8537,
+      "height": 0.6789924175027571
+    },
+    {
+      "id": "h-210",
+      "model": "verdant-glow",
+      "x": 2.838,
+      "z": 7.963,
+      "rotationY": 5.1744,
+      "height": 1.0751573455607955
+    },
+    {
+      "id": "h-211",
+      "model": "lp_bush_bloom_01",
+      "x": 0.434,
+      "z": 9.475,
+      "rotationY": 2.2631,
+      "height": 0.9510387339716185
+    },
+    {
+      "id": "h-212",
+      "model": "verdant-glow",
+      "x": 1.221,
+      "z": 6.663,
+      "rotationY": 0.7548,
+      "height": 1.098369773539333
+    },
+    {
+      "id": "h-213",
+      "model": "garden-blooms",
+      "x": -9.25,
+      "z": 5.562,
+      "rotationY": 6.2366,
+      "height": 0.7940421810847935
+    },
+    {
+      "id": "h-214",
+      "model": "garden-blooms",
+      "x": -8.565,
+      "z": 3.902,
+      "rotationY": 1.3685,
+      "height": 0.7878135929685381
+    },
+    {
+      "id": "h-215",
+      "model": "garden-blooms",
+      "x": -9.271,
+      "z": 4.618,
+      "rotationY": 2.6952,
+      "height": 0.6260223835888795
+    },
+    {
+      "id": "h-216",
+      "model": "verdant-glow",
+      "x": -7.847,
+      "z": 3.484,
+      "rotationY": 4.3382,
+      "height": 0.8571812519892328
+    },
+    {
+      "id": "h-217",
+      "model": "lp_bush_bloom_01",
+      "x": -8.974,
+      "z": 5.338,
+      "rotationY": 5.5465,
+      "height": 0.9006936161504259
+    },
+    {
+      "id": "h-218",
+      "model": "garden-blooms",
+      "x": 9.77,
+      "z": -10.899,
+      "rotationY": 4.3411,
+      "height": 0.7247059913483361
+    },
+    {
+      "id": "h-219",
+      "model": "garden-blooms",
+      "x": 8.239,
+      "z": -9.353,
+      "rotationY": 4.1893,
+      "height": 0.7916878688466475
+    },
+    {
+      "id": "h-220",
+      "model": "garden-blooms",
+      "x": 9.799,
+      "z": -11.051,
+      "rotationY": 5.2466,
+      "height": 0.8017930396127003
+    },
+    {
+      "id": "h-221",
+      "model": "verdant-glow",
+      "x": 8.959,
+      "z": -8.253,
+      "rotationY": 1.0091,
+      "height": 0.9889339188226904
+    },
+    {
+      "id": "h-222",
+      "model": "lp_bush_bloom_01",
+      "x": 9.084,
+      "z": -8.723,
+      "rotationY": 0.2135,
+      "height": 1.0866763697668562
+    },
+    {
+      "id": "h-223",
+      "model": "verdant-glow",
+      "x": 11.245,
+      "z": -10.768,
+      "rotationY": 3.9253,
+      "height": 0.9507432534805855
+    },
+    {
+      "id": "edit-224",
+      "model": "mosslit-stones",
+      "x": 2.919717398001477,
+      "z": 11.080871790744812,
+      "rotationY": 1.153903863789858,
+      "height": 5.634047090561965,
+      "fit": "width",
+      "sink": 0.35
+    },
+    {
+      "id": "edit-225",
+      "model": "mosslit-stones",
+      "x": -0.7397944277628712,
+      "z": 19.8717803010047,
+      "rotationY": 2.5875488762643544,
+      "height": 2.628324548196331,
+      "fit": "width",
+      "sink": 0.35
+    },
+    {
+      "id": "edit-226",
+      "model": "mosslit-stones",
+      "x": -25.964474447517855,
+      "z": -4.236785337522891,
+      "rotationY": 3.207823095668562,
+      "height": 2.628324548196331,
+      "fit": "width",
+      "sink": 0.35
+    },
+    {
+      "id": "edit-227",
+      "model": "mosslit-stones",
+      "x": -1.0347148077599464,
+      "z": -36.754821377242095,
+      "rotationY": 6.189180618142963,
+      "height": 2.628324548196331,
+      "fit": "width",
+      "sink": 0.35
+    },
+    {
+      "id": "edit-228",
+      "model": "mosslit-stones",
+      "x": 2.588854801121747,
+      "z": -5.117339871927023,
+      "rotationY": 5.002178457401364,
+      "height": 1.6319827558949214,
+      "fit": "width",
+      "sink": 0.35
+    },
+    {
+      "id": "edit-229",
+      "model": "mosslit-stones",
+      "x": -19.683889460643172,
+      "z": 3.492131116426508,
+      "rotationY": 1.058536017476576,
+      "height": 1.7951810314844137,
+      "fit": "width",
+      "sink": 0.35
+    },
+    {
+      "id": "edit-230",
+      "model": "sunlit-canopy",
+      "x": 23.54170278705921,
+      "z": 8.107129200859573,
+      "rotationY": 6.0131916412662605,
+      "height": 17.951810314844142
+    },
+    {
+      "id": "edit-231",
+      "model": "verdant-glow",
+      "x": 15.160279122336181,
+      "z": 12.42121207704347,
+      "rotationY": 3.2366439170513464,
+      "height": 2.7104608708045017
+    },
+    {
+      "id": "edit-232",
+      "model": "garden-blooms",
+      "x": -14.061798786112107,
+      "z": 15.308546783179892,
+      "rotationY": 2.0298253941669806,
+      "height": 0.72
+    },
+    {
+      "id": "edit-233",
+      "model": "garden-blooms",
+      "x": -15.063741877406123,
+      "z": 15.457928613852985,
+      "rotationY": 5.6025273667872275,
+      "height": 0.72
+    },
+    {
+      "id": "edit-234",
+      "model": "garden-blooms",
+      "x": -14.839837938187806,
+      "z": 14.51637271927359,
+      "rotationY": 2.1041843678777457,
+      "height": 0.72
+    },
+    {
+      "id": "edit-235",
+      "model": "verdant-glow",
+      "x": -16.112799499817033,
+      "z": 14.885882280234185,
+      "rotationY": 2.3534951416258427,
+      "height": 1.3908950000000002
+    },
+    {
+      "id": "edit-236",
+      "model": "garden-blooms",
+      "x": -12.410397935503122,
+      "z": -22.93339131237987,
+      "rotationY": 1.4848275113548486,
+      "height": 0.72
+    },
+    {
+      "id": "edit-237",
+      "model": "garden-blooms",
+      "x": -12.224860373073032,
+      "z": -22.11123646803504,
+      "rotationY": 5.717260581155312,
+      "height": 0.72
+    },
+    {
+      "id": "edit-238",
+      "model": "mossflower-hollow",
+      "x": -1.1247906864630783,
+      "z": -25.406736095524405,
+      "rotationY": 5.782263533627565,
+      "height": 7.122208128853694,
+      "sink": 0.08
+    },
+    {
+      "id": "edit-239",
+      "model": "garden-blooms",
+      "x": 2.0047104687465285,
+      "z": -20.462773031737672,
+      "rotationY": 3.9455997152758355,
+      "height": 0.72
+    },
+    {
+      "id": "edit-240",
+      "model": "garden-blooms",
+      "x": 0.6689923826753872,
+      "z": -19.84377318128951,
+      "rotationY": 2.4532333329880993,
+      "height": 0.72
+    },
+    {
+      "id": "edit-241",
+      "model": "garden-blooms",
+      "x": -4.634138797074392,
+      "z": -22.092621085280953,
+      "rotationY": 6.094617076062743,
+      "height": 0.72
+    },
+    {
+      "id": "edit-242",
+      "model": "garden-blooms",
+      "x": 1.6890681321149035,
+      "z": -19.75770371461592,
+      "rotationY": 0.8252616667764132,
+      "height": 0.72
+    },
+    {
+      "id": "edit-243",
+      "model": "garden-blooms",
+      "x": 3.0089837586545167,
+      "z": -23.420789804833493,
+      "rotationY": 1.3675293553702415,
+      "height": 0.72
+    },
+    {
+      "id": "edit-244",
+      "model": "garden-blooms",
+      "x": -7.416484352892832,
+      "z": -25.667943743596435,
+      "rotationY": 0.026975105329509603,
+      "height": 1.2755239200000006
+    },
+    {
+      "id": "edit-245",
+      "model": "garden-blooms",
+      "x": -6.916234220256916,
+      "z": -24.221886336516096,
+      "rotationY": 0.6300488760473074,
+      "height": 0.72
+    },
+    {
+      "id": "edit-246",
+      "model": "verdant-glow",
+      "x": -8.36585080672353,
+      "z": -23.809776443973085,
+      "rotationY": 5.591830836903869,
+      "height": 1.26445
+    },
+    {
+      "id": "edit-247",
+      "model": "garden-blooms",
+      "x": 1.228920966892749,
+      "z": 23.461885611176612,
+      "rotationY": 2.3414379671083263,
+      "height": 2.259668431239122
+    },
+    {
+      "id": "edit-248",
+      "model": "sunlit-canopy",
+      "x": 38.37693024735857,
+      "z": -117.50048024964403,
+      "rotationY": 0.2101033578766644,
+      "height": 5.2
+    },
+    {
+      "id": "edit-249",
+      "model": "sunlit-canopy",
+      "x": 18.349482163859083,
+      "z": 14.448323641745649,
+      "rotationY": 0.3900703007299788,
+      "height": 6.851988000000003
+    },
+    {
+      "id": "edit-250",
+      "model": "sunlit-canopy",
+      "x": -29.82485716708689,
+      "z": -9.128287674685389,
+      "rotationY": 4.250378058225972,
+      "height": 6.292000000000002
+    },
+    {
+      "id": "edit-251",
+      "model": "sunlit-canopy",
+      "x": -22.938928853180183,
+      "z": -10.896377340643358,
+      "rotationY": 3.063829670553423,
+      "height": 5.2
+    },
+    {
+      "id": "edit-252",
+      "model": "sunlit-canopy",
+      "x": -16.23400590680417,
+      "z": 11.900192307162179,
+      "rotationY": 5.646258098769972,
+      "height": 5.2
+    },
+    {
+      "id": "edit-253",
+      "model": "sunlit-canopy",
+      "x": -23.2265658371749,
+      "z": 0.6997901645533675,
+      "rotationY": 5.546240688764427,
+      "height": 5.2
+    },
+    {
+      "id": "edit-254",
+      "model": "sunlit-canopy",
+      "x": -24.726775401972905,
+      "z": -2.521535341248295,
+      "rotationY": 6.102475930732106,
+      "height": 5.720000000000001
+    },
+    {
+      "id": "edit-255",
+      "model": "rock_medium_01",
+      "x": -22.97337451929419,
+      "z": -13.941243816643862,
+      "rotationY": 2.218035318224098,
+      "height": 1.7951810314844137,
+      "fit": "width",
+      "sink": 0.35
+    },
+    {
+      "id": "edit-256",
+      "model": "rock_medium_01",
+      "x": -21.637640680483756,
+      "z": -13.276873573138046,
+      "rotationY": 1.326476291901783,
+      "height": 1.2261327993200009,
+      "fit": "width",
+      "sink": 0.35
+    },
+    {
+      "id": "edit-257",
+      "model": "rock_medium_01",
+      "x": -22.25925747461914,
+      "z": -12.232961480868642,
+      "rotationY": 1.0770285735340068,
+      "height": 1.0133328920000007,
+      "fit": "width",
+      "sink": 0.35
+    }
+  ],
+  "paths": [
+    {
+      "id": "path-main",
+      "points": [
+        [
+          8.8,
+          7.2
+        ],
+        [
+          8.675,
+          6.825
+        ],
+        [
+          8.55,
+          6.45
+        ],
+        [
+          8.425,
+          6.075
+        ],
+        [
+          8.3,
+          5.7
+        ],
+        [
+          8.117,
+          5.35
+        ],
+        [
+          7.933,
+          5
+        ],
+        [
+          7.75,
+          4.65
+        ],
+        [
+          7.567,
+          4.3
+        ],
+        [
+          7.383,
+          3.95
+        ],
+        [
+          7.2,
+          3.6
+        ],
+        [
+          6.967,
+          3.3
+        ],
+        [
+          6.733,
+          3
+        ],
+        [
+          6.5,
+          2.7
+        ],
+        [
+          6.267,
+          2.4
+        ],
+        [
+          6.033,
+          2.1
+        ],
+        [
+          5.8,
+          1.8
+        ],
+        [
+          5.48,
+          1.52
+        ],
+        [
+          5.16,
+          1.24
+        ],
+        [
+          4.84,
+          0.96
+        ],
+        [
+          4.52,
+          0.68
+        ],
+        [
+          4.2,
+          0.4
+        ],
+        [
+          3.84,
+          0.16
+        ],
+        [
+          3.48,
+          -0.08
+        ],
+        [
+          3.12,
+          -0.32
+        ],
+        [
+          2.76,
+          -0.56
+        ],
+        [
+          2.4,
+          -0.8
+        ],
+        [
+          2.06,
+          -1
+        ],
+        [
+          1.72,
+          -1.2
+        ],
+        [
+          1.38,
+          -1.4
+        ],
+        [
+          1.04,
+          -1.6
+        ],
+        [
+          0.7,
+          -1.8
+        ],
+        [
+          0.325,
+          -2
+        ],
+        [
+          -0.05,
+          -2.2
+        ],
+        [
+          -0.425,
+          -2.4
+        ],
+        [
+          -0.8,
+          -2.6
+        ],
+        [
+          -1.125,
+          -2.875
+        ],
+        [
+          -1.45,
+          -3.15
+        ],
+        [
+          -1.775,
+          -3.425
+        ],
+        [
+          -2.1,
+          -3.7
+        ],
+        [
+          -2.375,
+          -4.025
+        ],
+        [
+          -2.65,
+          -4.35
+        ],
+        [
+          -2.925,
+          -4.675
+        ],
+        [
+          -3.2,
+          -5
+        ],
+        [
+          -3.35,
+          -5.4
+        ],
+        [
+          -3.5,
+          -5.8
+        ],
+        [
+          -3.65,
+          -6.2
+        ],
+        [
+          -3.8,
+          -6.6
+        ]
+      ],
+      "width": 2.25
+    }
+  ]
+}

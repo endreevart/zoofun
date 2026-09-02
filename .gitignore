@@ -1,0 +1,88 @@
+# Secrets and local environment
+.env
+.env.local
+.env.*.local
+*.pem
+*.p12
+*.key
+*.p8
+credentials.json
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+dist/
+build/
+
+# Unity generated folders (project will live under client/)
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+client/**/[Ll]ibrary/
+client/**/[Tt]emp/
+client/**/[Oo]bj/
+client/**/[Bb]uild/
+client/**/[Bb]uilds/
+client/**/[Ll]ogs/
+client/**/[Uu]ser[Ss]ettings/
+
+# Unity / IDE noise
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# Test outputs
+**/TestResults/
+**/test-results/
+coverage/
+
+# Node
+node_modules/
+
+# Archives and temporary handoff artifacts
+*.zip
+*.zip.sha256
+*.tgz
+*.tar.gz
+outputs/
+exports/
+handoff/*.tmp
+handoff/*.log
+handoff/.tmp*
+
+# GitHub rejects files over 100 MB
+**/UNS_HDRI.hdr

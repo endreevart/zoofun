@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000008",
+  "revision": 1,
+  "displayName": "Закатный дино",
+  "locomotion": "walk",
+  "scaleClass": "large",
+  "scale": 1.3,
+  "moveSpeed": 1.05,
+  "turnSpeed": 220,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "2f483fdc78b33cf208d859313abc4a0a5d4c514584a94155b0f10a49ca0526a5" }
+  }
+}

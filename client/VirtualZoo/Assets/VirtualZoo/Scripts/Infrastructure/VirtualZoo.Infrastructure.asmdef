@@ -1,0 +1,17 @@
+{
+  "name": "VirtualZoo.Infrastructure",
+  "rootNamespace": "VirtualZoo.Infrastructure",
+  "references": [
+    "VirtualZoo.Domain",
+    "VirtualZoo.Application"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

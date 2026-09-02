@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000006",
+  "revision": 1,
+  "displayName": "Карамельная лошадка",
+  "locomotion": "walk",
+  "scaleClass": "large",
+  "scale": 1.22,
+  "moveSpeed": 1.4,
+  "turnSpeed": 220,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "37f606aff804f3ea49b5732b483868ab38888e112b0a4833b3076c6644ac729b" }
+  }
+}

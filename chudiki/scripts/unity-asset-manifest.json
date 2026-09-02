@@ -1,0 +1,373 @@
+{
+  "comment": "Curated meshes from client/VirtualZoo/Assets used in ZooReferenceGarden. Unity Asset Store packs stay embedded in this game; they are not a redistributable kit.",
+  "assetsRoot": "../../client/VirtualZoo/Assets",
+  "outDir": "../public/models/garden",
+  "textureOutDir": "../public/textures/garden",
+  "maxTexturePx": 1024,
+  "models": [
+    {
+      "name": "tree_cloud_a",
+      "src": "VirtualZoo/Art/PremiumPrototype/tree_cloud_a.fbx",
+      "maps": { "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png", "bark": "VirtualZoo/Art/PremiumPrototype/Textures/bark.png" }
+    },
+    {
+      "name": "tree_cloud_b",
+      "src": "VirtualZoo/Art/PremiumPrototype/tree_cloud_b.fbx",
+      "maps": { "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png", "bark": "VirtualZoo/Art/PremiumPrototype/Textures/bark.png" }
+    },
+    {
+      "name": "tree_cloud_c",
+      "src": "VirtualZoo/Art/PremiumPrototype/tree_cloud_c.fbx",
+      "maps": { "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png", "bark": "VirtualZoo/Art/PremiumPrototype/Textures/bark.png" }
+    },
+    {
+      "name": "bush_round_a",
+      "src": "VirtualZoo/Art/PremiumPrototype/bush_round_a.fbx",
+      "maps": { "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png" },
+      "alpha": true
+    },
+    {
+      "name": "bush_round_b",
+      "src": "VirtualZoo/Art/PremiumPrototype/bush_round_b.fbx",
+      "maps": { "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png" },
+      "alpha": true
+    },
+    {
+      "name": "flower_cluster_a",
+      "src": "VirtualZoo/Art/PremiumPrototype/flower_cluster_a.fbx",
+      "maps": { "petal": "VirtualZoo/Art/PremiumPrototype/Textures/petal.png", "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png" }
+    },
+    {
+      "name": "flower_cluster_b",
+      "src": "VirtualZoo/Art/PremiumPrototype/flower_cluster_b.fbx",
+      "maps": { "petal": "VirtualZoo/Art/PremiumPrototype/Textures/petal.png", "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png" }
+    },
+    {
+      "name": "flower_cluster_c",
+      "src": "VirtualZoo/Art/PremiumPrototype/flower_cluster_c.fbx",
+      "maps": { "petal": "VirtualZoo/Art/PremiumPrototype/Textures/petal.png", "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png" }
+    },
+    {
+      "name": "grass_tuft",
+      "src": "VirtualZoo/Art/PremiumPrototype/grass_tuft.fbx",
+      "maps": { "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/grass.png" },
+      "alpha": true
+    },
+    {
+      "name": "reed_cluster",
+      "src": "VirtualZoo/Art/PremiumPrototype/reed_cluster.fbx",
+      "maps": { "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png" },
+      "alpha": true
+    },
+    {
+      "name": "rock_soft_a",
+      "src": "VirtualZoo/Art/PremiumPrototype/rock_soft_a.fbx",
+      "maps": { "rock": "VirtualZoo/Art/PremiumPrototype/Textures/rock.png" }
+    },
+    {
+      "name": "rock_soft_b",
+      "src": "VirtualZoo/Art/PremiumPrototype/rock_soft_b.fbx",
+      "maps": { "rock": "VirtualZoo/Art/PremiumPrototype/Textures/rock.png" }
+    },
+    {
+      "name": "rock_soft_c",
+      "src": "VirtualZoo/Art/PremiumPrototype/rock_soft_c.fbx",
+      "maps": { "rock": "VirtualZoo/Art/PremiumPrototype/Textures/rock.png" }
+    },
+    {
+      "name": "lily_pad",
+      "src": "VirtualZoo/Art/PremiumPrototype/lily_pad.fbx",
+      "maps": { "leaf": "VirtualZoo/Art/PremiumPrototype/Textures/leaf.png" }
+    },
+    {
+      "name": "lantern",
+      "src": "VirtualZoo/Art/PremiumPrototype/lantern.fbx",
+      "maps": { "wood": "VirtualZoo/Art/PremiumPrototype/Textures/wood.png" }
+    },
+    {
+      "name": "bridge_round",
+      "src": "VirtualZoo/Art/PremiumPrototype/bridge_round.fbx",
+      "maps": { "wood": "VirtualZoo/Art/PremiumPrototype/Textures/wood.png" }
+    },
+    {
+      "name": "gate_arch",
+      "src": "VirtualZoo/Art/PremiumPrototype/gate_arch.fbx",
+      "maps": { "stone": "VirtualZoo/Art/PremiumPrototype/Textures/stone.png", "wood": "VirtualZoo/Art/PremiumPrototype/Textures/wood.png" }
+    },
+    {
+      "name": "hill_burrow",
+      "src": "VirtualZoo/Art/PremiumPrototype/hill_burrow.fbx",
+      "maps": { "grass": "VirtualZoo/Art/PremiumPrototype/Textures/grass.png", "rock": "VirtualZoo/Art/PremiumPrototype/Textures/rock.png" }
+    },
+    {
+      "name": "background_hills",
+      "src": "VirtualZoo/Art/PremiumPrototype/background_hills.fbx",
+      "maps": { "grass": "VirtualZoo/Art/PremiumPrototype/Textures/grass.png" }
+    },
+    {
+      "name": "fence_rail",
+      "src": "VirtualZoo/Art/PremiumPrototype/fence_rail.fbx",
+      "maps": { "wood": "VirtualZoo/Art/PremiumPrototype/Textures/wood.png" }
+    },
+    {
+      "name": "stone_paver",
+      "src": "VirtualZoo/Art/PremiumPrototype/stone_paver.fbx",
+      "maps": { "stone": "VirtualZoo/Art/PremiumPrototype/Textures/stone.png" }
+    },
+    {
+      "name": "broadleaf_01",
+      "src": "Idyllic Fantasy Nature/Models/Trees/BroadleafTree_01.fbx",
+      "maps": {
+        "leaf": "Idyllic Fantasy Nature/Textures/Trees/BroadleafTree_Leaves.png",
+        "bark": "Idyllic Fantasy Nature/Textures/Trees/Bark_Albedo.png"
+      },
+      "alpha": true
+    },
+    {
+      "name": "broadleaf_02",
+      "src": "Idyllic Fantasy Nature/Models/Trees/BroadleafTree_02.fbx",
+      "maps": {
+        "leaf": "Idyllic Fantasy Nature/Textures/Trees/BroadleafTree_Leaves.png",
+        "bark": "Idyllic Fantasy Nature/Textures/Trees/Bark_Albedo.png"
+      },
+      "alpha": true
+    },
+    {
+      "name": "broadleaf_03",
+      "src": "Idyllic Fantasy Nature/Models/Trees/BroadleafTree_03.fbx",
+      "maps": {
+        "leaf": "Idyllic Fantasy Nature/Textures/Trees/BroadleafTree_Leaves.png",
+        "bark": "Idyllic Fantasy Nature/Textures/Trees/Bark_Albedo.png"
+      },
+      "alpha": true
+    },
+    {
+      "name": "broadleaf_04",
+      "src": "Idyllic Fantasy Nature/Models/Trees/BroadleafTree_04.fbx",
+      "maps": {
+        "leaf": "Idyllic Fantasy Nature/Textures/Trees/BroadleafTree_Leaves.png",
+        "bark": "Idyllic Fantasy Nature/Textures/Trees/Bark_Albedo.png"
+      },
+      "alpha": true
+    },
+    {
+      "name": "willow_01",
+      "src": "Idyllic Fantasy Nature/Models/Trees/WillowTree_01.fbx",
+      "maps": {
+        "leaf": "Idyllic Fantasy Nature/Textures/Trees/WillowTree_Branch.png",
+        "bark": "Idyllic Fantasy Nature/Textures/Trees/Bark_Albedo.png"
+      },
+      "alpha": true
+    },
+    {
+      "name": "bush_01",
+      "src": "Idyllic Fantasy Nature/Models/Bushes/Bush_01_01.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Plants/Plants_Albedo.png" },
+      "alpha": true
+    },
+    {
+      "name": "bush_02",
+      "src": "Idyllic Fantasy Nature/Models/Bushes/Bush_02_01.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Plants/Plants_Albedo.png" },
+      "alpha": true
+    },
+    {
+      "name": "plant_01",
+      "src": "Idyllic Fantasy Nature/Models/Plants/Plant_01.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Plants/Plants_Albedo.png" },
+      "alpha": true
+    },
+    {
+      "name": "plant_02",
+      "src": "Idyllic Fantasy Nature/Models/Plants/Plant_02.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Plants/Plants_Albedo.png" },
+      "alpha": true
+    },
+    {
+      "name": "grass_01",
+      "src": "Idyllic Fantasy Nature/Models/Grass/Grass.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Grass/Grass_01.png" },
+      "alpha": true
+    },
+    {
+      "name": "flower_meadow_orange",
+      "src": "Idyllic Fantasy Nature/Models/Flowers/FlowerMeadow_Orange.fbx",
+      "maps": { "petal": "Idyllic Fantasy Nature/Textures/Flowers/FlowerMeadow.png" },
+      "alpha": true
+    },
+    {
+      "name": "flower_meadow_pink",
+      "src": "Idyllic Fantasy Nature/Models/Flowers/FlowerMeadow_Pink.fbx",
+      "maps": { "petal": "Idyllic Fantasy Nature/Textures/Flowers/FlowerMeadow.png" },
+      "alpha": true
+    },
+    {
+      "name": "flower_orange",
+      "src": "Idyllic Fantasy Nature/Models/Flowers/Flower_Orange.fbx",
+      "maps": { "petal": "Idyllic Fantasy Nature/Textures/Flowers/Flower.png" },
+      "alpha": true
+    },
+    {
+      "name": "flower_pink",
+      "src": "Idyllic Fantasy Nature/Models/Flowers/Flower_Pink.fbx",
+      "maps": { "petal": "Idyllic Fantasy Nature/Textures/Flowers/Flower.png" },
+      "alpha": true
+    },
+    {
+      "name": "flower_purple",
+      "src": "Idyllic Fantasy Nature/Models/Flowers/Flower_Purple.fbx",
+      "maps": { "petal": "Idyllic Fantasy Nature/Textures/Flowers/Flower.png" },
+      "alpha": true
+    },
+    {
+      "name": "flower_yellow",
+      "src": "Idyllic Fantasy Nature/Models/Flowers/Flower_Yellow.fbx",
+      "maps": { "petal": "Idyllic Fantasy Nature/Textures/Flowers/Flower.png" },
+      "alpha": true
+    },
+    {
+      "name": "flower_red",
+      "src": "Idyllic Fantasy Nature/Models/Flowers/Flower_Red.fbx",
+      "maps": { "petal": "Idyllic Fantasy Nature/Textures/Flowers/Flower.png" },
+      "alpha": true
+    },
+    {
+      "name": "lily_pads_01",
+      "src": "Idyllic Fantasy Nature/Models/Waterplants/LilyPads_01.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Waterplants/LilyPad_Albedo.png" },
+      "alpha": true
+    },
+    {
+      "name": "lily_pads_02",
+      "src": "Idyllic Fantasy Nature/Models/Waterplants/LilyPads_02.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Waterplants/LilyPad_Albedo.png" },
+      "alpha": true
+    },
+    {
+      "name": "waterlily_01",
+      "src": "Idyllic Fantasy Nature/Models/Waterplants/Waterlily_01.fbx",
+      "maps": { "petal": "Idyllic Fantasy Nature/Textures/Waterplants/Waterlily_Leaf.png" },
+      "alpha": true
+    },
+    {
+      "name": "reeds",
+      "src": "Idyllic Fantasy Nature/Models/Waterplants/Reeds.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Waterplants/Cattail_Albedo.png" },
+      "alpha": true
+    },
+    {
+      "name": "cattail_01",
+      "src": "Idyllic Fantasy Nature/Models/Waterplants/Cattail_01.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Waterplants/Cattail_Albedo.png" },
+      "alpha": true
+    },
+    {
+      "name": "oak_01",
+      "src": "Symphonie/StylizedForestKit Samples/Model/M_Oak01.fbx",
+      "maps": { "leaf": "Symphonie/StylizedForestKit Samples/Texture/Oak/T_Oak01_D.png" },
+      "alpha": true
+    },
+    {
+      "name": "oak_02",
+      "src": "Symphonie/StylizedForestKit Samples/Model/M_Oak01.fbx",
+      "maps": { "leaf": "Symphonie/StylizedForestKit Samples/Texture/Oak/T_Oak02_D.png" },
+      "alpha": true
+    },
+    {
+      "name": "oak_03",
+      "src": "Symphonie/StylizedForestKit Samples/Model/M_Oak01.fbx",
+      "maps": { "leaf": "Symphonie/StylizedForestKit Samples/Texture/Oak/T_Oak03_D.png" },
+      "alpha": true
+    },
+    {
+      "name": "oak_04",
+      "src": "Symphonie/StylizedForestKit Samples/Model/M_Oak01.fbx",
+      "maps": { "leaf": "Symphonie/StylizedForestKit Samples/Texture/Oak/T_Oak04_D.png" },
+      "alpha": true
+    },
+    {
+      "name": "grass_low",
+      "src": "Symphonie/StylizedForestKit Samples/Model/low grass LOD.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Grass/Grass_01.png" },
+      "alpha": true
+    },
+    {
+      "name": "grass_tall",
+      "src": "Symphonie/StylizedForestKit Samples/Model/tall grass LOD.fbx",
+      "maps": { "leaf": "Idyllic Fantasy Nature/Textures/Grass/Grass_03.png" },
+      "alpha": true
+    },
+    {
+      "name": "spherical_tree",
+      "src": "Palmov Island/Low Poly Environment Park/Models/Trees/spherical tree.fbx",
+      "maps": { "atlas": "Palmov Island/Low Poly Environment Park/Textures/texture main.png" }
+    },
+    {
+      "name": "round_foliage",
+      "src": "Palmov Island/Low Poly Environment Park/Models/Trees/tree round foliage.fbx",
+      "maps": { "atlas": "Palmov Island/Low Poly Environment Park/Textures/texture main.png" }
+    },
+    {
+      "name": "rock_03",
+      "src": "StylizedRocksPackFREE/Meshes/SM_RockPack_Rock_03.fbx",
+      "maps": { "rock": "VirtualZoo/Art/PremiumPrototype/Textures/rock.png" }
+    },
+    {
+      "name": "rock_04",
+      "src": "StylizedRocksPackFREE/Meshes/SM_RockPack_Rock_04.fbx",
+      "maps": { "rock": "VirtualZoo/Art/PremiumPrototype/Textures/rock.png" }
+    },
+    {
+      "name": "rock_06",
+      "src": "StylizedRocksPackFREE/Meshes/SM_RockPack_Rock_06.fbx",
+      "maps": { "rock": "VirtualZoo/Art/PremiumPrototype/Textures/rock.png" }
+    },
+    {
+      "name": "rock_group",
+      "src": "StylizedRocksPackFREE/Meshes/SM_RockPack_RockGroups_01_A.fbx",
+      "maps": { "rock": "VirtualZoo/Art/PremiumPrototype/Textures/rock.png" }
+    },
+    {
+      "name": "fence_beam",
+      "src": "EmaceArt/Fences 2026/Meshes/EA03_Fence_Beam_01a.fbx",
+      "maps": { "wood": "EmaceArt/Fences 2026/Textures/EmaceFences_Texture_01A.png" }
+    },
+    {
+      "name": "fence_stick_a",
+      "src": "EmaceArt/Fences 2026/Meshes/EA03_Fence_Stick_01a.fbx",
+      "maps": { "wood": "EmaceArt/Fences 2026/Textures/EmaceFences_Texture_01A.png" }
+    },
+    {
+      "name": "fence_stick_b",
+      "src": "EmaceArt/Fences 2026/Meshes/EA03_Fence_Stick_01b.fbx",
+      "maps": { "wood": "EmaceArt/Fences 2026/Textures/EmaceFences_Texture_01A.png" }
+    },
+    {
+      "name": "shrub",
+      "src": "Selcuk Gerceker/Toon Environments - World Creator Pack Lite/Models/Props/Shrub.fbx",
+      "maps": { "atlas": "Selcuk Gerceker/Toon Environments - World Creator Pack Lite/Textures/Spring.png" }
+    }
+  ],
+  "groundTextures": [
+    {
+      "name": "meadow.png",
+      "src": "VirtualZoo/Art/ReferenceGarden/MeadowAlbedo.png"
+    },
+    {
+      "name": "path.png",
+      "src": "VirtualZoo/Art/ReferenceGarden/PathAlbedo.png"
+    },
+    {
+      "name": "dirt.png",
+      "src": "Idyllic Fantasy Nature/Textures/Ground/Dirt/Dirt_01_Albedo.png"
+    },
+    {
+      "name": "grass.png",
+      "src": "Idyllic Fantasy Nature/Textures/Ground/Grass/Grass_Albedo.png"
+    },
+    {
+      "name": "skybox.png",
+      "src": "Idyllic Fantasy Nature/Textures/Skybox/Skybox.png"
+    }
+  ]
+}

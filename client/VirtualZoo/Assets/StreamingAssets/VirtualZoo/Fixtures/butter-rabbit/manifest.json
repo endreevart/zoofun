@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000009",
+  "revision": 1,
+  "displayName": "Сливочный кролик",
+  "locomotion": "hop",
+  "scaleClass": "small",
+  "scale": 0.82,
+  "moveSpeed": 1.55,
+  "turnSpeed": 260,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "4756e68a3c98c19cbb2cf77368aad5f483c12ed2082193769ddcfe8d333f8d1f" }
+  }
+}

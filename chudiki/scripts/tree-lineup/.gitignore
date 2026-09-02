@@ -1,0 +1,3 @@
+# Render output from the Blender preview scripts; regenerate with
+# blender --background --python ../render-idyllic-world.py
+*.exr

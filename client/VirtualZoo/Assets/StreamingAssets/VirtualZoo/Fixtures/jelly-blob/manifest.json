@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000013",
+  "revision": 1,
+  "displayName": "Ягодная медуза",
+  "locomotion": "float",
+  "scaleClass": "medium",
+  "scale": 0.96,
+  "moveSpeed": 0.7,
+  "turnSpeed": 140,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "b3631243af4f8616d08a786fa0653dca3ea86680f82457899f798b382552ccdd" }
+  }
+}

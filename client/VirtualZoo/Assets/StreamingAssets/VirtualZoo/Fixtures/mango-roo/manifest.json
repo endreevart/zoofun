@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-00000000000a",
+  "revision": 1,
+  "displayName": "Манговый прыгун",
+  "locomotion": "hop",
+  "scaleClass": "medium",
+  "scale": 1.12,
+  "moveSpeed": 1.6,
+  "turnSpeed": 260,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "508faaaca2455d6414b38679069df757959af8a940218d91731ec16bb8b8df6b" }
+  }
+}

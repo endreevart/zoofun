@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000002",
+  "revision": 1,
+  "displayName": "Горчичный пёс",
+  "locomotion": "walk",
+  "scaleClass": "medium",
+  "scale": 1.05,
+  "moveSpeed": 1.25,
+  "turnSpeed": 220,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "9bb48b591a41c13b72c97ef8599f87fca6703829b26f1eba11a637ede77a3ba4" }
+  }
+}

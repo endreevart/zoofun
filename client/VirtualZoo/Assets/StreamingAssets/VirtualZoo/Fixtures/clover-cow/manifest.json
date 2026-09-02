@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000004",
+  "revision": 1,
+  "displayName": "Клеверная корова",
+  "locomotion": "walk",
+  "scaleClass": "large",
+  "scale": 1.28,
+  "moveSpeed": 0.9,
+  "turnSpeed": 220,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "367e204aa680a527fdcf544031ae0af9a0406aa710d3c82543c1e54a448af3c4" }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-00000000000c",
+  "revision": 1,
+  "displayName": "Виноградный кузнечик",
+  "locomotion": "hop",
+  "scaleClass": "small",
+  "scale": 0.8,
+  "moveSpeed": 1.7,
+  "turnSpeed": 260,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "e2f301cfb21fee750ca29c9522100dd7157ebe4f3434695ae1535b333379cb46" }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000010",
+  "revision": 1,
+  "displayName": "Облачный дракончик",
+  "locomotion": "fly",
+  "scaleClass": "medium",
+  "scale": 1.1,
+  "moveSpeed": 1.65,
+  "turnSpeed": 180,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "9b1230eed59a8019373763d17e815d83f97c5e17e8778707261fecdfc40f86b8" }
+  }
+}

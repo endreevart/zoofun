@@ -1,0 +1,23 @@
+{
+  "name": "VirtualZoo.Editor",
+  "rootNamespace": "VirtualZoo.EditorTools",
+  "references": [
+    "VirtualZoo.Domain",
+    "VirtualZoo.Application",
+    "VirtualZoo.Infrastructure",
+    "VirtualZoo.Presentation",
+    "Unity.AI.Navigation",
+    "Unity.AI.Navigation.Editor",
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Core.Runtime"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

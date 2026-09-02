@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000003",
+  "revision": 1,
+  "displayName": "Сиреневый кот",
+  "locomotion": "walk",
+  "scaleClass": "small",
+  "scale": 0.85,
+  "moveSpeed": 1.35,
+  "turnSpeed": 220,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "d2bad446f373cd964a3fbdcef7127681c92a1204a60d4b734a6fe7ff433f88a4" }
+  }
+}

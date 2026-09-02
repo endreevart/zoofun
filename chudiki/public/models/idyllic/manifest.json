@@ -1,0 +1,314 @@
+{
+  "ground": {
+    "dirt_albedo": "ground_dirt_dirt_01_albedo.jpg",
+    "dirt_normal": "ground_dirt_dirt_normal.jpg",
+    "grass_albedo": "ground_grass_grass_albedo.jpg",
+    "grass_normal": "ground_grass_grass_normal.jpg",
+    "moss_albedo": "moss_moss_albedo.jpg"
+  },
+  "materials": {
+    "idy_bridge_wood": {
+      "alphaTest": 0,
+      "color": [
+        1.0,
+        0.82,
+        0.6
+      ],
+      "doubleSide": false,
+      "map": "texture_main.jpg",
+      "normalMap": "",
+      "roughness": 0.78
+    },
+    "idy_cattail": {
+      "alphaTest": 0.5,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "doubleSide": true,
+      "map": "waterplants_cattail_albedo.png",
+      "normalMap": "",
+      "roughness": 0.62
+    },
+    "idy_flower": {
+      "alphaTest": 0.5,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "doubleSide": true,
+      "map": "flowers_flower.png",
+      "normalMap": "",
+      "roughness": 0.62
+    },
+    "idy_grass": {
+      "alphaTest": 0.5,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "doubleSide": true,
+      "map": "grass_grass_01.png",
+      "normalMap": "",
+      "roughness": 0.62
+    },
+    "idy_grass2": {
+      "alphaTest": 0.5,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "doubleSide": true,
+      "map": "grass_grass_02.png",
+      "normalMap": "",
+      "roughness": 0.62
+    },
+    "idy_house_paint": {
+      "alphaTest": 0,
+      "color": [
+        1.0,
+        0.95,
+        0.88
+      ],
+      "doubleSide": false,
+      "map": "fantasy_house_6.jpg",
+      "normalMap": "",
+      "roughness": 0.8
+    },
+    "idy_lilypad": {
+      "alphaTest": 0.5,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "doubleSide": true,
+      "map": "waterplants_lilypad_albedo.png",
+      "normalMap": "",
+      "roughness": 0.62
+    },
+    "idy_lowpoly": {
+      "alphaTest": 0,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "doubleSide": false,
+      "map": "",
+      "normalMap": "",
+      "roughness": 0.95
+    },
+    "idy_meadow": {
+      "alphaTest": 0.7,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "doubleSide": true,
+      "map": "flowers_flowermeadow.png",
+      "normalMap": "",
+      "roughness": 0.62
+    },
+    "idy_plant": {
+      "alphaTest": 0.5,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "doubleSide": true,
+      "map": "plants_plants_albedo.png",
+      "normalMap": "",
+      "roughness": 0.62
+    },
+    "idy_rock_rock_big_01": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "rocks_rock_big_01_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_rock_big_02": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "rocks_rock_big_02_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_rock_big_03": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "rocks_rock_big_03_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_rock_medium_01": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "rocks_rock_medium_01_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_rock_medium_02": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "rocks_rock_medium_02_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_rock_medium_03": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "rocks_rock_medium_03_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_rock_small_01": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "rocks_rock_small_01_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_rock_small_02": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "rocks_rock_small_02_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_rock_small_03": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "rocks_rock_small_03_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_stone_big_01": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "stones_stone_big_01_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_stone_medium_01": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "stones_stone_medium_01_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_stone_medium_02": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "stones_stone_medium_02_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_rock_stone_medium_03": {
+      "alphaTest": 0,
+      "color": [
+        0.6,
+        0.56,
+        0.62
+      ],
+      "doubleSide": false,
+      "map": "stones_stone_medium_03_albedo.jpg",
+      "normalMap": "",
+      "roughness": 0.9
+    },
+    "idy_waterlily": {
+      "alphaTest": 0.5,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "doubleSide": true,
+      "map": "waterplants_waterlily_leaf.png",
+      "normalMap": "",
+      "roughness": 0.62
+    }
+  },
+  "models": [
+    "grass_a",
+    "grass_b",
+    "lp_bush_01",
+    "lp_bush_02",
+    "lp_bush_bloom_01",
+    "lp_pine_01",
+    "lp_pine_02",
+    "lp_tree_01",
+    "lp_tree_02",
+    "lp_tree_03",
+    "lp_tree_04",
+    "rock_medium_01",
+    "rock_small_01"
+  ]
+}

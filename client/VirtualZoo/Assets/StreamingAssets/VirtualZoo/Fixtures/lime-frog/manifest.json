@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-00000000000b",
+  "revision": 1,
+  "displayName": "Лаймовая лягушка",
+  "locomotion": "hop",
+  "scaleClass": "small",
+  "scale": 0.78,
+  "moveSpeed": 1.2,
+  "turnSpeed": 260,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "d0f506bc72e14c33ca381b0d9f73520a9cf6f92da8da584fbdded5b4b3d1e192" }
+  }
+}

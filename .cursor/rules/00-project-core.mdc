@@ -1,0 +1,17 @@
+---
+description: Core Virtual Zoo product, stack, and pilot constraints for every session.
+alwaysApply: true
+---
+
+# Virtual Zoo core
+
+- Audience is children aged 3–8 with a parent gate. The UI must work for pre-readers.
+- Recognition before polish: the child's drawing must stay recognizable. Do not erase silhouette, colors, unusual features, or the original idea.
+- Client stack is Unity 6.3 LTS, C#, and URP. Do not create a Unity project during bootstrap.
+- Backend stack is FastAPI, PostgreSQL, Redis, and Celery as a modular monolith.
+- OpenRouter is called only from the backend. Never from Unity, the Apple bridge, or MCP.
+- Never place provider, storage, or other credentials in Unity, source, or MCP config.
+- The current pilot is non-commercial for a test group of up to 10 children. It does not include payments, subscriptions, StoreKit, acquiring, creation credits, receipts, or a purchase ledger. Do not add them.
+- Pilot outcome: import or photograph a drawing, generate a recognizable 2.5D creature, spawn it seamlessly, and keep a stable zoo with 20+ active animals.
+- Do not start the next iteration until an external review returns `PASS`.
+- Compilation without visual and runtime verification is not done.

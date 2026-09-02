@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a423b5aeeec7846948e40f080074099e, type: 3}
+  m_Name: ArtDirectionAssets
+  m_EditorClassIdentifier: VirtualZoo.Presentation::VirtualZoo.Presentation.ArtDirectionAssets
+  CreatureSlab: {fileID: -1902175462435584599, guid: cedf379beca014134841897e69057bfc, type: 3}
+  CreatureNub: {fileID: 7012783570127345852, guid: 1e1dfed1a66554509b39d0565c80120c, type: 3}
+  CardShader: {fileID: 4800000, guid: 0a87c8b7fb7b84c9dafe78b78b3bf13f, type: 3}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-00000000000d",
+  "revision": 1,
+  "displayName": "Небесная птичка",
+  "locomotion": "fly",
+  "scaleClass": "small",
+  "scale": 0.86,
+  "moveSpeed": 1.8,
+  "turnSpeed": 180,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "1e4adfa7812b478074d3885d87f246ac2331d3f1a6d5a930bec672b65cae284c" }
+  }
+}

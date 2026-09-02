@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000005",
+  "revision": 1,
+  "displayName": "Персиковая свинка",
+  "locomotion": "walk",
+  "scaleClass": "medium",
+  "scale": 0.95,
+  "moveSpeed": 0.95,
+  "turnSpeed": 220,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "fdbdfad3355599ddbb30f603efd24d61587378fa60f74d3322762698005048ed" }
+  }
+}

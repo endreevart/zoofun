@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "creatureId": "a18c0001-7e2b-4c11-91a0-000000000012",
+  "revision": 1,
+  "displayName": "Коралловая рыбка",
+  "locomotion": "float",
+  "scaleClass": "small",
+  "scale": 0.8,
+  "moveSpeed": 1.1,
+  "turnSpeed": 140,
+  "groundAnchor": { "x": 0.5, "y": 0.08 },
+  "assets": {
+    "texture": { "path": "creature.png", "sha256": "cbcbe2fdd5c01165db98181e3c80de6b1852612b47855342b3d50c9683268bdf" }
+  }
+}
