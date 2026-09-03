@@ -45,6 +45,14 @@ StoreKit, receipts, creation credits, and a purchase ledger are deferred/post-pi
 
 The bridge exposes a narrow C-compatible boundary to C#. Domain rules do not live in Swift.
 
+### Public website (`zoofun-web`) owns
+
+- Parent landing, email registration, and sign-in.
+- Opening the Chudiki island after a backend parent session (`/play`).
+- The Kenney fixture garden (`/zoo/demo`) as the iteration-00 local demo.
+
+The website never calls OpenRouter. Child legal names, voice, and other child PII are not collected.
+
 ## Backend boundaries
 
 Start as a modular monolith with one API image and one worker image from the same Python codebase.

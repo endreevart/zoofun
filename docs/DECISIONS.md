@@ -17,6 +17,7 @@ This file is the concise decision register. Detailed engineering decisions live 
 | D-011 | iPhone/iPad vertical slice precedes macOS stabilization | Accepted |
 | D-012 | Official MCP servers are preferred; GitHub MCP is read-only by default | Accepted |
 | D-013 | Current work is a non-commercial pilot for ≤10 children; no payments, StoreKit, credits, receipts, or purchase ledger; zoo must hold 20+ active animals | Accepted |
+| D-014 | The public website signs a parent in with email, then opens the Chudiki island; Kenney `/zoo/demo` stays the iteration-00 fixture garden | Accepted |
 
 ## Pending decisions
 

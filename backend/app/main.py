@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth import router as auth_router
 from app.api.stylize import router as stylize_router
 from app.settings import get_settings
 
@@ -21,11 +22,14 @@ if settings.environment == "development":
             "http://127.0.0.1:5178",
             "http://localhost:5173",
             "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
         ],
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
 
+app.include_router(auth_router)
 app.include_router(stylize_router)
 
 

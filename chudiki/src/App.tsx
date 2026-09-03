@@ -24,6 +24,7 @@ import { isStudio } from './studioMode';
 import { WalkPad } from './ui/WalkPad';
 import { CareHud } from './ui/CareHud';
 import { PilotChoice } from './ui/PilotChoice';
+import { bootstrapParentSession, readParentProfile } from './parentSession';
 
 type Screen = 'zoo' | 'draw' | 'name' | 'roster';
 
@@ -53,6 +54,13 @@ export function App() {
   const [feeding, setFeeding] = useState(false);
   const [offerSpec, setOfferSpec] = useState<ChudikSpec | null>(null);
   const [driving, setDriving] = useState(false);
+
+  useEffect(() => {
+    const session = bootstrapParentSession();
+    if (session.token) {
+      void readParentProfile(session.token);
+    }
+  }, []);
 
   useEffect(() => {
     const stage = stageRef.current;

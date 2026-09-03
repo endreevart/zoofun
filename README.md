@@ -50,9 +50,9 @@ docs/               Product and engineering source of truth
 .cursor/mcp.json     Minimal safe MCP configuration
 ```
 
-The playable web zoo is at https://endreevart.github.io/zoofun/
+The playable web zoo is local: parent site in `zoofun-web` (`/auth` → `/play`), island in `chudiki/` on port 5178. GitHub Pages is not used.
 
-OpenRouter stylize runs only through the local backend. On the public site a drawing still becomes a chudik from the original picture.
+OpenRouter stylize runs only through the local backend. Without the API a drawing still becomes a chudik from the original picture.
 
 ## Start here
 

@@ -1,5 +1,6 @@
 # Secrets and local environment
 .env
+.data/
 .env.local
 .env.*.local
 *.pem

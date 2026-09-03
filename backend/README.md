@@ -30,4 +30,15 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 `POST /v1/generation/stylize` accepts a PNG/JPEG. The key never goes to the browser. If the key is missing the route returns 503 and the zoo keeps the child's original drawing.
 
+Parent email login for the public website:
+
+```text
+POST /v1/auth/register
+POST /v1/auth/login
+GET  /v1/auth/me
+POST /v1/auth/logout
+```
+
+Accounts persist in untracked `backend/.data/accounts.json`. Passwords are hashed. A child record holds only a nickname derived from the email local-part, never a legal name.
+
 Add further product modules according to `docs/ARCHITECTURE.md`. Introduce Alembic with the first persisted schema and commit every migration.

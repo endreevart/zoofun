@@ -29,6 +29,8 @@ These remain in the approved product scope but are **not implemented in this ite
 
 Pilot fixtures are bundled read-only content (`StreamingAssets/VirtualZoo/Fixtures`). That folder is not the writable cache for later generated animals.
 
+The public website (`zoofun-web`) and the Chudiki playground are a separate slice from Unity iteration 01. Parent email login there opens the island world; it does not replace or advance the Unity review gate.
+
 ## After `PASS`
 
 Later iterations may add drawing, import, backend generation, and care without changing the product definition in `docs/MVP.md`.
