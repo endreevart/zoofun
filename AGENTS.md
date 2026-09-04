@@ -2,7 +2,7 @@
 
 This repository contains a child-facing Unity game and a Python backend. Work from the written product constraints; do not infer new scope from a convenient technical implementation.
 
-The current goal is a fast non-commercial pilot for a test group of up to 10 children. The next stage starts only after an external review returns `PASS`.
+The public web zoo is in commercial launch (D-016). Unity iteration 01 still follows `docs/PILOT.md` and does not replace the website.
 
 ## Sources of truth
 
@@ -37,7 +37,7 @@ If code and documentation disagree, stop and surface the mismatch. Do not silent
 - Existing animals must remain usable offline after their assets have been cached.
 - Generation jobs are asynchronous, idempotent, retryable, and observable.
 - A partially downloaded or invalid creature must never appear in the zoo.
-- Do not implement payments, subscriptions, StoreKit, acquiring, creation credits, receipts, or a purchase ledger in this pilot.
+- Web commerce is T-Bank packs and a parent credit ledger (D-016). No StoreKit, subscriptions, or extra worlds.
 - MCP is development tooling, not an application runtime dependency.
 - Do not add friends, chat, public content, leagues, or automatic full-3D generation to this pilot.
 - Compilation without visual and runtime verification is not done.

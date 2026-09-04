@@ -8,6 +8,7 @@ import { mulberry32 } from '../core/rng';
 import type { Terrain } from './Terrain';
 import { GATE, ISLAND, inPond, onIsland } from './layout';
 import { nearestPathId, type AuthoredPath } from './layoutPaths';
+import { quality } from '../render/quality';
 
 const grassTime = { value: 0 };
 
@@ -32,10 +33,11 @@ export class GrassField {
 
   rebuild(paths: readonly AuthoredPath[]) {
     this.clear();
-    const spots = plantSpots(this.terrain, paths);
-    this.blades = scatterBlades(spots);
+    const look = quality();
+    const spots = plantSpots(this.terrain, paths, look.grassStep);
+    this.blades = scatterBlades(spots, look.grassBlades, look.grassReceivesShadow);
     this.group.add(this.blades);
-    if (this.library.has('grass_a') || this.library.has('grass_b')) {
+    if (look.paintedGrass && (this.library.has('grass_a') || this.library.has('grass_b'))) {
       this.painted = scatterPainted(this.library, spots);
       this.group.add(this.painted);
     }
@@ -73,10 +75,9 @@ export class GrassField {
 
 type Spot = { x: number; z: number; y: number; yaw: number; scale: number; tint: THREE.Color };
 
-function plantSpots(terrain: Terrain, paths: readonly AuthoredPath[]): Spot[] {
+function plantSpots(terrain: Terrain, paths: readonly AuthoredPath[], step: number): Spot[] {
   const rng = mulberry32(20260902);
   const spots: Spot[] = [];
-  const step = 0.48;
   const minX = ISLAND.centerX - ISLAND.radius;
   const minZ = ISLAND.centerZ - ISLAND.radius;
   const cols = Math.ceil((ISLAND.radius * 2) / step);
@@ -105,8 +106,8 @@ function plantSpots(terrain: Terrain, paths: readonly AuthoredPath[]): Spot[] {
   return spots;
 }
 
-function scatterBlades(spots: Spot[]): THREE.Group {
-  const geometry = bladeClump();
+function scatterBlades(spots: Spot[], bladeCount: number, receiveShadow: boolean): THREE.Group {
+  const geometry = bladeClump(bladeCount);
   const map = new THREE.TextureLoader().load(assetUrl('textures/ground/smm-grass-blade.png'));
   map.colorSpace = THREE.SRGBColorSpace;
   const material = new THREE.MeshStandardMaterial({
@@ -152,7 +153,7 @@ function scatterBlades(spots: Spot[]): THREE.Group {
   const group = new THREE.Group();
   group.name = 'smm-grass';
   for (const [key, bucket] of buckets) {
-    group.add(fillBladeTile(geometry, material, bucket, key));
+    group.add(fillBladeTile(geometry, material, bucket, key, receiveShadow));
   }
   return group;
 }
@@ -162,11 +163,12 @@ function fillBladeTile(
   material: THREE.Material,
   spots: Spot[],
   key: string,
+  receiveShadow: boolean,
 ): THREE.InstancedMesh {
   const mesh = new THREE.InstancedMesh(geometry, material, spots.length);
   mesh.name = `smm-grass:${key}`;
   mesh.castShadow = false;
-  mesh.receiveShadow = true;
+  mesh.receiveShadow = receiveShadow;
   const matrix = new THREE.Matrix4();
   const colors = new Float32Array(spots.length * 3);
   spots.forEach((spot, index) => {
@@ -186,12 +188,13 @@ function fillBladeTile(
   return mesh;
 }
 
-function bladeClump(): THREE.BufferGeometry {
+function bladeClump(count: number): THREE.BufferGeometry {
   const blades: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < 7; i++) {
+  const n = Math.max(1, count);
+  for (let i = 0; i < n; i++) {
     const card = new THREE.PlaneGeometry(0.18, 0.36, 1, 2);
     card.translate(0, 0.18, 0);
-    const yaw = (i / 7) * Math.PI + (i % 2) * 0.12;
+    const yaw = (i / n) * Math.PI + (i % 2) * 0.12;
     const lean = 0.08 + (i % 3) * 0.04;
     card.rotateY(yaw);
     card.rotateX((i % 2 === 0 ? 1 : -1) * lean);

@@ -8,7 +8,7 @@ This document is an engineering baseline, not a substitute for jurisdiction-spec
 - Do not collect advertising identifiers.
 - Do not add third-party behavioral analytics SDKs to the child experience by default.
 - Original drawings are private processing inputs, not social content.
-- Send AI providers only the image or validated generated text required for the current job.
+- Send AI providers only the image or validated generated text required for the current job. Meshy receives the stylized drawing still only; never names, voice, location, or other child PII.
 
 ## Secrets
 
@@ -16,7 +16,7 @@ This document is an engineering baseline, not a substitute for jurisdiction-spec
 - Mobile builds contain public API base URLs only.
 - Rotate any credential that appears in source, logs, screenshots, issue text, or MCP configuration.
 - Development and production credentials must be separate and least-privileged.
-- This pilot has no App Store server keys, StoreKit secrets, or payment credentials.
+- This release has no App Store server keys or StoreKit secrets. T-Bank terminal password and operator token stay in `.env`.
 
 ## Authentication and authorization
 
@@ -27,7 +27,7 @@ This document is an engineering baseline, not a substitute for jurisdiction-spec
 
 ## Purchases and credits
 
-**Status: deferred / post-pilot.** Do not implement StoreKit verification, receipts, creation credits, or a purchase ledger in this pilot.
+**Status: accepted (D-016).** First generation is free. Packs of 5 / 10 / 15 / 20 are paid through АО «ТБанк». The API owns `quota_total` and `generation_used`. Delete does not restore a credit. Card data never touches our servers. T-Bank and operator tokens stay in `.env`.
 
 Job creation still uses an idempotency key so a duplicate submission does not create a second job.
 

@@ -1,10 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type Props = {
   onWalk: (forward: number, right: number) => void;
 };
 
 const HELD = new Set<string>();
+const STICK_DEAD = 8;
+const COMPACT_WALK = '(max-width: 1280px)';
 
 function emit(onWalk: (forward: number, right: number) => void) {
   const forward = (HELD.has('up') ? 1 : 0) + (HELD.has('down') ? -1 : 0);
@@ -12,15 +14,102 @@ function emit(onWalk: (forward: number, right: number) => void) {
   onWalk(forward, right);
 }
 
+function useCompactWalk(): boolean {
+  const [compact, setCompact] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(COMPACT_WALK).matches,
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(COMPACT_WALK);
+    const sync = () => setCompact(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  return compact;
+}
+
 /**
- * Big D-pad for fingers. No words — a 4-year-old can press the arrows.
- * Hold one or two at once to go diagonally.
+ * Phone and tablet get a thumb stick. Desktop keeps the four arrows.
+ * No words — a 4-year-old can drag the knob.
  */
 export function WalkPad({ onWalk }: Props) {
-  useEffect(() => () => {
-    HELD.clear();
+  const compact = useCompactWalk();
+  return compact ? <WalkStick onWalk={onWalk} /> : <WalkArrows onWalk={onWalk} />;
+}
+
+function WalkStick({ onWalk }: Props) {
+  const baseRef = useRef<HTMLDivElement | null>(null);
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+
+  useEffect(
+    () => () => {
+      onWalk(0, 0);
+    },
+    [onWalk],
+  );
+
+  const moveTo = (clientX: number, clientY: number) => {
+    const base = baseRef.current?.getBoundingClientRect();
+    if (!base) return;
+    const travel = Math.max(18, base.width / 2 - 22);
+    const dx = clientX - (base.left + base.width / 2);
+    const dy = clientY - (base.top + base.height / 2);
+    const length = Math.hypot(dx, dy);
+    const scale = length > travel ? travel / length : 1;
+    const x = dx * scale;
+    const y = dy * scale;
+    setKnob({ x, y });
+    const right = Math.abs(x) < STICK_DEAD ? 0 : x / travel;
+    const forward = Math.abs(y) < STICK_DEAD ? 0 : -y / travel;
+    onWalk(forward, right);
+  };
+
+  const reset = () => {
+    setKnob({ x: 0, y: 0 });
     onWalk(0, 0);
-  }, [onWalk]);
+  };
+
+  return (
+    <div
+      ref={baseRef}
+      className="walk-pad walk-stick"
+      role="slider"
+      aria-label="Ходить по зоопарку"
+      aria-valuemin={-1}
+      aria-valuemax={1}
+      aria-valuenow={0}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        moveTo(event.clientX, event.clientY);
+      }}
+      onPointerMove={(event) => {
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        moveTo(event.clientX, event.clientY);
+      }}
+      onPointerUp={reset}
+      onPointerCancel={reset}
+    >
+      <div className="walk-stick-well" aria-hidden="true" />
+      <div
+        className="walk-stick-knob"
+        aria-hidden="true"
+        style={{ transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }}
+      />
+    </div>
+  );
+}
+
+function WalkArrows({ onWalk }: Props) {
+  useEffect(
+    () => () => {
+      HELD.clear();
+      onWalk(0, 0);
+    },
+    [onWalk],
+  );
 
   const press = (dir: string) => {
     HELD.add(dir);

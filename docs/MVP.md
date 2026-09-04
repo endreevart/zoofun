@@ -1,6 +1,6 @@
 # Pilot scope
 
-The active **product** target is a fast non-commercial pilot for a test group of up to 10 children. Historical “MVP commerce” ideas are deferred; they are not current requirements.
+The active **product** target is the public web zoo. Unity iteration gates in `docs/PILOT.md` stay separate from website commerce (D-016).
 
 **Current staged delivery** (what may be implemented in the open iteration) is documented in `docs/PILOT.md`. This file stays the approved included/excluded product list; it is not a checklist that every iteration must implement at once.
 
@@ -17,14 +17,15 @@ The active **product** target is a fast non-commercial pilot for a test group of
 9. Feeding, water, and washing.
 10. Fantastical structured card and narrated audio.
 11. Private local Zoo Stars as a gentle progress indicator, not a ranking.
-12. Parent gate and parent-only settings (no purchases).
+12. Parent gate and parent-only settings and purchases.
 13. Parent-account cloud save and local offline cache.
 14. Stable activity of **20+ simultaneously active** animals in that one zoo.
 15. iPhone and iPad first; macOS follows from the same Unity project after the mobile vertical slice is stable.
 
 ## Explicitly excluded from this pilot
 
-- Payments, subscriptions, StoreKit, acquiring, creation credits, receipts, and any purchase ledger.
+- Subscriptions, StoreKit, App Store IAP, advertising, and extra worlds for sale (worlds later).
+- Foreign acquiring and non-RUB prices (T-Bank / RUB only for now).
 - Friends, visits, gifting, leagues, public rankings, search, chat, comments, and public galleries.
 - Server-side social moderation workflows required only by user-to-user publishing.
 - Advertising, loot boxes, random paid rewards, and paid stat advantages.
@@ -35,7 +36,7 @@ The active **product** target is a fast non-commercial pilot for a test group of
 
 ## Deferred / post-pilot
 
-A commercial model (including any StoreKit packs, creation credits, receipts, or purchase ledger) may be designed after the pilot. It is not in scope until a new accepted decision says so.
+StoreKit remains out. Web credits and T-Bank acquiring are in scope (D-016). Extra worlds and foreign acquiring stay deferred.
 
 ## Zoo Stars in the pilot
 

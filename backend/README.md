@@ -30,6 +30,8 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 `POST /v1/generation/stylize` accepts a PNG/JPEG. The key never goes to the browser. If the key is missing the route returns 503 and the zoo keeps the child's original drawing.
 
+If the API host cannot reach OpenRouter (typical for a server in RU), set `OPENROUTER_HTTP_PROXY` to an EU/US HTTP proxy. The adapter sends provider traffic through that proxy; the Unity and website clients never see it.
+
 Parent email login for the public website:
 
 ```text
@@ -39,6 +41,17 @@ GET  /v1/auth/me
 POST /v1/auth/logout
 ```
 
-Accounts persist in untracked `backend/.data/accounts.json`. Passwords are hashed. A child record holds only a nickname derived from the email local-part, never a legal name.
+Accounts persist in PostgreSQL (local default is `backend/.data/zoo.sqlite`). Schema changes go through Alembic (`uv run alembic upgrade head`). Passwords are hashed. A child record holds only a nickname derived from the email local-part, never a legal name. Operator CRUD is SQLAdmin at `/staff`.
 
-Add further product modules according to `docs/ARCHITECTURE.md`. Introduce Alembic with the first persisted schema and commit every migration.
+Family zoo (the child's own drawings) for a signed-in child:
+
+```text
+GET    /v1/zoo
+PUT    /v1/zoo
+PUT    /v1/zoo/creatures/{id}
+DELETE /v1/zoo/creatures/{id}
+```
+
+Voice recordings are not accepted. Without a session the island keeps using on-device IndexedDB only.
+
+Add further product modules according to `docs/ARCHITECTURE.md`. Commit an Alembic revision with every schema change.

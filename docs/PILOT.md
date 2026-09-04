@@ -6,7 +6,7 @@ The next product stage starts only after an external review returns `PASS`.
 
 ## What the product still is
 
-Virtual Zoo remains a child-first game: a drawing becomes a recognizable 2.5D creature inside one authored zoo. Commerce is deferred. See `docs/MVP.md` for the full included and excluded feature lists.
+Virtual Zoo remains a child-first game: a drawing becomes a recognizable 2.5D creature inside one authored zoo. Web commerce is documented in D-016, not in this Unity iteration.
 
 ## What this repository is building now
 
@@ -25,11 +25,11 @@ These remain in the approved product scope but are **not implemented in this ite
 - backend generation, OpenRouter, ElevenLabs
 - creature cards, narration, feeding, water, washing
 - parent-account cloud save
-- payments, StoreKit, subscriptions, credits, receipts
+- payments, StoreKit, subscriptions, credits, receipts (Unity client; web commerce is D-016 on the site and API)
 
 Pilot fixtures are bundled read-only content (`StreamingAssets/VirtualZoo/Fixtures`). That folder is not the writable cache for later generated animals.
 
-The public website (`zoofun-web`) and the Chudiki playground are a separate slice from Unity iteration 01. Parent email login there opens the island world; it does not replace or advance the Unity review gate.
+The public website (`zoofun-web`) and the Chudiki playground are a separate slice from Unity iteration 01. Website commerce is D-016 and does not replace or advance the Unity review gate. The island may attach a Meshy GLB when `MESHY_API_KEY` is set (D-015); that does not change the Unity 2.5D contract.
 
 ## After `PASS`
 

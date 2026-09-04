@@ -3,7 +3,8 @@ import { mulberry32, range, type Rng } from '../core/rng';
 import type { WalkableQuery } from '../world/World';
 import { buildChudik, type ChudikRig } from './ChudikBuilder';
 import { buildDrawingChudik } from './DrawingChudikBuilder';
-import type { ChudikSpec } from './ChudikSpec';
+import type { ChudikSpec, DrawingData } from './ChudikSpec';
+import { crackAmount, hatchFromTap, hatchFromWait, warmEgg } from './hatch';
 
 type Behaviour = 'idle' | 'walk' | 'react' | 'arriving';
 
@@ -18,7 +19,7 @@ type CareTask =
  */
 export class Chudik {
   readonly spec: ChudikSpec;
-  readonly rig: ChudikRig;
+  rig: ChudikRig;
 
   private world: WalkableQuery;
   private rng: Rng;
@@ -61,6 +62,10 @@ export class Chudik {
    * looks like a stuck animation — so it follows the square root instead.
    */
   private moveScale = 1;
+  private hatchHeat = 0;
+  private hatchWait = 0;
+  private hatchKick = 0;
+  private hatchReady: DrawingData | null = null;
 
   constructor(spec: ChudikSpec, world: WalkableQuery, spawn: THREE.Vector3) {
     this.spec = spec;
@@ -83,6 +88,13 @@ export class Chudik {
 
     this.target.copy(this.rig.root.position);
     this.behaviourTimer = range(this.rng, 0.2, 2.5);
+    if (this.isHatching && spec.drawing && !spec.drawing.placeholder) {
+      this.hatchReady = spec.drawing;
+    }
+  }
+
+  get isHatching(): boolean {
+    return this.spec.hatching === true;
   }
 
   get id(): string {
@@ -199,7 +211,37 @@ export class Chudik {
     }
   }
 
+  /** Child tapped the egg. Returns true when it should open now. */
+  nudgeHatch(): boolean {
+    if (!this.isHatching) return false;
+    this.hatchHeat = warmEgg(this.hatchHeat);
+    this.hatchKick = 1;
+    this.rig.setHatchLook?.(crackAmount(this.hatchHeat, this.hatchReady !== null));
+    return hatchFromTap(this.hatchHeat, this.hatchReady !== null);
+  }
+
+  /** The finished puppet is ready; the egg can open when tapped or after a beat. */
+  prepareHatch(drawing: DrawingData) {
+    this.hatchReady = drawing;
+    this.rig.setHatchLook?.(crackAmount(this.hatchHeat, true));
+  }
+
+  takeHatch(): DrawingData | null {
+    const drawing = this.hatchReady;
+    this.hatchReady = null;
+    return drawing;
+  }
+
+  wantsHatch(): boolean {
+    return hatchFromWait(this.hatchWait, this.hatchHeat, this.hatchReady !== null);
+  }
+
   update(dt: number, elapsed: number, cameraPosition: THREE.Vector3) {
+    if (this.isHatching) {
+      this.updateEgg(dt, elapsed);
+      this.applyGround();
+      return;
+    }
     if (this.behaviour === 'arriving') {
       this.updateArrival(dt);
     } else if (this.behaviour === 'react' && !this.driven) {
@@ -216,6 +258,21 @@ export class Chudik {
     this.applyIdleMotion(elapsed);
     this.updateBlink(dt);
     this.updateGaze(dt, cameraPosition);
+  }
+
+  private updateEgg(dt: number, elapsed: number) {
+    if (this.behaviour === 'arriving') {
+      this.updateArrival(dt);
+      return;
+    }
+    if (this.hatchReady) this.hatchWait += dt;
+    this.hatchKick = Math.max(0, this.hatchKick - dt * 3.2);
+    const sway = Math.sin(elapsed * 2.4 + this.phaseOffset) * 0.05;
+    const tap = this.hatchKick * Math.sin(this.hatchKick * Math.PI) * 0.22;
+    this.rig.squash.rotation.z = sway + tap;
+    this.rig.squash.scale.set(1 + this.hatchKick * 0.08, 1 - this.hatchKick * 0.06, 1 + this.hatchKick * 0.08);
+    this.rig.bounce.position.y = Math.abs(tap) * 0.35;
+    this.rig.setHatchLook?.(crackAmount(this.hatchHeat, this.hatchReady !== null));
   }
 
   private updateArrival(dt: number) {
@@ -273,11 +330,13 @@ export class Chudik {
 
     if (task.kind === 'eat') {
       task.remaining -= dt;
-      const t = 1 - Math.max(0, task.remaining);
-      const hop = Math.sin(Math.min(1, t) * Math.PI);
-      this.rig.bounce.position.y = hop * 0.28 * this.spec.size;
-      const squash = 1 + hop * 0.12;
+      const chomp = 0.5 + 0.5 * Math.sin(task.remaining * 12);
+      this.rig.bounce.position.y = chomp * 0.34 * this.spec.size;
+      const squash = 1 - chomp * 0.22;
       this.rig.squash.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
+      for (const ear of this.rig.ears) {
+        ear.rotation.x = -Math.sin(task.remaining * 14) * 0.5;
+      }
       if (task.remaining <= 0) {
         this.rig.bounce.position.y = 0;
         this.rig.squash.scale.setScalar(1);
@@ -306,7 +365,7 @@ export class Chudik {
     this.targetYaw = Math.atan2(toTarget.x, toTarget.z);
     const turned = this.turnTowards(dt);
     const align = Math.max(0, 1 - Math.abs(turned) / 0.9);
-    this.speed = THREE.MathUtils.lerp(this.speed, this.walkSpeed * 1.25 * align, dt * 4);
+    this.speed = THREE.MathUtils.lerp(this.speed, this.walkSpeed * 1.85 * align, dt * 4);
     const step = Math.max(this.speed * this.moveScale * dt, 0.02);
     const here = this.rig.root.position;
     const tryStep = (yaw: number) => {
@@ -567,6 +626,27 @@ export class Chudik {
       pupil.position.x = THREE.MathUtils.clamp(localX, -1, 1) * reach;
       pupil.position.y = THREE.MathUtils.clamp(localY * 0.8, -1, 1) * reach;
     }
+  }
+
+  /** Swap the puppet after a neural restyle. Keeps place, heading, and scale. */
+  replaceDrawing(drawing: ChudikSpec['drawing']) {
+    if (!drawing) return;
+    const parent = this.rig.root.parent;
+    const position = this.rig.root.position.clone();
+    const oldRoot = this.rig.root;
+    this.rig.dispose();
+    oldRoot.removeFromParent();
+
+    this.spec.drawing = drawing;
+    this.spec.hatching = false;
+    const next = buildDrawingChudik(this.spec, drawing);
+    next.root.userData.chudik = this;
+    next.root.position.copy(position);
+    next.root.position.y = this.world.heightAt(position.x, position.z);
+    next.root.rotation.y = this.yaw;
+    next.root.scale.setScalar(this.scale);
+    parent?.add(next.root);
+    this.rig = next;
   }
 
   dispose() {

@@ -104,6 +104,10 @@ export const ZONES: Zone[] = [
   },
 ];
 
+const meadowZone = ZONES.find((zone) => zone.id === 'meadow') ?? ZONES[0];
+/** New drawings hatch on the open lawn, not behind a rock at the gate. */
+export const MEADOW_SPAWN = new THREE.Vector3(meadowZone.center.x, 0, meadowZone.center.y);
+
 /** Walkable links between zones, as capsules along the ground. */
 export const CORRIDORS: { from: THREE.Vector2; to: THREE.Vector2; halfWidth: number }[] = [
   { from: new THREE.Vector2(5.2, -9.5), to: new THREE.Vector2(6.2, -15.2), halfWidth: 2.4 },

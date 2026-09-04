@@ -9,9 +9,6 @@ export type RosterSheetProps = {
 };
 
 export function RosterSheet({ specs, recordedIds, onClose, onSelect }: RosterSheetProps) {
-  const mine = specs.filter((spec) => spec.origin === 'drawing');
-  const residents = specs.filter((spec) => spec.origin !== 'drawing');
-
   return (
     <div className="sheet">
       <div className="sheet-header">
@@ -23,33 +20,20 @@ export function RosterSheet({ specs, recordedIds, onClose, onSelect }: RosterShe
       </div>
 
       <div className="sheet-body">
-        {mine.length > 0 && (
-          <>
-            <p className="section-label">Мои рисунки ({mine.length})</p>
-            <div className="roster">
-              {mine.map((spec) => (
-                <RosterItem
-                  key={spec.id}
-                  spec={spec}
-                  recorded={recordedIds.has(spec.id)}
-                  onSelect={onSelect}
-                />
-              ))}
-            </div>
-          </>
+        {specs.length === 0 ? (
+          <p className="section-label">Пока никого. Нарисуй первого чудика!</p>
+        ) : (
+          <div className="roster">
+            {specs.map((spec) => (
+              <RosterItem
+                key={spec.id}
+                spec={spec}
+                recorded={recordedIds.has(spec.id)}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
         )}
-
-        <p className="section-label">Уже жили здесь ({residents.length})</p>
-        <div className="roster">
-          {residents.map((spec) => (
-            <RosterItem
-              key={spec.id}
-              spec={spec}
-              recorded={recordedIds.has(spec.id)}
-              onSelect={onSelect}
-            />
-          ))}
-        </div>
       </div>
     </div>
   );

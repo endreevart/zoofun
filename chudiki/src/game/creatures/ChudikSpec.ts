@@ -5,7 +5,7 @@ import { voiceFromSeed, type VoiceParams } from '../audio/voice';
 export type BodyShape = 'blob' | 'egg' | 'pear' | 'round' | 'tall';
 export type EarType = 'bunny' | 'horns' | 'antennae' | 'crest' | 'fins' | 'none';
 
-/** The "вид" a child picks after drawing. Pre-readers navigate by the emoji. */
+/** Locomotion / look family. OpenRouter picks one from the drawing. */
 export type ChudikKind = {
   id: string;
   label: string;
@@ -48,6 +48,12 @@ export type DrawingData = {
   /** Dominant colours, reused for the extruded sides and the feet. */
   sideColor: string;
   accentColor: string;
+  /** Neural restyle already painted the face; skip glued-on eyes and feet. */
+  painted?: boolean;
+  /** Backend-hosted GLB from Meshy. When set, the island loads a 3D mesh. */
+  modelUrl?: string;
+  /** Clay egg used only while the real creature is still being made. */
+  placeholder?: boolean;
 };
 
 export type ChudikSpec = {
@@ -72,12 +78,14 @@ export type ChudikSpec = {
   voice: VoiceParams;
   /** Present only for creatures grown from a drawing. */
   drawing?: DrawingData;
+  /** Egg on the lawn; the puppet is not ready yet. */
+  hatching?: boolean;
 };
 
 const BODY_SHAPES: BodyShape[] = ['blob', 'egg', 'pear', 'round', 'tall'];
 const EAR_TYPES: EarType[] = ['bunny', 'horns', 'antennae', 'crest', 'fins', 'none'];
 
-/** Builds a full appearance from a seed. Used for the residents. */
+/** Builds a full appearance from a seed. */
 export function generateSpec(options: {
   id: string;
   name: string;
@@ -85,6 +93,7 @@ export function generateSpec(options: {
   kindId?: string;
   origin?: ChudikSpec['origin'];
   drawing?: DrawingData;
+  hatching?: boolean;
 }): ChudikSpec {
   const rng = mulberry32(options.seed);
   const kind = options.kindId ? kindById(options.kindId) : pick(rng, KINDS);
@@ -114,12 +123,13 @@ export function generateSpec(options: {
 
     voice: voiceFromSeed(options.seed, size),
     drawing: options.drawing,
+    hatching: options.hatching,
   };
 
   return spec;
 }
 
-/** Names offered on the naming screen; a child taps instead of typing. */
+/** Fallback nicknames when the backend profile is missing. */
 export const NAME_SUGGESTIONS = [
   'Бубуся',
   'Тяпа',
@@ -141,26 +151,6 @@ export const NAME_SUGGESTIONS = [
   'Пипа',
   'Хрумка',
   'Облачко',
-] as const;
-
-/** Names for the creatures already living in the zoo on first launch. */
-export const RESIDENT_NAMES = [
-  'Пуфик',
-  'Тяпа',
-  'Кекс',
-  'Зюзя',
-  'Бублик',
-  'Шмяк',
-  'Няша',
-  'Плюх',
-  'Тыква',
-  'Жужа',
-  'Топа',
-  'Хрумка',
-  'Дынька',
-  'Мурзик',
-  'Облачко',
-  'Бубуся',
 ] as const;
 
 export function randomName(seed: number): string {

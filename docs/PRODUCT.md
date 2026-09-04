@@ -4,7 +4,7 @@
 
 Children aged 3–8, with a parent controlling account settings and external permissions.
 
-The current release target is a fast non-commercial pilot for a test group of up to 10 children.
+The current release is a public web zoo for children aged 3–8. A parent holds the account and any purchases.
 
 The interface must work for pre-readers: large targets, visual feedback, narration, minimal text, and no action that depends on understanding a long instruction.
 
@@ -46,9 +46,11 @@ No public gallery, chat, discovery, free text shared with other users, or exposu
 
 ## Commercial model
 
-**Status: deferred / post-pilot.**
+**Status: accepted (D-016 / ADR-0006).**
 
-This pilot has no subscriptions, payments, StoreKit, acquiring, creation credits, receipts, or purchase ledger. A later commercial model may be decided after the pilot; do not implement it now.
+The first creature on a parent account is free. Further creations use generation credits sold as one-time packs of 5, 10, 15, or 20 animals. Prices are in rubles and shown in the UI at checkout. Payment is internet acquiring through АО «ТБанк». Deleting a creature does not restore a credit. There are no subscriptions, StoreKit, App Store IAP, or extra worlds for sale yet. Foreign acquiring and other currencies come later.
+
+Purchase is parent-session only. Card data stays on the bank page. The zoo may show remaining creations and open a short pack sheet.
 
 ## Success signals for the pilot
 

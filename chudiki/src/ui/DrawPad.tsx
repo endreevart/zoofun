@@ -39,6 +39,7 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
   const [brush, setBrush] = useState(BRUSHES[1]);
   const [erasing, setErasing] = useState(false);
   const [hasArt, setHasArt] = useState(false);
+  const [openTool, setOpenTool] = useState<'color' | 'brush' | null>(null);
 
   // Size the bitmap to the element so strokes are crisp on any screen.
   useEffect(() => {
@@ -124,6 +125,7 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
+    setOpenTool(null);
     pushUndo();
     drawingRef.current = true;
     lastPointRef.current = null;
@@ -173,18 +175,12 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
   };
 
   return (
-    <div className="sheet">
+    <div className="sheet draw-sheet">
       <div className="sheet-header">
         <button className="icon-button" onClick={onCancel} aria-label="Назад">
           ⬅️
         </button>
         <h1 className="sheet-title">Нарисуй чудика</h1>
-        <button className="icon-button" onClick={undo} aria-label="Отменить">
-          ↩️
-        </button>
-        <button className="icon-button" onClick={clear} aria-label="Стереть всё">
-          🧽
-        </button>
       </div>
 
       <div className="sheet-body">
@@ -204,43 +200,87 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
           )}
         </div>
 
-        <div className="tool-row">
-          {PALETTE.map((swatch) => (
+        <div className="draw-tools">
+          <button className="icon-button" onClick={undo} aria-label="Отменить">
+            ↩️
+          </button>
+          <button className="icon-button" onClick={clear} aria-label="Стереть всё">
+            🧽
+          </button>
+          <div className="draw-tool">
             <button
-              key={swatch}
-              className="swatch"
-              style={{ background: swatch }}
-              data-active={!erasing && color === swatch}
-              aria-label={`Цвет ${swatch}`}
-              onClick={() => {
-                setColor(swatch);
-                setErasing(false);
-              }}
+              type="button"
+              className="draw-chip"
+              style={{ background: erasing ? '#f4f0e4' : color }}
+              data-open={openTool === 'color'}
+              aria-label="Цвет"
+              aria-expanded={openTool === 'color'}
+              onClick={() => setOpenTool((current) => (current === 'color' ? null : 'color'))}
             />
-          ))}
-        </div>
+            {openTool === 'color' ? (
+              <div className="draw-pop" role="listbox" aria-label="Цвета">
+                {PALETTE.map((swatch) => (
+                  <button
+                    key={swatch}
+                    className="swatch"
+                    style={{ background: swatch }}
+                    data-active={!erasing && color === swatch}
+                    aria-label={`Цвет ${swatch}`}
+                    onClick={() => {
+                      setColor(swatch);
+                      setErasing(false);
+                      setOpenTool(null);
+                    }}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
 
-        <div className="tool-row">
-          {BRUSHES.map((size) => (
+          <div className="draw-tool">
             <button
-              key={size}
-              className="brush"
-              data-active={!erasing && brush === size}
-              aria-label={`Кисть ${size}`}
+              type="button"
+              className="draw-chip draw-chip-brush"
+              data-open={openTool === 'brush'}
+              aria-label="Кисть"
+              aria-expanded={openTool === 'brush'}
               onClick={() => {
-                setBrush(size);
                 setErasing(false);
+                setOpenTool((current) => (current === 'brush' ? null : 'brush'));
               }}
             >
-              <span style={{ width: size * 0.8, height: size * 0.8 }} />
+              <span style={{ width: brush * 0.7, height: brush * 0.7 }} />
             </button>
-          ))}
+            {openTool === 'brush' ? (
+              <div className="draw-pop draw-pop-brushes" role="listbox" aria-label="Размер кисти">
+                {BRUSHES.map((size) => (
+                  <button
+                    key={size}
+                    className="brush"
+                    data-active={!erasing && brush === size}
+                    aria-label={`Кисть ${size}`}
+                    onClick={() => {
+                      setBrush(size);
+                      setErasing(false);
+                      setOpenTool(null);
+                    }}
+                  >
+                    <span style={{ width: size * 0.8, height: size * 0.8 }} />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           <button
-            className="brush"
+            type="button"
+            className="draw-chip draw-chip-erase"
             data-active={erasing}
             aria-label="Ластик"
-            onClick={() => setErasing(true)}
-            style={{ fontSize: 26 }}
+            onClick={() => {
+              setErasing(true);
+              setOpenTool(null);
+            }}
           >
             🩹
           </button>

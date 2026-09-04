@@ -16,9 +16,8 @@ import {
 } from './feedingPlan';
 
 /**
- * Sends chudiki to the harvest baskets in groups: one eater per feeder, the
- * next in line waiting a step back, everyone else staying put until they
- * move up. Each animal spends at most a second at the bowl.
+ * Sends every chudik to the nearest harvest basket. One animal eats at a
+ * bowl at a time; the rest wait in line.
  */
 export class FeedingDirector {
   private assignments: Assignment[] = [];

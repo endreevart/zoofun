@@ -1,7 +1,8 @@
 # ADR-0004: Non-commercial pilot, commerce deferred
 
-- Status: accepted
+- Status: superseded by ADR-0006 / D-016
 - Date: 2026-08-25
+- Superseded: 2026-09-03
 
 ## Context
 

@@ -80,7 +80,53 @@ function maskFromPhoto(image: ImageData): Mask {
   for (let p = 0; p < mask.data.length; p++) {
     mask.data[p] = visited[p] && matchesPaper(p) ? 0 : 1;
   }
+  punchCardPaper(image, mask);
   return mask;
+}
+
+/**
+ * A photo of a page often has a coloured frame. Border flood then leaves the
+ * white sheet as the "creature". Punch pale paper from the already-cleared edge
+ * so the figure stays and the card does not.
+ */
+function punchCardPaper(image: ImageData, mask: Mask): void {
+  const { width, height, data } = image;
+  if (maskArea(mask) < width * height * 0.28) return;
+
+  const isPalePaper = (p: number) => {
+    const i = p * 4;
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    return max > 220 && max - min < 28;
+  };
+
+  const seen = new Uint8Array(width * height);
+  const queue: number[] = [];
+  for (let p = 0; p < mask.data.length; p++) {
+    if (mask.data[p] !== 0) continue;
+    const x = p % width;
+    const y = (p - x) / width;
+    if (x > 0 && mask.data[p - 1] && isPalePaper(p - 1)) queue.push(p - 1);
+    if (x < width - 1 && mask.data[p + 1] && isPalePaper(p + 1)) queue.push(p + 1);
+    if (y > 0 && mask.data[p - width] && isPalePaper(p - width)) queue.push(p - width);
+    if (y < height - 1 && mask.data[p + width] && isPalePaper(p + width)) queue.push(p + width);
+  }
+
+  while (queue.length) {
+    const p = queue.pop()!;
+    if (seen[p] || !isPalePaper(p)) continue;
+    seen[p] = 1;
+    mask.data[p] = 0;
+    const x = p % width;
+    const y = (p - x) / width;
+    if (x > 0) queue.push(p - 1);
+    if (x < width - 1) queue.push(p + 1);
+    if (y > 0) queue.push(p - width);
+    if (y < height - 1) queue.push(p + width);
+  }
 }
 
 function estimateBorderColor(image: ImageData): [number, number, number] {

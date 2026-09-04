@@ -15,11 +15,14 @@ dependencies = [
   "celery[redis]>=5.4,<6",
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
+  "itsdangerous>=2.2.0",
+  "psycopg[binary]>=3.3.5",
   "pydantic-settings>=2.7,<3",
   "python-multipart>=0.0.20,<1",
+  "sqladmin[i18n]>=0.31.1",
   "sqlalchemy[asyncio]>=2.0,<3",
   "structlog>=25,<26",
-  "uvicorn[standard]>=0.34,<1"
+  "uvicorn[standard]>=0.34,<1",
 ]
 
 [project.optional-dependencies]

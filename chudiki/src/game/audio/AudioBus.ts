@@ -1,5 +1,10 @@
+import { assetUrl } from '../../assetUrl';
 import type { VoiceParams } from './voice';
 import { voiceDuration } from './voice';
+
+const GARDEN_MUSIC = assetUrl('audio/garden.mp3');
+/** Quiet bed under voices — children hold tablets close. */
+const GARDEN_VOLUME = 0.11;
 
 /**
  * One shared WebAudio graph. Synthesises creature voices, plays back recorded
@@ -9,11 +14,15 @@ export class AudioBus {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private decoded = new Map<string, AudioBuffer>();
+  private garden: HTMLAudioElement | null = null;
+  private gardenWanted = false;
 
   /** Browsers only allow audio after a gesture, so this is called on first tap. */
   async unlock(): Promise<void> {
     const ctx = this.ensureContext();
     if (ctx.state === 'suspended') await ctx.resume();
+    this.gardenWanted = true;
+    this.startGarden();
   }
 
   private ensureContext(): AudioContext {
@@ -182,6 +191,53 @@ export class AudioBus {
 
   forgetRecording(key: string) {
     this.decoded.delete(key);
+  }
+
+  /** Garden bed as a media track, so a TV stream can carry the music too. */
+  tapGardenStream(): MediaStream | null {
+    const el = this.garden as (HTMLAudioElement & { captureStream?: () => MediaStream }) | null;
+    if (!el || typeof el.captureStream !== 'function') return null;
+    try {
+      return el.captureStream();
+    } catch {
+      return null;
+    }
+  }
+
+  /** Soft looping garden bed. Starts after unlock; pauses when the tab hides. */
+  setGardenPaused(paused: boolean) {
+    if (paused) {
+      this.garden?.pause();
+      return;
+    }
+    if (this.gardenWanted) this.startGarden();
+  }
+
+  dispose() {
+    this.gardenWanted = false;
+    if (this.garden) {
+      this.garden.pause();
+      this.garden.removeAttribute('src');
+      this.garden.load();
+      this.garden = null;
+    }
+    void this.context?.close();
+    this.context = null;
+    this.master = null;
+    this.decoded.clear();
+  }
+
+  private startGarden() {
+    if (!this.gardenWanted || document.visibilityState === 'hidden') return;
+    if (!this.garden) {
+      const el = new Audio(GARDEN_MUSIC);
+      el.loop = true;
+      el.preload = 'auto';
+      el.volume = GARDEN_VOLUME;
+      this.garden = el;
+    }
+    const play = this.garden.play();
+    if (play) void play.catch(() => {});
   }
 
   /** Short UI confirmations, deliberately different from creature voices. */

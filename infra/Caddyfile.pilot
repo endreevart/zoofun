@@ -1,0 +1,29 @@
+:80 {
+	encode gzip zstd
+
+	handle /staff* {
+		reverse_proxy api:8000
+	}
+
+	handle /v1/* {
+		reverse_proxy api:8000
+	}
+
+	handle /health {
+		reverse_proxy api:8000
+	}
+
+	redir /admin /staff
+
+	handle_path /api/zoo/* {
+		reverse_proxy api:8000
+	}
+
+	handle /island* {
+		reverse_proxy island:80
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

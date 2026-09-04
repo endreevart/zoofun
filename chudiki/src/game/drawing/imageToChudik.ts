@@ -28,14 +28,22 @@ import {
 /** Working resolution for the mask maths. Big enough for shape, cheap to run. */
 const WORK_SIZE = 320;
 const TEXTURE_SIZE = 640;
+const PAINTED_TEXTURE_SIZE = 896;
 
 export type ProcessResult =
   | { ok: true; drawing: DrawingData; previewUrl: string }
   | { ok: false; reason: 'empty' | 'too-small' | 'too-thin' };
 
+export type ProcessOptions = {
+  /** Neural restyle: keep the paint, don't treat it as pencil-on-paper. */
+  painted?: boolean;
+};
+
 export async function imageToChudik(
   source: HTMLCanvasElement | HTMLImageElement | ImageBitmap,
+  options: ProcessOptions = {},
 ): Promise<ProcessResult> {
+  const painted = options.painted === true;
   const sourceWidth = 'naturalWidth' in source ? source.naturalWidth : source.width;
   const sourceHeight = 'naturalHeight' in source ? source.naturalHeight : source.height;
   if (!sourceWidth || !sourceHeight) return { ok: false, reason: 'empty' };
@@ -65,10 +73,12 @@ export async function imageToChudik(
 
   const boxWidth = bounds.maxX - bounds.minX + 1;
   const boxHeight = bounds.maxY - bounds.minY + 1;
-  if (Math.max(boxWidth, boxHeight) < Math.max(workWidth, workHeight) * 0.12) {
+  const minBox = painted ? 0.08 : 0.12;
+  const minFill = painted ? 0.04 : 0.12;
+  if (Math.max(boxWidth, boxHeight) < Math.max(workWidth, workHeight) * minBox) {
     return { ok: false, reason: 'too-small' };
   }
-  if (maskArea(mask) < boxWidth * boxHeight * 0.12) {
+  if (maskArea(mask) < boxWidth * boxHeight * minFill) {
     return { ok: false, reason: 'too-thin' };
   }
 
@@ -86,6 +96,8 @@ export async function imageToChudik(
     baseColor: palette.base,
     sourceWidth,
     sourceHeight,
+    fillBase: !painted,
+    textureSize: painted ? PAINTED_TEXTURE_SIZE : TEXTURE_SIZE,
   });
 
   const eyes = findEyeAnchor(mask, bounds);
@@ -102,8 +114,80 @@ export async function imageToChudik(
       eyeRadius: eyes.radius,
       sideColor: palette.side,
       accentColor: palette.accent,
+      painted,
     },
   };
+}
+
+/** A clay egg on the meadow while OpenRouter and Meshy still work. */
+export function makeEggDrawing(drawing: DrawingData): DrawingData {
+  const contour: Array<[number, number]> = [];
+  const steps = 36;
+  for (let i = 0; i < steps; i++) {
+    const t = (i / steps) * Math.PI * 2;
+    const flare = 0.5 - 0.5 * Math.cos(t);
+    const rx = 0.26 * (0.76 + 0.24 * flare);
+    const ry = 0.4;
+    contour.push([Math.sin(t) * rx, Math.cos(t) * ry]);
+  }
+  const clay = lightenHex(drawing.sideColor, 0.34);
+  return {
+    contour,
+    textureUrl: solidFillTexture(clay),
+    aspect: 0.7,
+    eyeAnchor: [0, 0.06],
+    eyeSpacing: 0.14,
+    eyeRadius: 0.05,
+    sideColor: clay,
+    accentColor: drawing.accentColor,
+    painted: true,
+    placeholder: true,
+  };
+}
+
+/** Cream egg before the drawing has been read. */
+export function blankEggDrawing(): DrawingData {
+  return makeEggDrawing({
+    contour: [],
+    textureUrl: '',
+    aspect: 0.7,
+    eyeAnchor: [0, 0],
+    eyeSpacing: 0.14,
+    eyeRadius: 0.05,
+    sideColor: '#f3d7a6',
+    accentColor: '#e08a4a',
+    painted: true,
+  });
+}
+
+function solidFillTexture(color: string): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 64, 64);
+  return canvas.toDataURL('image/png');
+}
+
+function lightenHex(hex: string, amount: number): string {
+  const value = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, ((value >> 16) & 255) + Math.round(255 * amount));
+  const g = Math.min(255, ((value >> 8) & 255) + Math.round(255 * amount));
+  const b = Math.min(255, (value & 255) + Math.round(255 * amount));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * Turns a neural restyle into a chudik. Never drops a painted image just
+ * because the silhouette maths were built for pencil-on-paper.
+ */
+export async function styledToChudik(
+  source: HTMLCanvasElement | HTMLImageElement | ImageBitmap,
+): Promise<ProcessResult> {
+  const painted = await imageToChudik(source, { painted: true });
+  if (painted.ok) return painted;
+  return paintedFallback(source);
 }
 
 /**
@@ -113,22 +197,34 @@ export async function imageToChudik(
 function renderTexture(
   source: HTMLCanvasElement | HTMLImageElement | ImageBitmap,
   bounds: { minX: number; minY: number; maxX: number; maxY: number },
-  options: { scale: number; baseColor: string; sourceWidth: number; sourceHeight: number },
+  options: {
+    scale: number;
+    baseColor: string;
+    sourceWidth: number;
+    sourceHeight: number;
+    fillBase?: boolean;
+    textureSize?: number;
+  },
 ): string {
   const boxWidth = bounds.maxX - bounds.minX + 1;
   const boxHeight = bounds.maxY - bounds.minY + 1;
   const aspect = boxWidth / boxHeight;
+  const size = options.textureSize ?? TEXTURE_SIZE;
 
-  const outWidth = aspect >= 1 ? TEXTURE_SIZE : Math.round(TEXTURE_SIZE * aspect);
-  const outHeight = aspect >= 1 ? Math.round(TEXTURE_SIZE / aspect) : TEXTURE_SIZE;
+  const outWidth = aspect >= 1 ? size : Math.round(size * aspect);
+  const outHeight = aspect >= 1 ? Math.round(size / aspect) : size;
 
   const canvas = document.createElement('canvas');
   canvas.width = outWidth;
   canvas.height = outHeight;
   const ctx = canvas.getContext('2d')!;
 
-  ctx.fillStyle = options.baseColor;
-  ctx.fillRect(0, 0, outWidth, outHeight);
+  if (options.fillBase !== false) {
+    ctx.fillStyle = options.baseColor;
+    ctx.fillRect(0, 0, outWidth, outHeight);
+  } else {
+    ctx.clearRect(0, 0, outWidth, outHeight);
+  }
 
   // Map the working-resolution box back onto the original pixels.
   const sx = bounds.minX / options.scale;
@@ -140,6 +236,71 @@ function renderTexture(
   ctx.drawImage(source, sx, sy, sw, sh, 0, 0, outWidth, outHeight);
 
   return canvas.toDataURL('image/png');
+}
+
+/**
+ * Last resort for a neural image whose silhouette we cannot trace: crop the
+ * painted pixels onto a rounded body so the restyle still reaches the zoo.
+ */
+function paintedFallback(
+  source: HTMLCanvasElement | HTMLImageElement | ImageBitmap,
+): ProcessResult {
+  const sourceWidth = 'naturalWidth' in source ? source.naturalWidth : source.width;
+  const sourceHeight = 'naturalHeight' in source ? source.naturalHeight : source.height;
+  if (!sourceWidth || !sourceHeight) return { ok: false, reason: 'empty' };
+
+  const scale = WORK_SIZE / Math.max(sourceWidth, sourceHeight);
+  const workWidth = Math.max(8, Math.round(sourceWidth * scale));
+  const workHeight = Math.max(8, Math.round(sourceHeight * scale));
+  const work = document.createElement('canvas');
+  work.width = workWidth;
+  work.height = workHeight;
+  const workCtx = work.getContext('2d', { willReadFrequently: true })!;
+  workCtx.drawImage(source, 0, 0, workWidth, workHeight);
+  const imageData = workCtx.getImageData(0, 0, workWidth, workHeight);
+
+  const mask = maskFromImageData(imageData);
+  const bounds = maskBounds(mask);
+  if (!bounds || maskArea(mask) < 8) return { ok: false, reason: 'empty' };
+
+  const boxWidth = bounds.maxX - bounds.minX + 1;
+  const boxHeight = bounds.maxY - bounds.minY + 1;
+  const rx = boxWidth / 2;
+  const ry = boxHeight / 2;
+  const cx = bounds.minX + rx;
+  const cy = bounds.minY + ry;
+  const oval: Array<[number, number]> = [];
+  for (let i = 0; i < 32; i++) {
+    const angle = (i / 32) * Math.PI * 2;
+    oval.push([cx + Math.cos(angle) * rx * 0.92, cy + Math.sin(angle) * ry * 0.92]);
+  }
+  const { contour, aspect } = normalizeContour(oval, bounds);
+  const palette = extractPalette(imageData, mask);
+  const textureUrl = renderTexture(source, bounds, {
+    scale,
+    baseColor: palette.base,
+    sourceWidth,
+    sourceHeight,
+    fillBase: false,
+    textureSize: PAINTED_TEXTURE_SIZE,
+  });
+  const eyes = findEyeAnchor(mask, bounds);
+
+  return {
+    ok: true,
+    previewUrl: textureUrl,
+    drawing: {
+      contour,
+      textureUrl,
+      aspect,
+      eyeAnchor: eyes.anchor,
+      eyeSpacing: eyes.spacing,
+      eyeRadius: eyes.radius,
+      sideColor: palette.side,
+      accentColor: palette.accent,
+      painted: true,
+    },
+  };
 }
 
 /**

@@ -1,15 +1,15 @@
 /**
  * Who goes to which harvest basket, and where they stand so two groups never
- * pile onto one bowl. Group k is the k-th animal at every feeder; only the
- * current group and the next one walk up.
+ * pile onto one bowl. Group k is the k-th animal at every feeder. Everyone
+ * walks up; they take turns at the bowl.
  */
 
 export const FEEDER_MODEL = 'harvest-cradle';
-export const EAT_SECONDS = 1;
+export const EAT_SECONDS = 2.4;
 /** How close a chudik must get before it starts eating. */
 export const ARRIVE_RADIUS = 0.5;
-/** Only the eater and the next in line approach the basket. */
-export const APPROACH_DEPTH = 2;
+/** Everyone walks toward a basket so feeding is visible across the park. */
+export const APPROACH_DEPTH = 64;
 /** If the head of the queue cannot reach the bowl, snap and eat. */
 export const ARRIVE_TIMEOUT = 18;
 
@@ -29,15 +29,15 @@ export type CreaturePose = {
 export type Assignment = {
   creatureId: string;
   feederIndex: number;
-  /** 0 eats now, 1 waits beside, 2+ stay put until they move up. */
+  /** 0 eats now; later places stand in line behind. */
   place: number;
 };
 
 export type GroundSlot = { x: number; z: number };
 
 /**
- * Spread animals across baskets: prefer the emptier feeder, then the nearer
- * one, so a far-away chudik does not walk past a free bowl.
+ * Each chudik walks to the nearest basket and queues there. An empty bowl
+ * across the park is not worth a trek.
  */
 export function assignToFeeders(
   creatures: readonly CreaturePose[],
@@ -53,9 +53,8 @@ export function assignToFeeders(
     for (let index = 0; index < feeders.length; index++) {
       const feeder = feeders[index];
       const distance = Math.hypot(creature.x - feeder.x, creature.z - feeder.z);
-      const score = counts[index] * 40 + distance;
-      if (score < bestScore) {
-        bestScore = score;
+      if (distance < bestScore) {
+        bestScore = distance;
         best = index;
       }
     }
@@ -102,7 +101,7 @@ export function slotBeside(
   const nz = inwardZ / length;
   const sideX = -nz;
   const sideZ = nx;
-  const back = 1.7 + place * 1.25;
+  const back = 1.55 + place * 0.95;
   const side = place === 0 ? 0 : (place % 2 === 1 ? 0.55 : -0.55);
   return {
     x: feeder.x + nx * back + sideX * side,

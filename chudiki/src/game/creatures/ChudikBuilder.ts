@@ -24,6 +24,8 @@ export type ChudikRig = {
   height: number;
   /** Horizontal footprint, used for tap targets and spacing. */
   radius: number;
+  /** Cracks on a waiting egg. Missing on hatched puppets. */
+  setHatchLook?(progress: number): void;
   dispose(): void;
 };
 

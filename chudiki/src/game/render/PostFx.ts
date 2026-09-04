@@ -8,6 +8,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { tuning, type TuningValues } from './tuning';
 import { SunShaftsPass } from './SunShafts';
 import { applyStylizedTuning } from './stylized';
+import { quality, type QualitySettings } from './quality';
 
 /**
  * The pass stack that turns flat lit geometry into something that reads as a
@@ -84,8 +85,8 @@ export type PostFxQuality = 'high' | 'low';
 export class PostFx {
   readonly composer: EffectComposer;
   private gtao?: GTAOPass;
-  private bloom: UnrealBloomPass;
-  private shafts: SunShaftsPass;
+  private bloom?: UnrealBloomPass;
+  private shafts?: SunShaftsPass;
   private grading: ShaderPass;
   private unsubscribe: () => void = () => {};
 
@@ -93,14 +94,14 @@ export class PostFx {
     private renderer: THREE.WebGLRenderer,
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
-    quality: PostFxQuality,
+    settings: QualitySettings = quality(),
   ) {
     const size = renderer.getSize(new THREE.Vector2());
 
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
 
-    if (quality === 'high') {
+    if (settings.gtao) {
       // Half-res AO: full-screen 12-sample GTAO on a retina canvas is what
       // made an empty lawn hitch. The creases still read; the cost halves.
       const gtao = new GTAOPass(scene, camera, Math.ceil(size.x / 2), Math.ceil(size.y / 2));
@@ -117,15 +118,19 @@ export class PostFx {
       this.composer.addPass(gtao);
     }
 
-    // Bloom runs before the grade, on linear values, exactly as the reference
-    // pipeline did.
-    this.bloom = new UnrealBloomPass(size, 0.14, 0.6, 0.72);
-    this.composer.addPass(this.bloom);
+    if (settings.bloom) {
+      // Bloom runs before the grade, on linear values, exactly as the reference
+      // pipeline did.
+      this.bloom = new UnrealBloomPass(size, 0.14, 0.6, 0.72);
+      this.composer.addPass(this.bloom);
+    }
 
-    // Shafts read the still-linear frame, so their threshold means the same
-    // thing as the bloom's and the grade compresses both together.
-    this.shafts = new SunShaftsPass();
-    this.composer.addPass(this.shafts);
+    if (settings.shafts) {
+      // Shafts read the still-linear frame, so their threshold means the same
+      // thing as the bloom's and the grade compresses both together.
+      this.shafts = new SunShaftsPass();
+      this.composer.addPass(this.shafts);
+    }
 
     this.grading = new ShaderPass(GradingShader);
     this.composer.addPass(this.grading);
@@ -137,11 +142,13 @@ export class PostFx {
 
   /** Pushes tunable look parameters into the passes that own them. */
   apply(values: TuningValues) {
-    this.bloom.strength = values.bloomStrength;
-    this.bloom.threshold = values.bloomThreshold;
-    this.bloom.radius = values.bloomRadius;
+    if (this.bloom) {
+      this.bloom.strength = values.bloomStrength;
+      this.bloom.threshold = values.bloomThreshold;
+      this.bloom.radius = values.bloomRadius;
+    }
     if (this.gtao) this.gtao.blendIntensity = values.aoIntensity;
-    this.shafts.apply(values);
+    this.shafts?.apply(values);
     applyStylizedTuning(values);
 
     const uniforms = this.grading.uniforms;
@@ -155,21 +162,19 @@ export class PostFx {
 
   /** Picks a quality tier from what the device can plausibly sustain. */
   static suggestQuality(): PostFxQuality {
-    const coarsePointer =
-      typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    const cores = navigator.hardwareConcurrency ?? 4;
-    const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-    if (coarsePointer || cores <= 4 || (memory !== undefined && memory <= 8)) return 'low';
-    return 'high';
+    return quality().tier;
   }
 
   /** Per-frame: the shafts need this frame's projected sun position. */
   updateSun(sun: THREE.DirectionalLight, camera: THREE.PerspectiveCamera) {
-    if (this.shafts.enabled) this.shafts.update(sun, camera);
+    if (this.shafts?.enabled) this.shafts.update(sun, camera);
   }
 
   /** Dev readout: whether the sun-shaft pass can see the key light. */
   shaftDebug() {
+    if (!this.shafts) {
+      return { enabled: false, sunVisible: 0, shaftStrength: 0, sunHaze: 0, sunUv: [0, 0] };
+    }
     const u = this.shafts.uniforms;
     const sunUv = u.sunUv.value as THREE.Vector2;
     return {
@@ -184,8 +189,8 @@ export class PostFx {
   setSize(width: number, height: number) {
     this.composer.setSize(width, height);
     this.gtao?.setSize(Math.ceil(width / 2), Math.ceil(height / 2));
-    this.bloom.setSize(width, height);
-    this.shafts.setSize(width, height);
+    this.bloom?.setSize(width, height);
+    this.shafts?.setSize(width, height);
   }
 
   render(delta: number) {

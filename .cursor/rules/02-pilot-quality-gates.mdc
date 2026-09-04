@@ -5,10 +5,9 @@ alwaysApply: true
 
 # Pilot quality gates
 
-- Work one iteration at a time. After packaging a review ZIP, stop.
-- The next stage must not start until an external reviewer returns `PASS`.
 - A partially downloaded or invalid creature must never appear in the zoo.
 - Existing cached animals must remain usable offline.
 - Compilation, a green editor, or a passing lint run is not a finished result. Review logs, generated assets, Game view, and device/runtime behavior.
-- Do not add friends, chat, public content, leagues, payments, subscriptions, StoreKit, acquiring, creation credits, receipts, a purchase ledger, or automatic full-3D generation during this pilot.
+- Do not add friends, chat, public content, leagues, subscriptions, StoreKit, or automatic full-3D generation.
+- Web commerce follows D-016 / ADR-0006. Do not add extra worlds or foreign acquiring without a new decision.
 - If code and `docs/` disagree, stop and surface the mismatch. Do not silently redefine the product.

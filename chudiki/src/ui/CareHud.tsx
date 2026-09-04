@@ -1,3 +1,5 @@
+import { HudIcon } from './HudIcon';
+
 type CareHudProps = {
   joy: number;
   feeding: boolean;
@@ -6,7 +8,7 @@ type CareHudProps = {
 
 /**
  * Feed sits in the main toolbar. A bowl plus a filling bar: empty means
- * tap to feed, full means everyone ate. No faces, no “они кушают”.
+ * tap to feed. While they eat the button pulses so the child sees it worked.
  */
 export function CareHud({ joy, feeding, onFeed }: CareHudProps) {
   const food = Math.max(0.08, Math.min(1, joy));
@@ -18,15 +20,13 @@ export function CareHud({ joy, feeding, onFeed }: CareHudProps) {
       type="button"
       disabled={feeding}
       onClick={onFeed}
-      aria-label={`Покормить, еды ${level}`}
+      aria-label={feeding ? 'Чудики кушают' : `Покормить, еды ${level}`}
     >
-      <span className="icon" aria-hidden="true">
-        🥣
-      </span>
+      <HudIcon name="feed" />
       <span className="food-bar" aria-hidden="true">
         <span className="food-bar-fill" style={{ width: `${food * 100}%` }} />
       </span>
-      <span>Покормить</span>
+      <span>{feeding ? 'Кушают' : 'Покормить'}</span>
     </button>
   );
 }

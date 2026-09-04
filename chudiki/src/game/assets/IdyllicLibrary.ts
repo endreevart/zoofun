@@ -107,7 +107,7 @@ export class IdyllicLibrary {
   ): Promise<void> {
     const wanted = [...new Set(names)].filter((name) => this.canLoad(name));
     let done = 0;
-    const batchSize = 4;
+    const batchSize = 8;
     for (let i = 0; i < wanted.length; i += batchSize) {
       await Promise.all(
         wanted.slice(i, i + batchSize).map(async (name) => {

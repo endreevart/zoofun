@@ -7,15 +7,13 @@ import {
   randomSeed,
   type ChudikSpec,
 } from './game/creatures/ChudikSpec';
-import type { DrawingData } from './game/creatures/ChudikSpec';
-import { imageToChudik } from './game/drawing/imageToChudik';
+import { blankEggDrawing, imageToChudik, styledToChudik } from './game/drawing/imageToChudik';
 import { stylizeDrawing } from './game/drawing/stylizeDrawing';
 import {
   deleteVoiceRecording,
   saveVoiceRecording,
 } from './game/persistence/zooStore';
 import { DrawPad } from './ui/DrawPad';
-import { NameSheet } from './ui/NameSheet';
 import { CreatureCard } from './ui/CreatureCard';
 import { RosterSheet } from './ui/RosterSheet';
 import { TuningPanel } from './ui/TuningPanel';
@@ -23,12 +21,60 @@ import { LayoutEditor } from './ui/LayoutEditor';
 import { isStudio } from './studioMode';
 import { WalkPad } from './ui/WalkPad';
 import { CareHud } from './ui/CareHud';
+import { HudIcon } from './ui/HudIcon';
 import { PilotChoice } from './ui/PilotChoice';
-import { bootstrapParentSession, readParentProfile } from './parentSession';
+import { bootstrapParentSession } from './parentSession';
+import { readQuota, type Quota } from './game/commerce';
+import { PackSheet } from './ui/PackSheet';
+import { isTvReceiver, TvReceiver } from './ui/TvReceiver';
 
-type Screen = 'zoo' | 'draw' | 'name' | 'roster';
+type Screen = 'zoo' | 'draw' | 'roster';
 
-type Pending = { drawing: DrawingData; previewUrl: string; seed: number };
+type FullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+type FullscreenNode = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+
+function currentFullscreen(): Element | null {
+  const doc = document as FullscreenDocument;
+  return document.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+}
+
+async function enterFullscreen(node: HTMLElement): Promise<boolean> {
+  const el = node as FullscreenNode;
+  try {
+    if (el.requestFullscreen) {
+      await el.requestFullscreen();
+      return true;
+    }
+    if (el.webkitRequestFullscreen) {
+      await el.webkitRequestFullscreen();
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+async function leaveFullscreen(): Promise<void> {
+  const doc = document as FullscreenDocument;
+  try {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      await document.exitFullscreen();
+      return;
+    }
+    if (doc.webkitFullscreenElement && doc.webkitExitFullscreen) {
+      await doc.webkitExitFullscreen();
+    }
+  } catch {
+    /* already left */
+  }
+}
 
 const FAILURE_MESSAGES: Record<string, string> = {
   empty: 'Тут почти ничего не нарисовано. Нарисуй чудика побольше!',
@@ -37,6 +83,8 @@ const FAILURE_MESSAGES: Record<string, string> = {
 };
 
 export function App() {
+  if (isTvReceiver()) return <TvReceiver />;
+
   const stageRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Game | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -46,7 +94,6 @@ export function App() {
   const [specs, setSpecs] = useState<ChudikSpec[]>([]);
   const [recordedIds, setRecordedIds] = useState<Set<string>>(new Set());
   const [cardSpec, setCardSpec] = useState<ChudikSpec | null>(null);
-  const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(true);
@@ -54,13 +101,29 @@ export function App() {
   const [feeding, setFeeding] = useState(false);
   const [offerSpec, setOfferSpec] = useState<ChudikSpec | null>(null);
   const [driving, setDriving] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [cinema, setCinema] = useState(false);
+  const [quota, setQuota] = useState<Quota | null>(null);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const appRef = useRef<HTMLDivElement | null>(null);
+
+  const refreshQuota = useCallback(async () => {
+    const token = bootstrapParentSession().token;
+    if (!token) {
+      setQuota(null);
+      return;
+    }
+    setQuota(await readQuota(token));
+  }, []);
 
   useEffect(() => {
-    const session = bootstrapParentSession();
-    if (session.token) {
-      void readParentProfile(session.token);
-    }
-  }, []);
+    void refreshQuota();
+  }, [refreshQuota]);
+
+  useEffect(() => {
+    if (screen !== 'zoo') setActionsOpen(false);
+  }, [screen]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -77,7 +140,7 @@ export function App() {
     });
     gameRef.current = game;
 
-    void game.start().then(() => {
+    void game.start((fraction) => setLoadProgress(fraction)).then(() => {
       setReady(true);
       setRecordedIds(new Set(game.getRecordedIds()));
     });
@@ -170,42 +233,106 @@ export function App() {
     window.setTimeout(() => setToast((current) => (current === message ? null : current)), 3200);
   }, []);
 
-  /** Shared by the drawing pad and the photo picker. */
+  const toggleFullscreen = useCallback(() => {
+    if (currentFullscreen()) {
+      setCinema(false);
+      void leaveFullscreen();
+      return;
+    }
+    setCinema(true);
+    const root = appRef.current ?? document.documentElement;
+    void enterFullscreen(root);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setCinema(Boolean(currentFullscreen()));
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      document.removeEventListener('webkitfullscreenchange', sync);
+    };
+  }, []);
+
+  const canCreate = useCallback(() => {
+    if (quota && quota.remaining <= 0) {
+      setShopOpen(true);
+      return false;
+    }
+    return true;
+  }, [quota]);
   const processArtwork = useCallback(
     async (source: HTMLCanvasElement | HTMLImageElement) => {
-      setBusy('Смотрим на рисунок...');
-      try {
-        // One frame for the spinner to paint before the heavy pixel work.
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        const local = await imageToChudik(source);
+      if (!canCreate()) return;
+      const game = gameRef.current;
+      const seed = randomSeed();
+      const spec = generateSpec({
+        id: makeId(),
+        name: randomName(seed),
+        seed,
+        kindId: 'roundy',
+        origin: 'drawing',
+        hatching: true,
+        drawing: blankEggDrawing(),
+      });
 
+      setScreen('zoo');
+      setBusy(null);
+      if (game) {
+        await game.addCreature(spec);
+        flash('Яйцо на поляне. Постучи — вылупится скорее!');
+      }
+
+      try {
+        const local = await imageToChudik(source);
         if (!local.ok) {
-          setBusy(null);
+          if (game) await game.removeCreature(spec.id);
           setScreen('draw');
           flash(FAILURE_MESSAGES[local.reason] ?? 'Не получилось разобрать рисунок.');
           return;
         }
 
-        setBusy('Нейронка рисует чудика...');
-        const styled = await stylizeDrawing(source);
-        const fromStyle = styled ? await imageToChudik(styled) : null;
-        const result = fromStyle?.ok ? fromStyle : local;
+        if (!game) return;
+        let painted = local.drawing;
+        const ready = async (
+          styled: Extract<Awaited<ReturnType<typeof stylizeDrawing>>, { ok: true }>,
+        ) => {
+          const fromStyle = await styledToChudik(styled.image);
+          if (fromStyle.ok) painted = fromStyle.drawing;
+          if (styled.modelUrl) painted = { ...painted, modelUrl: styled.modelUrl };
+          const name = styled.name || spec.name;
+          const kindId = styled.kindId || spec.kindId;
+          game.prepareHatch(spec.id, { drawing: painted, name, kindId });
+        };
 
-        setPending({
-          drawing: result.drawing,
-          previewUrl: result.previewUrl,
-          seed: randomSeed(),
+        const styled = await stylizeDrawing(source, {
+          onImage: () => {
+            flash('Греется. Постучи по яйцу!');
+          },
         });
-        setScreen('name');
+        if (styled.ok) {
+          await ready(styled);
+          flash('Почти! Постучи — или подожди чуть-чуть.');
+        } else if (styled.reason === 'no_credits') {
+          setShopOpen(true);
+          flash('Нужен пакет — бесплатный зверь уже создан.');
+          game.prepareHatch(spec.id, { drawing: local.drawing });
+        } else if (styled.reason !== 'unavailable') {
+          game.prepareHatch(spec.id, { drawing: local.drawing });
+          flash('Постучи по яйцу — там твой рисунок.');
+        } else {
+          game.prepareHatch(spec.id, { drawing: local.drawing });
+        }
       } catch (error) {
         console.error('[drawing] processing failed', error);
         flash('Что-то пошло не так с рисунком.');
         setScreen('zoo');
       } finally {
         setBusy(null);
+        void refreshQuota();
       }
     },
-    [flash],
+    [canCreate, flash, refreshQuota],
   );
 
   const handlePhoto = useCallback(
@@ -226,32 +353,6 @@ export function App() {
       }
     },
     [flash, processArtwork],
-  );
-
-  const confirmCreature = useCallback(
-    async ({ name, kindId }: { name: string; kindId: string }) => {
-      const game = gameRef.current;
-      if (!game || !pending) return;
-
-      const spec = generateSpec({
-        id: makeId(),
-        name,
-        seed: pending.seed,
-        kindId,
-        origin: 'drawing',
-        drawing: pending.drawing,
-      });
-
-      setPending(null);
-      setScreen('zoo');
-      setBusy('Выпускаем в зоопарк...');
-      try {
-        await game.addCreature(spec);
-      } finally {
-        setBusy(null);
-      }
-    },
-    [pending],
   );
 
   const saveRecording = useCallback(
@@ -294,13 +395,16 @@ export function App() {
   );
 
   return (
-    <div className="app">
+    <div className="app" ref={appRef}>
       <div className="stage" ref={stageRef} />
 
       {screen === 'zoo' && ready && (
         <>
-          {showHint && !driving && (
+          {showHint && !driving && specs.length > 0 && (
             <div className="hint">Тапни чудика — он тебе ответит 👆</div>
+          )}
+          {specs.length === 0 && !driving && (
+            <div className="hint">Нарисуй чудика — он поселится в саду 🎨</div>
           )}
 
           <WalkPad onWalk={walkPad} />
@@ -320,41 +424,109 @@ export function App() {
             </button>
           )}
 
-          <div className="toolbar">
+          <div className={`toolbar-dock${actionsOpen ? ' is-open' : ''}`}>
             <button
-              className="big-button ghost"
-              onClick={() => {
-                stopPilot();
-                gameRef.current?.showWholeZoo();
-              }}
-            >
-              <span className="icon">🔭</span>
-              <span>Весь зоопарк</span>
-            </button>
-
-            <button className="big-button primary" onClick={() => setScreen('draw')}>
-              <span className="icon">🎨</span>
-              <span>Нарисовать</span>
-            </button>
-
-            <CareHud
-              joy={joy}
-              feeding={feeding}
-              onFeed={() => {
-                stopPilot();
-                const ok = gameRef.current?.feedZoo();
-                if (ok === false) flash('Поставьте корзинку в парке — туда придут кушать.');
-              }}
+              className="toolbar-scrim"
+              type="button"
+              aria-label="Закрыть"
+              onClick={() => setActionsOpen(false)}
             />
+            <div className="toolbar">
+              <div className="toolbar-side toolbar-side-left">
+                <button
+                  className="big-button ghost"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    stopPilot();
+                    gameRef.current?.showWholeZoo();
+                  }}
+                >
+                  <HudIcon name="zoo" />
+                  <span>Весь зоопарк</span>
+                </button>
+              </div>
 
-            <button className="big-button" onClick={() => fileInputRef.current?.click()}>
-              <span className="icon">📷</span>
-              <span>Фото рисунка</span>
-            </button>
+              <button
+                className="big-button primary"
+                onClick={() => {
+                  setActionsOpen(false);
+                  if (!canCreate()) return;
+                  setScreen('draw');
+                }}
+              >
+                <HudIcon name="draw" />
+                <span>Нарисовать</span>
+              </button>
 
-            <button className="big-button ghost" onClick={() => setScreen('roster')}>
-              <span className="icon">🐾</span>
-              <span>Мои чудики</span>
+              <div className="toolbar-side toolbar-side-right">
+              <CareHud
+                joy={joy}
+                feeding={feeding}
+                onFeed={() => {
+                  setActionsOpen(false);
+                  stopPilot();
+                  const ok = gameRef.current?.feedZoo();
+                  if (ok === false) {
+                    flash(
+                      specs.length === 0
+                        ? 'Сначала нарисуй чудика — он придёт кушать.'
+                        : 'Поставьте корзинку в парке — туда придут кушать.',
+                    );
+                  }
+                }}
+              />
+
+              <button
+                className="big-button"
+                onClick={() => {
+                  setActionsOpen(false);
+                  if (!canCreate()) return;
+                  fileInputRef.current?.click();
+                }}
+              >
+                <HudIcon name="photo" />
+                <span>Фото рисунка</span>
+              </button>
+
+              <button
+                className="big-button ghost"
+                onClick={() => {
+                  setActionsOpen(false);
+                  setScreen('roster');
+                }}
+              >
+                <HudIcon name="roster" />
+                <span>Мои чудики</span>
+              </button>
+
+              {quota ? (
+                <button
+                  className="big-button quota-chip"
+                  type="button"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    setShopOpen(true);
+                  }}
+                  aria-label={`Можно создать ещё ${quota.remaining}`}
+                >
+                  <span className="icon">✦</span>
+                  <span>Ещё {quota.remaining}</span>
+                </button>
+              ) : null}
+              </div>
+            </div>
+            <button
+              className="toolbar-fab"
+              type="button"
+              aria-label={actionsOpen ? 'Закрыть' : 'Действия'}
+              aria-expanded={actionsOpen}
+              onClick={() => setActionsOpen((open) => !open)}
+            >
+              {actionsOpen ? (
+                <span className="icon">✕</span>
+              ) : (
+                <HudIcon name="draw" />
+              )}
             </button>
           </div>
         </>
@@ -364,18 +536,6 @@ export function App() {
         <DrawPad
           onCancel={() => setScreen('zoo')}
           onDone={(canvas) => void processArtwork(canvas)}
-        />
-      )}
-
-      {screen === 'name' && pending && (
-        <NameSheet
-          previewUrl={pending.previewUrl}
-          suggestedName={randomName(pending.seed)}
-          onCancel={() => {
-            setPending(null);
-            setScreen('draw');
-          }}
-          onConfirm={(result) => void confirmCreature(result)}
         />
       )}
 
@@ -391,6 +551,10 @@ export function App() {
           }}
         />
       )}
+
+      {shopOpen ? (
+        <PackSheet remaining={quota?.remaining ?? 0} onClose={() => setShopOpen(false)} />
+      ) : null}
 
       {cardSpec && (
         <CreatureCard
@@ -420,14 +584,29 @@ export function App() {
         <div className="busy">
           <div className="spinner" />
           <span>Открываем зоопарк...</span>
+          <span className="load-bar" aria-hidden="true">
+            <span className="food-bar-fill" style={{ width: `${Math.round(loadProgress * 100)}%` }} />
+          </span>
         </div>
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast ? <div className="toast">{toast}</div> : null}
 
-      {isStudio() && ready && gameRef.current && <LayoutEditor game={gameRef.current} />}
-
-      {isStudio() && ready && <TuningPanel />}
+      <div className="admin-dock">
+        {screen === 'zoo' && ready && (
+          <button
+            className={`tv-share${cinema ? ' is-live' : ''}`}
+            type="button"
+            title={cinema ? 'Выйти из полного экрана' : 'Открыть зоопарк на весь экран'}
+            aria-label={cinema ? 'Выйти из полного экрана' : 'Открыть зоопарк на весь экран'}
+            onClick={toggleFullscreen}
+          >
+            ⛶
+          </button>
+        )}
+        {isStudio() && ready && gameRef.current && <LayoutEditor game={gameRef.current} />}
+        {isStudio() && ready && <TuningPanel />}
+      </div>
 
       <input
         ref={fileInputRef}

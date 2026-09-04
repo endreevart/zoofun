@@ -1,31 +1,34 @@
 import * as THREE from 'three';
 import { World } from './world/World';
 import { Chudik } from './creatures/Chudik';
+import { assetUrl } from '../assetUrl';
 import {
   generateSpec,
   kindById,
-  RESIDENT_NAMES,
   type ChudikSpec,
+  type DrawingData,
 } from './creatures/ChudikSpec';
 import { CameraRig } from './interaction/CameraRig';
 import { TapController } from './interaction/TapController';
 import { LayoutStudio } from './interaction/LayoutStudio';
 import { PostFx } from './render/PostFx';
+import { quality } from './render/quality';
 import { Sparkles } from './effects/Sparkles';
 import { AudioBus } from './audio/AudioBus';
 import { mulberry32 } from './core/rng';
-import { HERO_FOV } from './world/layout';
+import { HERO_FOV, MEADOW_SPAWN } from './world/layout';
 import { tuning } from './render/tuning';
 import { stylizedUniforms, updateStylizedSun } from './render/stylized';
 import { updateWorldCurve } from './render/worldCurve';
 import {
-  loadCreatures,
+  hydrateZoo,
   loadVoiceRecording,
   saveCreature,
   deleteCreature,
   type StoredCreature,
 } from './persistence/zooStore';
 import { FeedingDirector } from './care/FeedingDirector';
+import { track } from '../analytics';
 
 export type CareState = {
   joy: number;
@@ -41,9 +44,6 @@ export type GameCallbacks = {
   onCareChanged?(state: CareState): void;
   onReady?(): void;
 };
-
-const RESIDENT_COUNT = 14;
-const RESIDENT_SEED_BASE = 771100;
 
 /**
  * Owns the renderer, the world and every living chudik, and is the single
@@ -88,23 +88,30 @@ export class Game {
   private projected = new THREE.Vector3();
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
+  private tvFeed: {
+    canvas: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+  } | null = null;
 
   constructor(container: HTMLElement, callbacks: GameCallbacks = {}) {
     this.container = container;
     this.callbacks = callbacks;
 
+    const look = quality();
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: look.antialias,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(look.pixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     // PostFx's grading pass owns tone mapping, using the curve fitted against
     // the reference painting. Leaving a renderer tone map on would apply a
     // second, unrelated shoulder on top of it.
     this.renderer.toneMapping = THREE.NoToneMapping;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = look.shadows;
+    this.renderer.shadowMap.type = look.softShadows
+      ? THREE.PCFSoftShadowMap
+      : THREE.BasicShadowMap;
 
     const canvas = this.renderer.domElement;
     canvas.style.width = '100%';
@@ -131,15 +138,71 @@ export class Game {
     }
 
     document.addEventListener('visibilitychange', this.onVisibilityChange);
+    document.addEventListener('pointerdown', this.onFirstSound, { capture: true });
+  }
+
+  /** The live zoo picture — not the HTML chrome. Used to share onto a TV. */
+  get view(): HTMLCanvasElement {
+    return this.renderer.domElement;
   }
 
   /**
-   * Loads the nature models, builds the park, restores the saved zoo (seeding
-   * residents on a first launch) and starts the loop.
+   * A smaller 16:9 copy of the garden. We only blit when a TV frame is sent,
+   * not every animation frame.
+   */
+  startTvFeed(): HTMLCanvasElement {
+    this.stopTvFeed();
+    const canvas = document.createElement('canvas');
+    canvas.className = 'tv-share-feed';
+    canvas.width = 1280;
+    canvas.height = 720;
+    const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false });
+    if (!ctx) throw new Error('tv canvas failed');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    this.tvFeed = { canvas, ctx };
+    this.grabTvFrame();
+    document.body.appendChild(canvas);
+    return canvas;
+  }
+
+  stopTvFeed() {
+    if (!this.tvFeed) return;
+    this.tvFeed.canvas.remove();
+    this.tvFeed = null;
+  }
+
+  grabTvFrame() {
+    const feed = this.tvFeed;
+    if (!feed) return;
+    const src = this.renderer.domElement;
+    const sw = src.width;
+    const sh = src.height;
+    const dw = feed.canvas.width;
+    const dh = feed.canvas.height;
+    if (!sw || !sh) return;
+    let sx = 0;
+    let sy = 0;
+    let cw = sw;
+    let ch = sh;
+    if (sw / sh > dw / dh) {
+      cw = sh * (dw / dh);
+      sx = (sw - cw) / 2;
+    } else {
+      ch = sw * (dh / dw);
+      sy = (sh - ch) / 2;
+    }
+    feed.ctx.drawImage(src, sx, sy, cw, ch, 0, 0, dw, dh);
+  }
+
+  /**
+   * Loads the nature models, builds the park, restores the child's zoo and
+   * starts the loop. An empty park is the starting state: children fill it.
    */
   async start(onProgress?: (fraction: number) => void): Promise<void> {
+    const storedPromise = hydrateZoo();
     this.world = await World.create(undefined, (done, total) =>
-      onProgress?.(total > 0 ? done / total : 1),
+      onProgress?.(total > 0 ? (done / total) * 0.92 : 0.92),
     );
     this.scene.add(this.world.root);
     this.scene.fog = this.world.root.userData.fog as THREE.FogExp2;
@@ -167,23 +230,19 @@ export class Game {
       rig: this.rig,
     });
 
-    this.postFx = new PostFx(this.renderer, this.scene, this.camera, PostFx.suggestQuality());
+    this.postFx = new PostFx(this.renderer, this.scene, this.camera);
     this.untune = tuning.subscribe((values) => {
       for (const chudik of this.creatures.values()) chudik.setScale(values.creatureScale);
     });
     this.resize();
 
-    const stored = await loadCreatures();
+    const stored = await storedPromise;
+    onProgress?.(0.97);
 
-    if (stored.length === 0) {
-      const residents = this.createResidents();
-      for (const record of residents) {
-        await saveCreature(record);
-      }
-      this.spawnStored(residents, false);
-    } else {
-      this.spawnStored(stored, false);
-      await this.loadRecordings(stored.map((record) => record.spec.id));
+    this.spawnStored(stored, false);
+    await this.maybeSeedGladeCreature();
+    if (this.creatures.size > 0) {
+      await this.loadRecordings([...this.creatures.keys()]);
     }
 
     this.running = true;
@@ -192,27 +251,8 @@ export class Game {
 
     this.emitRoster();
     this.emitCare(true);
+    onProgress?.(1);
     this.callbacks.onReady?.();
-  }
-
-  private createResidents(): StoredCreature[] {
-    const rng = mulberry32(RESIDENT_SEED_BASE);
-    const records: StoredCreature[] = [];
-
-    for (let i = 0; i < RESIDENT_COUNT; i++) {
-      const seed = RESIDENT_SEED_BASE + i * 9176;
-      const spec = generateSpec({
-        id: `resident_${i}`,
-        name: RESIDENT_NAMES[i % RESIDENT_NAMES.length],
-        seed,
-      });
-      // Residents predate anything the child makes, so they sort first.
-      spec.createdAt = i;
-      const spot = this.world.findOpenSpot(rng);
-      records.push({ spec, lastPosition: { x: spot.x, z: spot.z } });
-    }
-
-    return records;
   }
 
   private spawnStored(records: StoredCreature[], arrival: boolean) {
@@ -239,28 +279,69 @@ export class Game {
 
   /** Adds a brand new creature, saves it, and makes an entrance out of it. */
   async addCreature(spec: ChudikSpec): Promise<void> {
-    const spot = this.world.findOpenSpot(Math.random, new THREE.Vector3(2, 0, 7));
+    const spot = this.world.findOpenSpot(Math.random, MEADOW_SPAWN);
     const chudik = this.instantiate(spec, spot, true);
 
     await saveCreature({ spec, lastPosition: { x: spot.x, z: spot.z } });
     this.emitRoster();
+    track('creature.add', { id: spec.id, name: spec.name, kind: spec.kindId });
 
     const burstPoint = chudik.position.clone();
     burstPoint.y += chudik.height * 0.5;
+    const egg = spec.hatching === true;
     this.sparkles.burst(
       burstPoint,
       [spec.bodyColor, spec.accentColor, '#ffffff', '#ffe066'],
-      54,
-      1.25,
+      egg ? 22 : 54,
+      egg ? 0.8 : 1.25,
     );
 
-    this.audio.playUiSound('appear');
+    this.audio.playUiSound(egg ? 'tap' : 'appear');
     // Stay on the current zoo view. Flying onto the spawn made every later
     // orbit revolve around that one creature instead of the park.
 
-    // Let the pop land before it introduces itself.
-    window.setTimeout(() => this.playVoice(spec.id), 700);
-    this.showNameplate(chudik, 3.4);
+    if (!egg) {
+      window.setTimeout(() => this.playVoice(spec.id), 700);
+    }
+    this.showNameplate(chudik, egg ? 4.2 : 3.4);
+  }
+
+  /**
+   * One Meshy doodle on the meadow so the 3D path is visible without drawing
+   * again. Skipped once that creature already lives in the zoo.
+   */
+  private async maybeSeedGladeCreature(): Promise<void> {
+    const id = 'drawing_meshy_glade';
+    if (this.creatures.has(id)) return;
+    const spec = generateSpec({
+      id,
+      name: 'Корона',
+      seed: 20260903,
+      kindId: 'flyer',
+      origin: 'drawing',
+      drawing: {
+        contour: [
+          [-0.22, -0.42],
+          [0.22, -0.42],
+          [0.22, 0.42],
+          [-0.22, 0.42],
+        ],
+        textureUrl:
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+        aspect: 1,
+        eyeAnchor: [0, 0.12],
+        eyeSpacing: 0.18,
+        eyeRadius: 0.07,
+        sideColor: '#f4e4c1',
+        accentColor: '#f5d76e',
+        painted: true,
+        modelUrl: assetUrl('models/creatures/krakozyabra.glb'),
+      },
+    });
+    const spot = this.world.findOpenSpot(Math.random, MEADOW_SPAWN);
+    this.instantiate(spec, spot, true);
+    await saveCreature({ spec, lastPosition: { x: spot.x, z: spot.z } });
+    this.emitRoster();
   }
 
   async removeCreature(id: string): Promise<void> {
@@ -275,6 +356,68 @@ export class Game {
     this.audio.forgetRecording(id);
     await deleteCreature(id);
     this.emitRoster();
+    track('creature.remove', { id });
+  }
+
+  /** Keep the egg; remember the finished puppet for the next tap or the wait. */
+  prepareHatch(
+    id: string,
+    patch: { drawing: DrawingData; name?: string; kindId?: string },
+  ) {
+    const chudik = this.creatures.get(id);
+    if (!chudik?.isHatching) return;
+    if (patch.name) chudik.spec.name = patch.name;
+    if (patch.kindId) chudik.spec.kindId = patch.kindId;
+    chudik.spec.drawing = patch.drawing;
+    chudik.prepareHatch(patch.drawing);
+    void saveCreature({
+      spec: chudik.spec,
+      lastPosition: { x: chudik.position.x, z: chudik.position.z },
+    });
+    this.showNameplate(chudik, 3);
+  }
+
+  /** Swap the egg for the finished creature. */
+  async finishHatch(id: string): Promise<void> {
+    const chudik = this.creatures.get(id);
+    if (!chudik?.isHatching) return;
+    const drawing = chudik.takeHatch() ?? chudik.spec.drawing;
+    if (!drawing || drawing.placeholder) return;
+    await this.upgradeCreature(id, { drawing, name: chudik.spec.name, kindId: chudik.spec.kindId });
+  }
+
+  /** Hatches the painted drawing onto a silhouette that is already in the zoo. */
+  async upgradeCreature(
+    id: string,
+    patch: { drawing?: DrawingData; name?: string; kindId?: string },
+  ): Promise<void> {
+    const chudik = this.creatures.get(id);
+    if (!chudik) return;
+    if (patch.name) chudik.spec.name = patch.name;
+    if (patch.kindId) chudik.spec.kindId = patch.kindId;
+    if (patch.drawing) {
+      chudik.replaceDrawing(patch.drawing);
+      chudik.setScale(tuning.get().creatureScale);
+      chudik.playArrival();
+      const burstPoint = chudik.position.clone();
+      burstPoint.y += chudik.height * 0.5;
+      this.sparkles.burst(
+        burstPoint,
+        [chudik.spec.bodyColor, chudik.spec.accentColor, '#ffffff', '#ffe066'],
+        40,
+        1.1,
+      );
+      this.audio.playUiSound('appear');
+    }
+    await saveCreature({
+      spec: chudik.spec,
+      lastPosition: { x: chudik.position.x, z: chudik.position.z },
+    });
+    this.emitRoster();
+    this.showNameplate(chudik, 3.4);
+    if (patch.name) {
+      window.setTimeout(() => this.playVoice(id), 500);
+    }
   }
 
   /** Replaces a spec in place, e.g. after renaming. */
@@ -353,6 +496,7 @@ export class Game {
     this.drivenId = id;
     chudik.setDriven(true);
     this.rig.follow(chudik.position);
+    track('creature.walk', { id });
     this.applyWalk();
     this.showNameplate(chudik, 2.4);
     return true;
@@ -371,13 +515,21 @@ export class Game {
     return this.drivenId !== null;
   }
 
-  /** Send everyone to the harvest baskets, in groups so they do not pile up. */
+  /** Send everyone to the harvest baskets and pull the camera back so it shows. */
   feedZoo(): boolean {
     if (this.feeding.active) return true;
     this.releaseControl();
     const feeders = this.world.feederSpots();
     if (feeders.length === 0 || this.creatures.size === 0) return false;
-    this.feeding.start([...this.creatures.values()], feeders, this.world);
+    const hungry = [...this.creatures.values()].filter((chudik) => !chudik.isHatching);
+    if (hungry.length === 0) return false;
+    this.feeding.start(hungry, feeders, this.world);
+    this.showWholeZoo();
+    track('creature.feed', { count: this.creatures.size });
+    for (const feeder of feeders) {
+      const burst = new THREE.Vector3(feeder.x, this.world.heightAt(feeder.x, feeder.z) + 1.15, feeder.z);
+      this.sparkles.burst(burst, ['#ffe066', '#ffb347', '#fff7d6'], 36, 1.15);
+    }
     this.emitCare(true);
     return true;
   }
@@ -425,8 +577,22 @@ export class Game {
   poke(id: string): void {
     const chudik = this.creatures.get(id);
     if (!chudik) return;
+    if (chudik.isHatching) {
+      const open = chudik.nudgeHatch();
+      this.audio.playUiSound('tap');
+      this.sparkles.burst(
+        chudik.position.clone().setY(chudik.position.y + chudik.height * 0.55),
+        [chudik.spec.accentColor, '#ffffff', '#ffe066'],
+        10,
+        0.45,
+      );
+      this.showNameplate(chudik, 2.4);
+      if (open) void this.finishHatch(id);
+      return;
+    }
     chudik.react();
     this.playVoice(id);
+    track('creature.view', { id, name: chudik.spec.name });
     this.sparkles.burst(
       chudik.position.clone().setY(chudik.position.y + chudik.height * 0.7),
       [chudik.spec.accentColor, '#ffffff', '#ffe066'],
@@ -451,13 +617,13 @@ export class Game {
     if (!chudik) return;
 
     this.poke(chudik.id);
-    this.callbacks.onCreatureTapped?.(chudik.spec);
+    if (!chudik.isHatching) this.callbacks.onCreatureTapped?.(chudik.spec);
   }
 
   private handleLongPress(clientX: number, clientY: number) {
     if (this.layout.getState().enabled) return;
     const chudik = this.pick(clientX, clientY);
-    if (!chudik) return;
+    if (!chudik || chudik.isHatching) return;
     void this.audio.unlock();
     this.callbacks.onCreatureHeld?.(chudik.spec);
   }
@@ -508,9 +674,11 @@ export class Game {
 
   private showNameplate(chudik: Chudik, seconds: number) {
     const kind = kindById(chudik.spec.kindId);
-    this.nameplate.innerHTML = `<span class="nameplate-emoji">${kind.emoji}</span><span class="nameplate-text"><strong>${escapeHtml(
+    const emoji = chudik.isHatching ? '🥚' : kind.emoji;
+    const label = chudik.isHatching ? 'Постучи' : kind.label;
+    this.nameplate.innerHTML = `<span class="nameplate-emoji">${emoji}</span><span class="nameplate-text"><strong>${escapeHtml(
       chudik.spec.name,
-    )}</strong><em>${escapeHtml(kind.label)}</em></span>`;
+    )}</strong><em>${escapeHtml(label)}</em></span>`;
     this.nameplateTarget = chudik;
     this.nameplateTimer = seconds;
     this.nameplate.style.opacity = '1';
@@ -589,6 +757,7 @@ export class Game {
     }
     for (const chudik of roster) {
       chudik.update(dt, this.elapsed, this.camera.position);
+      if (chudik.wantsHatch()) void this.finishHatch(chudik.id);
     }
     if (!this.feeding.active) {
       for (const chudik of roster) {
@@ -599,6 +768,7 @@ export class Game {
 
     this.updateNameplate(dt);
     this.postFx.render(dt);
+    if (this.tvFeed) this.grabTvFrame();
   };
 
   private resize() {
@@ -629,7 +799,12 @@ export class Game {
     this.callbacks.onCareChanged?.({ joy, feeding });
   }
 
+  private onFirstSound = () => {
+    void this.audio.unlock();
+  };
+
   private onVisibilityChange = () => {
+    this.audio.setGardenPaused(document.visibilityState === 'hidden');
     if (document.visibilityState !== 'hidden') return;
     // Remember where everyone was standing, so the zoo feels continuous.
     for (const chudik of this.creatures.values()) {
@@ -643,6 +818,7 @@ export class Game {
   /** Renders a single frame; used by the preview after a drawing is processed. */
   renderOnce() {
     this.postFx.render(1 / 60);
+    if (this.tvFeed) this.grabTvFrame();
   }
 
   /** Dev-only snapshot of the render state, used when verifying visuals. */
@@ -658,6 +834,7 @@ export class Game {
 
     const shadowCamera = this.world.sun.shadow.camera;
     return {
+      quality: quality().tier,
       shadowMapEnabled: this.renderer.shadowMap.enabled,
       toneMapping: this.renderer.toneMapping,
       castShadow,
@@ -685,6 +862,7 @@ export class Game {
     this.running = false;
     cancelAnimationFrame(this.frameHandle);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    document.removeEventListener('pointerdown', this.onFirstSound, { capture: true });
     this.resizeObserver.disconnect();
     this.layout?.dispose();
     this.taps?.dispose();
@@ -696,6 +874,8 @@ export class Game {
     for (const chudik of this.creatures.values()) chudik.dispose();
     this.creatures.clear();
     this.sparkles.dispose();
+    this.stopTvFeed();
+    this.audio.dispose();
     this.nameplate.remove();
     this.renderer.dispose();
     this.renderer.domElement.remove();

@@ -84,7 +84,9 @@ Assets/VirtualZoo/
 
 ## Local secrets
 
-Add provider keys only to `.env`. Leave them empty for health checks and non-provider tests. Never copy them into `.cursor/mcp.json`, Unity assets, ScriptableObjects, or Xcode project files. This pilot has no StoreKit or App Store server keys.
+Add provider keys only to `.env`. Leave them empty for health checks and non-provider tests. Never copy them into `.cursor/mcp.json`, Unity assets, ScriptableObjects, or Xcode project files. There are no StoreKit keys.
+
+Web commerce (D-016): `OPERATOR_LOGIN` / `OPERATOR_PASSWORD` unlock SQLAdmin at `/staff`. `TBANK_TERMINAL_KEY` and `TBANK_PASSWORD` unlock checkout. Pack prices start at 0 ₽ until the operator sets them. Do not put T-Bank or operator secrets in the client.
 
 ## First implementation order
 
@@ -96,6 +98,6 @@ Add provider keys only to `.env`. Leave them empty for health checks and non-pro
 6. Structured card and ElevenLabs narration.
 7. Atomic cache/spawn and offline restart.
 
-Do not add payments, subscriptions, StoreKit, acquiring, creation credits, receipts, or a purchase ledger.
+Do not add StoreKit, subscriptions, or extra worlds. Web T-Bank credits are D-016 on the API and site, not in the Unity project.
 
 Full expansion beyond the pilot begins only after an external `PASS` and the technical-spike gates.

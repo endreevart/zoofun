@@ -27,6 +27,28 @@ const finished = new Set(['near-a']);
 assert.equal(livePlace(assigned, 'also-a', finished), 0);
 assert.equal(livePlace(assigned, 'near-a', finished), null);
 
+const piled = assignToFeeders(
+  [
+    { id: 'x', x: 1, z: 0 },
+    { id: 'y', x: 2, z: 0 },
+  ],
+  feeders,
+);
+assert.equal(piled.every((row) => row.feederIndex === 0), true);
+
+const crowd = assignToFeeders(
+  [
+    { id: 'a1', x: 0, z: 0 },
+    { id: 'a2', x: 1, z: 0 },
+    { id: 'a3', x: 2, z: 0 },
+    { id: 'b1', x: 20, z: 0 },
+    { id: 'b2', x: 21, z: 0 },
+  ],
+  feeders,
+);
+assert.equal(crowd.filter((row) => row.feederIndex === 0).length, 3);
+assert.ok(crowd.some((row) => row.place >= 2));
+
 const eat = slotBeside(feeders[0], 0, { x: 0, z: -5 });
 const wait = slotBeside(feeders[0], 1, { x: 0, z: -5 });
 assert.ok(Math.hypot(wait.x - eat.x, wait.z - eat.z) > 0.8);

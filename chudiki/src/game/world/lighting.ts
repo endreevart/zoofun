@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { TuningValues } from '../render/tuning';
+import { quality } from '../render/quality';
 
 /**
  * Lighting ported from build_scene() in scripts/render-idyllic-world.py.
@@ -38,10 +39,11 @@ export class Lighting {
   constructor() {
     this.group.name = 'lighting';
 
+    const look = quality();
     this.sun = new THREE.DirectionalLight(SUN_WARM.clone(), 1);
     this.sun.target.position.copy(FOCUS);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.castShadow = look.shadows;
+    this.sun.shadow.mapSize.set(look.shadowMapSize, look.shadowMapSize);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 140;
     // Island is ~80 m across; a tight frustum clipped the shadow map and

@@ -1,18 +1,23 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { EYE } from '../core/palette';
 import { bakePaintables, blobGeometry, createToyMaterial } from '../core/geometry';
 import type { ChudikSpec, DrawingData } from './ChudikSpec';
 import type { ChudikRig } from './ChudikBuilder';
 
+const meshyLoader = new GLTFLoader();
+
 /**
  * Grows a creature out of a child's drawing.
  *
- * The rule that matters: the drawing is the creature. We extrude its own
- * silhouette, wrap its own strokes around the front and back, and only add the
- * two things that make it belong to this world — googly eyes and little feet.
- * Nothing is redrawn, smoothed away or replaced.
+ * The silhouette stays the child's. A neural restyle already paints the face,
+ * so we do not glue on extra eyes and feet. A raw drawing still gets those
+ * two toys so it reads as alive.
  */
 export function buildDrawingChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
+  if (spec.hatching) return buildEggChudik(spec, drawing);
+  if (drawing.modelUrl) return buildMeshyChudik(spec, drawing);
+
   const root = new THREE.Group();
   root.name = `chudik:${spec.id}`;
   const bounce = new THREE.Group();
@@ -26,19 +31,27 @@ export function buildDrawingChudik(spec: ChudikSpec, drawing: DrawingData): Chud
   // procedural residents so a child can spot their own creature immediately.
   const scale = 2.5 * spec.size;
   const width = drawing.aspect * scale;
-  const depth = Math.max(0.22, Math.min(width, scale) * 0.34);
+  const painted = drawing.painted === true;
+  // Felt cutout, not a loaf. Three.js adds a bevel on both caps, so total
+  // thickness is depth + 2 * bevelThickness. Keep that near 1/5 of the span.
+  const span = Math.min(width, scale);
+  const depth = span * 0.07;
+  const bevelThickness = span * 0.065;
+  const bevelSize = span * 0.03;
 
   const shape = contourToShape(drawing.contour, scale);
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth,
     bevelEnabled: true,
-    bevelThickness: depth * 0.42,
-    bevelSize: Math.min(width, scale) * 0.045,
-    bevelSegments: 3,
+    bevelThickness,
+    bevelSize,
+    bevelSegments: 5,
     curveSegments: 1,
     steps: 1,
   });
-  geometry.translate(0, 0, -depth / 2);
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (box) geometry.translate(0, 0, -(box.min.z + box.max.z) / 2);
   geometry.computeVertexNormals();
   disposables.push(geometry);
 
@@ -59,9 +72,16 @@ export function buildDrawingChudik(spec: ChudikSpec, drawing: DrawingData): Chud
   texture.anisotropy = 4;
   disposables.push(texture);
 
-  const faceMaterial = createToyMaterial({ roughness: 0.55 });
+  const faceMaterial = createToyMaterial({
+    roughness: painted ? 0.58 : 0.68,
+    transparent: true,
+  });
   faceMaterial.map = texture;
-  const sideMaterial = createToyMaterial({ color: drawing.sideColor, roughness: 0.7 });
+  faceMaterial.alphaTest = 0.08;
+  const sideMaterial = createToyMaterial({
+    color: drawing.sideColor,
+    roughness: painted ? 0.78 : 0.82,
+  });
   disposables.push(faceMaterial, sideMaterial);
 
   const bodyMesh = new THREE.Mesh(geometry, [faceMaterial, sideMaterial]);
@@ -71,14 +91,18 @@ export function buildDrawingChudik(spec: ChudikSpec, drawing: DrawingData): Chud
   bodyMesh.position.y = scale / 2 + scale * 0.06;
   squash.add(bodyMesh);
 
-  const eyeRig = addGooglyEyes(squash, spec, drawing, {
-    scale,
-    depth,
-    lift: bodyMesh.position.y,
-    disposables,
-  });
+  const eyeRig = painted
+    ? { eyes: [] as THREE.Group[], pupils: [] as THREE.Group[] }
+    : addGooglyEyes(squash, spec, drawing, {
+        scale,
+        depth,
+        lift: bodyMesh.position.y,
+        disposables,
+      });
 
-  addFeet(squash, spec, drawing, { scale, width, depth, disposables });
+  if (!painted) {
+    addFeet(squash, spec, drawing, { scale, width, depth, disposables });
+  }
 
   return {
     root,
@@ -90,7 +114,7 @@ export function buildDrawingChudik(spec: ChudikSpec, drawing: DrawingData): Chud
     wings: [],
     tail: null,
     height: scale * 1.12,
-    radius: Math.max(width, depth) * 0.5,
+    radius: Math.max(width, depth + bevelThickness * 2) * 0.5,
     dispose() {
       for (const item of disposables) item.dispose();
     },
@@ -212,4 +236,176 @@ function addFeet(
   mesh.userData.chudikId = spec.id;
   parent.add(mesh);
   ctx.disposables.push(mesh.geometry);
+}
+
+/** A clay egg on the lawn while the real puppet is still being made. */
+function buildEggChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
+  const root = new THREE.Group();
+  root.name = `chudik:${spec.id}`;
+  const bounce = new THREE.Group();
+  const squash = new THREE.Group();
+  root.add(bounce);
+  bounce.add(squash);
+
+  const scale = 2.15 * spec.size;
+  const disposables: Array<THREE.BufferGeometry | THREE.Material | THREE.Texture> = [];
+  const shell = new THREE.SphereGeometry(scale * 0.4, 22, 16);
+  shell.scale(0.78, 1.14, 0.78);
+  const body = new THREE.Mesh(
+    shell,
+    createToyMaterial({ color: drawing.sideColor, roughness: 0.7 }),
+  );
+  body.position.y = scale * 0.42;
+  body.castShadow = true;
+  body.userData.chudikId = spec.id;
+  squash.add(body);
+  disposables.push(shell, body.material);
+
+  const spotGeo = new THREE.SphereGeometry(scale * 0.08, 10, 8);
+  spotGeo.scale(1.4, 0.7, 1);
+  const spotMat = createToyMaterial({ color: drawing.accentColor, roughness: 0.62 });
+  disposables.push(spotGeo, spotMat);
+  for (const [x, y, z, s] of [
+    [0.18, 0.52, 0.16, 1],
+    [-0.2, 0.38, 0.12, 0.8],
+    [0.06, 0.62, -0.18, 0.7],
+  ] as const) {
+    const spot = new THREE.Mesh(spotGeo, spotMat);
+    spot.position.set(x * scale, y * scale, z * scale);
+    spot.scale.setScalar(s);
+    spot.userData.chudikId = spec.id;
+    squash.add(spot);
+  }
+
+  const crackMat = new THREE.MeshBasicMaterial({
+    color: 0x3a2418,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  disposables.push(crackMat);
+  const cracks: THREE.Mesh[] = [];
+  const crackMarks = [
+    { y: 0.48, z: 0.31, rotZ: 0.15, rotX: 0.2, h: 0.42 },
+    { y: 0.4, z: 0.28, rotZ: -0.55, rotX: -0.1, h: 0.32 },
+    { y: 0.55, z: 0.26, rotZ: 0.8, rotX: 0.05, h: 0.28 },
+  ];
+  for (const mark of crackMarks) {
+    const geo = new THREE.BoxGeometry(scale * 0.018, scale * mark.h, scale * 0.018);
+    const crack = new THREE.Mesh(geo, crackMat);
+    crack.position.set(0, mark.y * scale, mark.z * scale);
+    crack.rotation.z = mark.rotZ;
+    crack.rotation.x = mark.rotX;
+    crack.userData.chudikId = spec.id;
+    squash.add(crack);
+    cracks.push(crack);
+    disposables.push(geo);
+  }
+
+  return {
+    root,
+    bounce,
+    squash,
+    eyes: [],
+    pupils: [],
+    ears: [],
+    wings: [],
+    tail: null,
+    height: scale * 0.92,
+    radius: scale * 0.38,
+    setHatchLook(progress: number) {
+      crackMat.opacity = Math.max(0, Math.min(1, progress));
+      for (const crack of cracks) {
+        crack.scale.setScalar(0.35 + progress * 0.65);
+      }
+    },
+    dispose() {
+      for (const item of disposables) item.dispose();
+    },
+  };
+}
+
+function buildMeshyChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
+  const root = new THREE.Group();
+  root.name = `chudik:${spec.id}`;
+  const bounce = new THREE.Group();
+  const squash = new THREE.Group();
+  root.add(bounce);
+  bounce.add(squash);
+
+  const scale = 2.5 * spec.size;
+  const disposables: Array<THREE.BufferGeometry | THREE.Material | THREE.Texture> = [];
+  const holder = new THREE.Group();
+  squash.add(holder);
+
+  const placeholder = new THREE.Mesh(
+    blobGeometry(scale * 0.28, new THREE.Vector3(1, 1.15, 0.95), 18),
+    createToyMaterial({ color: drawing.sideColor, roughness: 0.62 }),
+  );
+  placeholder.position.y = scale * 0.32;
+  placeholder.castShadow = true;
+  holder.add(placeholder);
+  disposables.push(placeholder.geometry, placeholder.material);
+
+  const rig: ChudikRig = {
+    root,
+    bounce,
+    squash,
+    eyes: [],
+    pupils: [],
+    ears: [],
+    wings: [],
+    tail: null,
+    height: scale * 1.05,
+    radius: scale * 0.42,
+    dispose() {
+      cancelled = true;
+      holder.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          for (const mat of mats) mat.dispose();
+        }
+      });
+      for (const item of disposables) item.dispose();
+    },
+  };
+
+  let cancelled = false;
+  void meshyLoader.loadAsync(drawing.modelUrl!).then((gltf) => {
+    if (cancelled) return;
+    holder.clear();
+    placeholder.geometry.dispose();
+    if (placeholder.material instanceof THREE.Material) placeholder.material.dispose();
+    const scene = gltf.scene;
+    fitMeshyModel(scene, scale);
+    scene.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+      obj.userData.chudikId = spec.id;
+    });
+    holder.add(scene);
+    const box = new THREE.Box3().setFromObject(holder);
+    const size = box.getSize(new THREE.Vector3());
+    rig.height = Math.max(scale * 0.6, size.y);
+    rig.radius = Math.max(size.x, size.z) * 0.5;
+  }).catch((error) => {
+    console.warn('[meshy] glb failed, keeping clay', error);
+  });
+
+  return rig;
+}
+
+function fitMeshyModel(scene: THREE.Object3D, targetHeight: number) {
+  scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(scene);
+  const size = box.getSize(new THREE.Vector3());
+  const tall = Math.max(size.y, 0.001);
+  scene.scale.setScalar(targetHeight / tall);
+  scene.updateMatrixWorld(true);
+  const fitted = new THREE.Box3().setFromObject(scene);
+  scene.position.x -= (fitted.min.x + fitted.max.x) / 2;
+  scene.position.y -= fitted.min.y;
+  scene.position.z -= (fitted.min.z + fitted.max.z) / 2;
 }

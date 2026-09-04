@@ -1,4 +1,5 @@
 import type { ChudikSpec } from '../creatures/ChudikSpec';
+import { deleteCloudCreature, pullCloudZoo, pushCloudZoo, upsertCloudCreature } from '../../cloudZoo';
 
 /**
  * The zoo lives on the device. A creature a child made must still be there
@@ -15,6 +16,14 @@ export type StoredCreature = {
   /** Position the creature was last seen at, so the zoo feels continuous. */
   lastPosition?: { x: number; z: number };
 };
+
+export function isSeededResident(id: string): boolean {
+  return id.startsWith('resident_');
+}
+
+function withoutResidents(records: StoredCreature[]): StoredCreature[] {
+  return records.filter((record) => !isSeededResident(record.spec.id));
+}
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -64,13 +73,75 @@ export async function loadCreatures(): Promise<StoredCreature[]> {
   }
 }
 
+export async function replaceCreatures(records: StoredCreature[]): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(CREATURES, 'readwrite');
+    const store = tx.objectStore(CREATURES);
+    store.clear();
+    for (const record of records) store.put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/** Local cache first; signed-in families also get the server copy. */
+export async function hydrateZoo(): Promise<StoredCreature[]> {
+  const rawLocal = await loadCreatures();
+  const local = withoutResidents(rawLocal);
+  if (local.length !== rawLocal.length) {
+    try {
+      await replaceCreatures(local);
+    } catch (error) {
+      console.warn('[zoo] could not drop seeded residents', error);
+    }
+  }
+
+  const pulled = await pullCloudZoo();
+  if (pulled === null) return local;
+
+  const leftover = pulled.filter((record) => isSeededResident(record.spec.id));
+  if (leftover.length > 0) {
+    void Promise.allSettled(leftover.map((record) => deleteCloudCreature(record.spec.id)));
+  }
+  const remote = withoutResidents(pulled);
+
+  if (remote.length === 0 && local.length > 0) {
+    try {
+      await pushCloudZoo(local);
+    } catch (error) {
+      console.warn('[zoo] could not upload local zoo', error);
+    }
+    return local;
+  }
+  if (remote.length > 0) {
+    try {
+      await replaceCreatures(remote);
+    } catch (error) {
+      console.warn('[zoo] could not cache cloud zoo', error);
+    }
+    return remote;
+  }
+  return local;
+}
+
 export async function saveCreature(record: StoredCreature): Promise<void> {
   await transact(CREATURES, 'readwrite', (s) => s.put(record));
+  try {
+    await upsertCloudCreature(record);
+  } catch (error) {
+    console.warn('[zoo] could not sync creature', error);
+  }
 }
 
 export async function deleteCreature(id: string): Promise<void> {
   await transact(CREATURES, 'readwrite', (s) => s.delete(id));
   await transact(VOICES, 'readwrite', (s) => s.delete(id));
+  try {
+    await deleteCloudCreature(id);
+  } catch (error) {
+    console.warn('[zoo] could not sync delete', error);
+  }
 }
 
 /** Recorded voices are stored as raw bytes next to the creature. */
