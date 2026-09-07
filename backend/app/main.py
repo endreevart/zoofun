@@ -12,6 +12,7 @@ from app.admin import mount_admin
 from app.api.auth import router as auth_router
 from app.api.commerce import router as commerce_router
 from app.api.operator import router as operator_router
+from app.api.lab import router as lab_router
 from app.api.stylize import router as stylize_router
 from app.api.crm import router as crm_router
 from app.api.track import router as track_router
@@ -54,6 +55,11 @@ async def lifespan(_app: FastAPI):
 
     with db_session() as db:
         seed_packs(db)
+    from app.generation.jobs import recover_stale_jobs
+
+    recovered = recover_stale_jobs()
+    if recovered:
+        logger.warning("recovered %s stale stylize jobs", recovered)
     logger.info("database ready parents=%s imported=%s", store.count_parents(), imported)
     yield
 
@@ -84,6 +90,10 @@ if settings.environment == "development":
             "http://127.0.0.1:3000",
             "http://localhost:5175",
             "http://127.0.0.1:5175",
+            "http://localhost:5179",
+            "http://127.0.0.1:5179",
+            "http://localhost:8010",
+            "http://127.0.0.1:8010",
         ]
     )
 if cors_origins:
@@ -97,6 +107,7 @@ if cors_origins:
 app.include_router(auth_router)
 app.include_router(zoo_router)
 app.include_router(stylize_router)
+app.include_router(lab_router)
 app.include_router(tv_router)
 app.include_router(commerce_router)
 app.include_router(operator_router)

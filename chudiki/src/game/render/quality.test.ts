@@ -38,11 +38,17 @@ const phone = settingsFromHints(iphone);
 assert.equal(phone.tier, 'low');
 assert.equal(phone.bloom, false);
 assert.equal(phone.shafts, false);
-assert.equal(phone.shadows, false);
-assert.equal(phone.antialias, false);
-assert.equal(phone.pixelRatio, 1);
+assert.equal(phone.shadows, true);
+assert.equal(phone.softShadows, true, 'PCFSoft is cheap and hides blocky edges');
+assert.equal(phone.antialias, true);
+assert.equal(phone.pixelRatio, 2);
 assert.ok(phone.grassStep > desk.grassStep);
 assert.ok(phone.grassBlades < desk.grassBlades);
+
+const forcedLow = settingsFromHints(desktop, 'low');
+assert.equal(forcedLow.tier, 'low');
+const forcedHigh = settingsFromHints(iphone, 'high');
+assert.equal(forcedHigh.tier, 'high');
 
 const tablet = settingsFromHints(ipad);
 assert.equal(tablet.tier, 'high');

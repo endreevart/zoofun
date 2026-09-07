@@ -16,6 +16,17 @@ services:
       retries: 10
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    # Broker only: job state lives in Postgres, so a lost queue entry is
+    # recovered by the startup sweep, and Redis needs no persistence.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   api:
     build:
       context: ./backend
@@ -24,19 +35,88 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       ENVIRONMENT: production
       CORS_ORIGINS: https://zooo.fun,https://www.zooo.fun,https://crm.zooo.fun
       ACCOUNTS_PATH: /app/.data/accounts.json
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-virtual_zoo}:${POSTGRES_PASSWORD:-virtual_zoo_local_only}@postgres:5432/${POSTGRES_DB:-virtual_zoo}
+      REDIS_URL: redis://redis:6379/0
+      USE_CELERY: "true"
     env_file:
       - path: .env
         required: false
+    # Several workers: generations no longer run inside the API process,
+    # so scaling it is safe. Polls are answered from Postgres by any worker.
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host", "0.0.0.0",
+        "--port", "8000",
+        "--proxy-headers",
+        "--forwarded-allow-ips", "*",
+        "--workers", "3",
+      ]
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - zoo_accounts:/app/.data
       - local_assets:/data/assets
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-virtual_zoo}:${POSTGRES_PASSWORD:-virtual_zoo_local_only}@postgres:5432/${POSTGRES_DB:-virtual_zoo}
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - path: .env
+        required: false
+    # Six parallel generations; each is provider-IO bound (~2-3 min in Meshy).
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel", "INFO", "--concurrency", "6"]
+    # On deploy celery stops taking new tasks and finishes the ones in flight;
+    # ten minutes covers the worst Meshy retry chain, so a restart never kills
+    # a paid generation.
+    stop_grace_period: 10m
+    volumes:
+      - local_assets:/data/assets
+    restart: unless-stopped
+
+  backup:
+    image: postgres:17-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-virtual_zoo_local_only}
+      POSTGRES_DB: ${POSTGRES_DB:-virtual_zoo}
+      POSTGRES_USER: ${POSTGRES_USER:-virtual_zoo}
+    volumes:
+      - pg_backups:/backups
+    # Nightly compressed dump, two weeks kept. Credits and payments are money:
+    # restore with `pg_restore -h postgres -U $POSTGRES_USER -d $POSTGRES_DB -c <file>`.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          pg_dump -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -F c \
+            -f "/backups/zoo-$$(date +%Y%m%d-%H%M%S).dump" \
+            && echo "backup ok $$(date -Iseconds)" \
+            || echo "backup FAILED $$(date -Iseconds)"
+          find /backups -name 'zoo-*.dump' -mtime +14 -delete
+          sleep 86400
+        done
     restart: unless-stopped
 
   island:
@@ -50,3 +130,4 @@ volumes:
   zoo_accounts:
   zoo_pg:
   local_assets:
+  pg_backups:

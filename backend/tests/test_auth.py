@@ -104,6 +104,37 @@ async def test_replace_password_then_login() -> None:
         assert new.status_code == 200
 
 
+@pytest.mark.asyncio
+async def test_register_stores_optional_marketing_consent() -> None:
+    from sqlalchemy import select
+
+    from app.persistence.db import session
+    from app.persistence.models import ParentRow
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        skipped = await client.post(
+            "/v1/auth/register",
+            json={"email": "skip@example.com", "password": "pilot12"},
+        )
+        granted = await client.post(
+            "/v1/auth/register",
+            json={
+                "email": "mail@example.com",
+                "password": "pilot12",
+                "marketing_consent": True,
+            },
+        )
+    assert skipped.status_code == 200
+    assert granted.status_code == 200
+    with session() as db:
+        skip_row = db.scalar(select(ParentRow).where(ParentRow.email == "skip@example.com"))
+        mail_row = db.scalar(select(ParentRow).where(ParentRow.email == "mail@example.com"))
+    assert skip_row is not None
+    assert skip_row.marketing_consent_at is None
+    assert mail_row is not None
+    assert mail_row.marketing_consent_at is not None
+
+
 def test_login_reads_accounts_from_the_database() -> None:
     first = AccountStore()
     first.register("parent@example.com", "pilot12")

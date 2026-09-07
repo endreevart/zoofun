@@ -19,16 +19,15 @@ This file is the concise decision register. Detailed engineering decisions live 
 | D-013 | Current work is a non-commercial pilot for ≤10 children; no payments, StoreKit, credits, receipts, or purchase ledger; zoo must hold 20+ active animals | Superseded by D-016 |
 | D-016 | Exit the non-commercial pilot: T-Bank web acquiring, generation credits, packs 5/10/15/20, first creature free, delete does not restore a credit; extra worlds later; no StoreKit or subscriptions | Accepted |
 | D-014 | The public website signs a parent in with email, then opens the Chudiki island; Kenney `/zoo/demo` stays the iteration-00 fixture garden | Accepted |
-| D-015 | Web island may attach a Meshy image-to-3D GLB after stylize; Unity pilot and ADR-0003 stay 2.5D; missing mesh falls back to the standee | Experimental |
+| D-015 | Web island may attach an image-to-3D GLB after stylize; Unity pilot and ADR-0003 stay 2.5D; missing mesh falls back to the standee | Experimental |
 | D-017 | PostgreSQL + Alembic is the account and payment ledger; SQLAdmin at `/staff` is the operator console; CRM may read later but must not write a second ledger | Accepted |
 | D-018 | Visual CRM at crm.zooo.fun reads the same Postgres; cookie banner + first-party site visits; no second ledger | Accepted |
 
-D-015 is an owner experiment on the Chudiki island only. It does not replace ADR-0003 or change the Unity iteration gate. Meshy stays backend-only; the key never ships in the client. If the mesh fails, the zoo still shows the 2.5D drawing.
+D-015 is an owner experiment on the Chudiki island only. It does not replace ADR-0003 or change the Unity iteration gate. Image-to-3D keys stay backend-only and never ship in the client. If the mesh fails, the zoo still shows the 2.5D drawing. The island paints with FLUX.2 Pro and the contour prompt, then asks Tripo 3.0. If that call fails, it retries once with Tripo 2.5. Meshy 7 stays as a spare if both Tripo calls fail. Mesh queue/compute timings are recorded to `ops_logs` as `stylize.mesh_timing`. Alongside the mesh, the backend quietly paints one more OpenRouter still — the same figurine in the garden — stored on the API host and served as `postcard.png`; the roster's «Открытка из сада» button downloads it (owner request, 2026-09-06; one extra image call per creature).
 
 ## Pending decisions
 
 - Minimum supported Apple devices and OS versions after profiling the technical spike.
-- Final OpenRouter image model/provider after a controlled drawing evaluation.
 - Exact Zoo Stars formula after observing the pilot.
 - Production cloud vendor and data region after privacy/legal review.
 - App name, visual identity, and final narrator voice.

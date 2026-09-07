@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import time
 
-from sqlalchemy import Boolean, CheckConstraint, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
@@ -29,6 +39,7 @@ class ParentRow(Base):
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time)
     last_login_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    marketing_consent_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     children: Mapped[list[ChildRow]] = relationship(
         back_populates="parent", cascade="all, delete-orphan"
@@ -137,6 +148,38 @@ class OpsLogRow(Base):
     payload: Mapped[dict | None] = mapped_column(
         JSON().with_variant(SQLITE_JSON(), "sqlite"), nullable=True
     )
+
+
+class StylizeJobRow(Base):
+    """A generation job. Persisted so deploys and worker restarts never lose a
+    paid OpenRouter/Meshy result, and any API process can answer the poll."""
+
+    __tablename__ = "stylize_jobs"
+    __table_args__ = (
+        Index("ix_stylize_jobs_status_updated", "status", "updated_at"),
+        Index("ix_stylize_jobs_parent", "parent_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    error: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The child's drawing; cleared once the job is ready so the table stays lean.
+    source: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    source_type: Mapped[str] = mapped_column(String(32), default="image/png")
+    # The styled still, served to the polling client.
+    image_base64: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    kind_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    model_url: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    mesh_status: Mapped[str] = mapped_column(String(16), default="pending")
+    postcard_url: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    postcard_status: Mapped[str] = mapped_column(String(16), default="pending")
+    parent_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    reserved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
 class OperatorSessionRow(Base):

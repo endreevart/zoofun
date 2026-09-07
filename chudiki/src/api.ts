@@ -3,17 +3,7 @@ const TOKEN_KEY = 'zoofun-parent-token';
 export const API_BASE =
   (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '/api/zoo';
 
-function localPlayWithoutAccount(): boolean {
-  if (!import.meta.env.DEV) return false;
-  try {
-    return !new URLSearchParams(window.location.search).has('cloud');
-  } catch {
-    return true;
-  }
-}
-
-export function parentToken(): string | null {
-  if (localPlayWithoutAccount()) return null;
+function readStoredToken(): string | null {
   try {
     const dedicated = localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
     if (dedicated) return dedicated;
@@ -24,6 +14,10 @@ export function parentToken(): string | null {
   } catch {
     return null;
   }
+}
+
+export function parentToken(): string | null {
+  return readStoredToken();
 }
 
 export function rememberParentToken(token: string): void {

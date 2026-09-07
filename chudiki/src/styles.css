@@ -40,6 +40,8 @@ body {
 .app {
   position: fixed;
   inset: 0;
+  --hud-bottom: max(18px, env(safe-area-inset-bottom));
+  --hud-control: 96px;
 }
 
 .stage {
@@ -54,8 +56,9 @@ body {
   top: 0;
   left: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 16px 10px;
   background: rgba(255, 250, 240, 0.95);
   border: 3px solid rgba(52, 48, 47, 0.12);
@@ -65,6 +68,41 @@ body {
   transition: opacity 220ms ease;
   white-space: nowrap;
   z-index: 5;
+}
+
+.nameplate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nameplate-birth {
+  display: none;
+}
+
+.nameplate--hatching {
+  padding-top: 10px;
+}
+
+.nameplate--hatching .nameplate-birth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nameplate-birth-spin {
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(52, 48, 47, 0.16);
+  border-top-color: #f4c14a;
+  border-radius: 50%;
+  animation: nameplate-spin 0.8s linear infinite;
+}
+
+@keyframes nameplate-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .nameplate-emoji {
@@ -193,28 +231,14 @@ body {
 .toolbar {
   position: absolute;
   left: 0;
-  right: 148px;
+  right: 0;
   bottom: max(18px, env(safe-area-inset-bottom));
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: end;
-  gap: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 14px;
   padding: 0 16px;
   z-index: 6;
-}
-
-.toolbar-side {
-  display: flex;
-  align-items: flex-end;
-  gap: 18px;
-}
-
-.toolbar-side-left {
-  justify-content: flex-end;
-}
-
-.toolbar-side-right {
-  justify-content: flex-start;
 }
 
 .big-button {
@@ -457,15 +481,16 @@ body {
     z-index: 8;
   }
 
-  .toolbar-dock.is-open .toolbar-side {
-    display: contents;
+  @media (min-width: 720px) {
+    .toolbar-dock.is-open .toolbar {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
   }
 
   .toolbar-dock.is-open .big-button,
   .toolbar-dock.is-open .big-button.primary,
   .toolbar-dock.is-open .big-button.ghost,
-  .toolbar-dock.is-open .big-button.feed-button,
-  .toolbar-dock.is-open .big-button.quota-chip {
+  .toolbar-dock.is-open .big-button.feed-button {
     min-width: 0;
     width: 100%;
     height: 80px;
@@ -516,7 +541,6 @@ body {
   }
 
   .pilot-stop {
-    top: max(56px, calc(env(safe-area-inset-top) + 48px));
     min-width: 72px;
     min-height: 72px;
     font-size: 12px;
@@ -544,8 +568,7 @@ body {
   .toolbar-dock.is-open .big-button,
   .toolbar-dock.is-open .big-button.primary,
   .toolbar-dock.is-open .big-button.ghost,
-  .toolbar-dock.is-open .big-button.feed-button,
-  .toolbar-dock.is-open .big-button.quota-chip {
+  .toolbar-dock.is-open .big-button.feed-button {
     min-height: 72px;
     font-size: 11px;
     padding: 6px 4px;
@@ -593,7 +616,7 @@ body {
     left: max(8px, env(safe-area-inset-left));
     right: max(8px, env(safe-area-inset-right));
     bottom: calc(76px + env(safe-area-inset-bottom));
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 4px;
     padding: 0;
   }
@@ -601,8 +624,7 @@ body {
   .toolbar-dock.is-open .big-button,
   .toolbar-dock.is-open .big-button.primary,
   .toolbar-dock.is-open .big-button.ghost,
-  .toolbar-dock.is-open .big-button.feed-button,
-  .toolbar-dock.is-open .big-button.quota-chip {
+  .toolbar-dock.is-open .big-button.feed-button {
     min-height: 56px;
     padding: 4px 2px;
     font-size: 10px;
@@ -651,7 +673,9 @@ body {
   background: rgba(255, 250, 240, 0.94);
   box-shadow: var(--shadow);
   z-index: 8;
+  max-width: calc(100vw - 20px);
 }
+
 
 .pilot-choice-name {
   margin: 0;
@@ -679,8 +703,9 @@ body {
 
 .pilot-stop {
   position: absolute;
-  top: max(12px, env(safe-area-inset-top));
-  right: 12px;
+  top: auto;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(var(--hud-bottom) + var(--hud-control) + 12px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -703,6 +728,21 @@ body {
 .pilot-stop .icon {
   font-size: 32px;
   line-height: 1;
+}
+
+.site-back {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  z-index: 40;
+  min-height: 44px;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.92);
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
 }
 
 .hint {
@@ -735,7 +775,10 @@ body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #ffe9c2, #ffd39b);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.72), rgba(255, 245, 225, 0.5)),
+    url('/ui/bg-meadow.webp') center / cover no-repeat,
+    #ffe9c2;
   z-index: 50;
   animation: sheetIn 260ms ease both;
 }
@@ -816,49 +859,288 @@ body {
   padding: 0 18px max(18px, env(safe-area-inset-bottom));
 }
 
-.quota-chip {
-  min-width: 7.5rem;
-}
-
-.pack-sheet {
-  background: linear-gradient(180deg, #fff4d6, #f3e0a8);
-}
-
-.pack-lead {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-.pack-list {
-  display: grid;
-  gap: 10px;
-}
-
-.pack-row {
+.quota-dock {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 41;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  width: 100%;
-  min-height: 64px;
-  padding: 0 18px;
-  border: 4px solid rgba(52, 48, 47, 0.12);
-  border-radius: 20px;
-  background: var(--paper);
-  box-shadow: var(--shadow);
+  gap: 10px;
+  padding: 8px 8px 8px 12px;
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.94);
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.12), 0 14px 24px rgba(0, 0, 0, 0.16);
+}
+
+.quota-dock-tray {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.quota-topup {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffd85e, var(--sun));
+  box-shadow: 0 4px 0 rgba(180, 120, 20, 0.28);
+  color: var(--ink);
   font: inherit;
   font-weight: 800;
+  font-size: 15px;
   cursor: pointer;
 }
 
-.pack-row.is-featured {
-  border-color: #63c93f;
+.quota-topup:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(180, 120, 20, 0.28);
 }
 
-.pack-row:disabled {
+.quota-dock.is-empty .quota-topup {
+  animation: quotaNudge 1.8s ease-in-out infinite;
+}
+
+@keyframes quotaNudge {
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.credit-eggs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.credit-egg {
+  width: 18px;
+  height: 22px;
+  border-radius: 50% 50% 48% 48%;
+  background: radial-gradient(circle at 35% 30%, #fff8, transparent 42%),
+    linear-gradient(180deg, #ffe28a, #f4b42a);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.08), 0 2px 0 rgba(0, 0, 0, 0.12);
+}
+
+.credit-egg.hue-1 {
+  background: radial-gradient(circle at 35% 30%, #fff8, transparent 42%),
+    linear-gradient(180deg, #ffc2d8, #f26b9a);
+}
+
+.credit-egg.hue-2 {
+  background: radial-gradient(circle at 35% 30%, #fff8, transparent 42%),
+    linear-gradient(180deg, #b8e9ff, #4ea6d8);
+}
+
+.credit-egg.hue-3 {
+  background: radial-gradient(circle at 35% 30%, #fff8, transparent 42%),
+    linear-gradient(180deg, #c8f39a, #63c93f);
+}
+
+.credit-egg.hue-4 {
+  background: radial-gradient(circle at 35% 30%, #fff8, transparent 42%),
+    linear-gradient(180deg, #ddc4ff, #9a5bd6);
+}
+
+.credit-egg.hue-5 {
+  background: radial-gradient(circle at 35% 30%, #fff8, transparent 42%),
+    linear-gradient(180deg, #ffd0a8, #e85d2a);
+}
+
+.credit-egg.is-empty {
+  background: linear-gradient(180deg, #efe6d4, #d9cbb0);
+  opacity: 0.7;
+}
+
+.credit-extra {
+  margin-left: 2px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.pack-shop {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+}
+
+.pack-shop-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(28, 36, 22, 0.42);
+  cursor: pointer;
+}
+
+.pack-shop-card {
+  position: relative;
+  width: min(720px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 18px 20px 22px;
+  border: 4px solid rgba(255, 255, 255, 0.92);
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 12% 0%, #fff7d2 0 28%, transparent 29%),
+    linear-gradient(180deg, #fff6df, #f3d48a);
+  box-shadow: var(--shadow);
+}
+
+.pack-shop-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.pack-shop-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+.pack-shop-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.pack-shop-remain {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.pack-shop-lead {
+  margin: 14px 0 16px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  opacity: 0.78;
+}
+
+.pack-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pack-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-height: 148px;
+  padding: 22px 14px 16px;
+  border: 4px solid rgba(52, 48, 47, 0.1);
+  border-radius: 24px;
+  background: var(--paper);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.1);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pack-tile:active {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.pack-tile.is-featured {
+  border-color: #63c93f;
+  background: linear-gradient(180deg, #fff, #eefbe4);
+}
+
+.pack-tile:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.pack-tile-badge {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #63c93f;
+  color: #14350c;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.pack-tile-count {
+  font-size: 20px;
+}
+
+.pack-tile-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffd85e, var(--sun));
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.pack-tile-price s {
+  opacity: 0.55;
+  font-size: 13px;
+}
+
+@media (max-width: 1280px) {
+  .quota-dock {
+    padding: 6px 6px 6px 10px;
+    gap: 8px;
+  }
+
+  .quota-topup {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .credit-egg {
+    width: 14px;
+    height: 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .quota-dock {
+    max-width: calc(100vw - 24px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .pack-shop-card {
+    padding: 14px 12px 16px;
+    border-radius: 26px;
+  }
+
+  .pack-shop-title {
+    font-size: 22px;
+  }
+
+  .pack-tiles {
+    grid-template-columns: 1fr;
+  }
+
+  .pack-tile {
+    min-height: 120px;
+    padding: 18px 12px 14px;
+  }
 }
 
 .icon-button.ghost {
@@ -937,6 +1219,7 @@ body {
 }
 
 .draw-chip-brush,
+.draw-chip-fill,
 .draw-chip-erase {
   display: flex;
   align-items: center;
@@ -950,6 +1233,13 @@ body {
   display: block;
   border-radius: 50%;
   background: #34302f;
+}
+
+.draw-chip-fill .fill-icon {
+  display: block;
+  width: 30px;
+  height: 30px;
+  overflow: visible;
 }
 
 .draw-pop {
@@ -1137,6 +1427,11 @@ body {
   .draw-sheet .draw-chip {
     width: 44px;
     height: 44px;
+  }
+
+  .draw-sheet .draw-chip-fill .fill-icon {
+    width: 26px;
+    height: 26px;
   }
 }
 
@@ -1376,12 +1671,94 @@ body {
 
 /* ---------- Zoo roster ---------- */
 
+.roster-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 8px;
+}
+
 .roster {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: 12px;
-  overflow-y: auto;
   padding: 4px;
+}
+
+.roster-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 4px 12px;
+}
+
+.roster-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 14px;
+}
+
+.roster-portrait {
+  display: flex;
+  flex-direction: column;
+  border: 4px solid rgba(255, 255, 255, 0.9);
+  border-radius: 22px;
+  background: var(--paper);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.roster-portrait-pic {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: #fffdf6;
+  cursor: pointer;
+}
+
+.roster-portrait-pic img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+.roster-portrait-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 10px;
+}
+
+.roster-portrait-name {
+  font-size: 16px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roster-download {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border: 3px solid rgba(52, 48, 47, 0.1);
+  border-radius: 16px;
+  background: #ffe066;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.roster-download:active {
+  transform: translateY(3px);
 }
 
 .roster-item {
@@ -1421,6 +1798,69 @@ body {
 }
 
 /* ---------- Misc ---------- */
+
+.hatch-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: max(18px, env(safe-area-inset-top)) 22px max(22px, env(safe-area-inset-bottom));
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.55), rgba(255, 250, 240, 0.2)),
+    url('/ui/bg-meadow.webp') center / cover no-repeat,
+    #fff6e4;
+}
+
+.hatch-preview-lead,
+.hatch-preview-name {
+  text-shadow:
+    0 2px 0 rgba(255, 255, 255, 0.85),
+    0 0 18px rgba(255, 255, 255, 0.7);
+}
+
+.hatch-preview-lead {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.hatch-preview-name {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.hatch-preview-art {
+  width: min(72vw, 64vh, 420px);
+  height: min(72vw, 64vh, 420px);
+  object-fit: contain;
+  background: #fffaf0;
+  border-radius: 36px;
+  border: 4px solid rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow);
+}
+
+.hatch-preview-go {
+  min-width: 200px;
+  min-height: 88px;
+  flex-direction: row;
+  gap: 12px;
+  font-size: 26px;
+}
+
+.hatch-preview-wait {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+  opacity: 0.7;
+}
 
 .busy {
   position: absolute;
@@ -1471,7 +1911,7 @@ body {
   color: #fff;
   font-size: 20px;
   font-weight: 800;
-  z-index: 50;
+  z-index: 60;
   animation: floatIn 240ms ease both;
 }
 
@@ -1529,7 +1969,7 @@ body {
 
 @media (max-width: 1280px) {
   .admin-dock {
-    top: max(8px, env(safe-area-inset-top));
+    top: max(64px, calc(env(safe-area-inset-top) + 56px));
     right: max(8px, env(safe-area-inset-right));
     bottom: auto;
     height: auto;
@@ -1873,4 +2313,1289 @@ body {
 .tuning-body input[type='range'] {
   width: 100%;
   accent-color: #7fd4a8;
+}
+
+/* ---------- Mini games: puzzle, care room, feeding ---------- */
+
+.puzzle,
+.care-room,
+.frenzy {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: max(14px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 250, 240, 0.45),
+      rgba(255, 250, 240, 0.08) 30%,
+      rgba(255, 250, 240, 0.08) 72%,
+      rgba(255, 250, 240, 0.4)
+    ),
+    url('/ui/bg-meadow.webp') center / cover no-repeat,
+    #cfe7a8;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Shared floating header pill and progress bar */
+
+.mg-head {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px 8px 8px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  background: rgba(255, 250, 240, 0.94);
+  box-shadow: var(--shadow);
+}
+
+.mg-lead {
+  margin: 0;
+  flex: 1;
+  font-size: 21px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mg-progress {
+  position: relative;
+  flex: 0 0 112px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(120, 80, 30, 0.16);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.14);
+}
+
+.mg-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s;
+}
+
+.care-fill {
+  background: linear-gradient(180deg, #8fe3ff, #3fb6e8);
+}
+
+.frenzy-fill {
+  background: linear-gradient(180deg, #ffd36b, #ff9d2e);
+}
+
+.mg-progress-icon {
+  position: absolute;
+  right: -14px;
+  top: 50%;
+  width: 34px;
+  transform: translateY(-50%);
+  z-index: 1;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2));
+}
+
+.mg-done {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.mg-button-sprite {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+/* ----- Puzzle ----- */
+
+.puzzle-count {
+  font-weight: 900;
+  font-size: 18px;
+  opacity: 0.7;
+}
+
+.puzzle-board {
+  position: relative;
+  width: min(72vw, 52vh, 380px);
+  border-radius: 26px;
+  overflow: hidden;
+  background: #fffaf0;
+  border: 5px solid rgba(255, 255, 255, 0.95);
+  box-shadow: var(--shadow);
+}
+
+.puzzle-board.is-solved {
+  animation: puzzle-pop 0.5s ease;
+}
+
+.puzzle-ghost {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+.puzzle-cell {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px dashed rgba(190, 150, 90, 0.4);
+  background-color: transparent;
+}
+
+.puzzle-cell.is-placed {
+  border: none;
+}
+
+.puzzle-cell.is-pop {
+  animation: puzzle-pop 0.45s ease;
+}
+
+@keyframes puzzle-pop {
+  0% {
+    transform: scale(0.72);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.puzzle-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  max-width: 560px;
+}
+
+.puzzle-piece {
+  width: 84px;
+  height: 84px;
+  border-radius: 16px;
+  border: 4px solid rgba(255, 255, 255, 0.95);
+  box-shadow: var(--shadow);
+  background-color: #fffaf0;
+  touch-action: none;
+}
+
+.puzzle-piece.is-dragging {
+  opacity: 0.25;
+}
+
+.puzzle-float {
+  position: fixed;
+  z-index: 70;
+  border-radius: 14px;
+  border: 4px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 14px 30px rgba(80, 50, 20, 0.35);
+  background-color: #fffaf0;
+  pointer-events: none;
+  transform: rotate(-3deg);
+}
+
+/* ----- Care room (washing) ----- */
+
+.care-stage {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  max-width: 560px;
+  min-height: 0;
+  border-radius: 28px;
+  overflow: hidden;
+  border: 5px solid rgba(255, 255, 255, 0.95);
+  background:
+    url('/ui/bg-wash.webp') center / cover no-repeat,
+    #bfe9ff;
+  box-shadow: var(--shadow);
+  touch-action: none;
+}
+
+.care-toybox {
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  width: 58%;
+  height: 60%;
+  pointer-events: none;
+}
+
+/* The portrait is square; keep the mud box square too so spots sit on the toy
+   even when the stage is a tall phone card. */
+@supports (width: 1cqw) {
+  .care-stage {
+    container-type: size;
+  }
+
+  .care-toybox {
+    width: min(88cqw, 58cqh);
+    height: min(88cqw, 58cqh);
+  }
+}
+
+.care-toy {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom;
+  filter: drop-shadow(0 12px 12px rgba(40, 60, 20, 0.28));
+}
+
+.care-toy.is-wiggle {
+  animation: care-wiggle 0.22s ease;
+}
+
+.care-toy.is-happy {
+  animation: care-happy 0.8s ease infinite alternate;
+}
+
+.care-toy.is-cheer {
+  animation: care-cheer 0.7s ease;
+}
+
+@keyframes care-cheer {
+  30% {
+    transform: translateY(-14px) scale(1.06) rotate(-3deg);
+  }
+  60% {
+    transform: translateY(0) scale(0.98) rotate(2deg);
+  }
+}
+
+/* Lazy soap bubbles drifting up through the whole wash. */
+.care-bubbles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.care-bubbles img {
+  position: absolute;
+  bottom: -14%;
+  opacity: 0;
+  animation-name: bubble-rise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes bubble-rise {
+  0% {
+    bottom: -14%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.55;
+  }
+  88% {
+    opacity: 0.45;
+  }
+  100% {
+    bottom: 104%;
+    opacity: 0;
+  }
+}
+
+/* A cleaned mud spot tumbles off the toy. */
+.care-mudfall {
+  position: absolute;
+  pointer-events: none;
+  animation: mud-drop 0.85s ease-in forwards;
+}
+
+@keyframes mud-drop {
+  from {
+    opacity: 0.9;
+    transform: rotate(0deg);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(190%) rotate(50deg) scale(0.8);
+  }
+}
+
+/* The reward arc over a freshly washed chudik. */
+.care-rainbow {
+  position: absolute;
+  left: 50%;
+  top: 16%;
+  width: 66%;
+  aspect-ratio: 2 / 1;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    circle at 50% 100%,
+    transparent 0 40%,
+    #ff8a8a 40% 48%,
+    #ffc36b 48% 56%,
+    #ffe98a 56% 64%,
+    #a3e58a 64% 72%,
+    #8ccfff 72% 80%,
+    #c9a8ff 80% 88%,
+    transparent 88%
+  );
+  opacity: 0;
+  animation: rainbow-in 1.1s ease 0.15s forwards;
+  pointer-events: none;
+}
+
+@keyframes rainbow-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(14px) scale(0.9);
+  }
+  to {
+    opacity: 0.85;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes care-wiggle {
+  50% {
+    transform: rotate(2.5deg) scale(1.01);
+  }
+}
+
+@keyframes care-happy {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: translateY(-10px) scale(1.03);
+  }
+}
+
+.care-dirt {
+  position: absolute;
+  pointer-events: none;
+  transition:
+    opacity 0.2s,
+    filter 0.4s;
+}
+
+.care-dirt.is-wet {
+  filter: brightness(0.82) saturate(1.2);
+}
+
+.care-foamblob {
+  position: absolute;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 4px rgba(30, 60, 90, 0.15));
+  animation: foam-bob 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes foam-bob {
+  from {
+    transform: rotate(-5deg) scale(0.97);
+  }
+  to {
+    transform: rotate(6deg) scale(1.05);
+  }
+}
+
+.care-splash {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.care-splash.is-foam {
+  animation: foam-up 0.85s ease forwards;
+}
+
+@keyframes foam-up {
+  from {
+    opacity: 0.95;
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -190%) scale(1.4);
+  }
+}
+
+.care-splash.is-drop {
+  animation: drop-fall 0.8s ease-in forwards;
+}
+
+.care-splash.is-shine {
+  animation: shine-pop 0.85s ease forwards;
+}
+
+@keyframes shine-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4) rotate(-20deg);
+  }
+  40% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -110%) scale(1.3) rotate(25deg);
+  }
+}
+
+@keyframes drop-fall {
+  from {
+    opacity: 0.95;
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, 260%) scale(0.8);
+  }
+}
+
+.care-cursor {
+  position: absolute;
+  width: 16%;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.22));
+  animation: cursor-scrub 0.3s ease infinite alternate;
+}
+
+@keyframes cursor-scrub {
+  from {
+    transform: translate(-58%, -58%) rotate(-8deg);
+  }
+  to {
+    transform: translate(-42%, -58%) rotate(8deg);
+  }
+}
+
+.care-cursor.is-shower {
+  animation: cursor-pour 0.5s ease infinite alternate;
+}
+
+.care-cursor.is-towel {
+  animation: cursor-rub 0.26s ease infinite alternate;
+}
+
+@keyframes cursor-rub {
+  from {
+    transform: translate(-62%, -54%) rotate(-11deg);
+  }
+  to {
+    transform: translate(-38%, -60%) rotate(9deg);
+  }
+}
+
+@keyframes cursor-pour {
+  from {
+    transform: translate(-50%, -64%) rotate(-4deg);
+  }
+  to {
+    transform: translate(-50%, -56%) rotate(7deg);
+  }
+}
+
+.care-sparkle {
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  font-size: 36px;
+  animation: sparkle-drift 1.5s ease infinite;
+}
+
+@keyframes sparkle-drift {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-30px) scale(1.25);
+  }
+}
+
+.care-tools {
+  display: flex;
+  gap: 16px;
+}
+
+.care-tool {
+  width: 96px;
+  height: 96px;
+  padding: 10px;
+  border: 4px solid rgba(255, 255, 255, 0.92);
+  border-radius: 26px;
+  background: rgba(255, 250, 240, 0.94);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.care-tool img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.care-tool.is-active {
+  outline: 5px solid #ffb64d;
+  transform: scale(1.06);
+}
+
+.care-tool.is-waiting {
+  opacity: 0.42;
+  filter: saturate(0.5);
+  cursor: default;
+}
+
+.care-tool.is-turn {
+  animation: tool-turn 0.9s ease infinite alternate;
+}
+
+@keyframes tool-turn {
+  from {
+    transform: scale(1.04) translateY(0);
+  }
+  to {
+    transform: scale(1.12) translateY(-6px);
+  }
+}
+
+/* The big friendly banner announcing each minigame step. */
+.mg-banner {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 26px;
+  border-radius: 999px;
+  border: 4px solid rgba(255, 255, 255, 0.95);
+  background: rgba(255, 250, 240, 0.96);
+  box-shadow: var(--shadow);
+  font-family: var(--font-round);
+  font-weight: 800;
+  font-size: 24px;
+  color: #5a4632;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: banner-pop 1.5s ease forwards;
+  z-index: 3;
+}
+
+.mg-banner img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+@keyframes banner-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+  22% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -62%) scale(0.94);
+  }
+}
+
+/* ----- Feeding arcade ----- */
+
+.frenzy-stage {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  max-width: 560px;
+  min-height: 0;
+  border-radius: 28px;
+  overflow: hidden;
+  border: 5px solid rgba(255, 255, 255, 0.95);
+  background:
+    url('/ui/bg-feed.webp') center bottom / cover no-repeat,
+    #aee3ff;
+  box-shadow: var(--shadow);
+  touch-action: none;
+}
+
+.frenzy-snack {
+  position: absolute;
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.18));
+  animation-name: snack-sway;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.frenzy-snack.is-sock {
+  width: 72px;
+  height: 72px;
+}
+
+.frenzy-snack.is-golden {
+  width: 70px;
+  height: 70px;
+  filter: drop-shadow(0 0 14px rgba(255, 200, 40, 0.95)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.18));
+}
+
+@keyframes snack-sway {
+  from {
+    transform: translate(-50%, -50%) rotate(-13deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(13deg);
+  }
+}
+
+.frenzy-bowl {
+  position: absolute;
+  width: 136px;
+  height: 156px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.frenzy-toy {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  width: calc(116px * var(--frenzy-toy-scale, 1));
+  height: calc(116px * var(--frenzy-toy-scale, 1));
+  object-fit: contain;
+  object-position: bottom;
+  filter: drop-shadow(0 8px 8px rgba(40, 60, 20, 0.25));
+}
+
+.frenzy-dish {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  transform: translateX(-50%);
+  width: 118px;
+  filter: drop-shadow(0 8px 8px rgba(40, 60, 20, 0.3));
+}
+
+.frenzy-bowl.is-munch {
+  animation: bowl-munch 0.25s ease;
+}
+
+.frenzy-bowl.is-sneeze {
+  animation: bowl-sneeze 0.45s ease;
+}
+
+.frenzy-bowl.is-full .frenzy-toy {
+  animation: frenzy-happy 0.8s ease infinite alternate;
+}
+
+@keyframes frenzy-happy {
+  from {
+    transform: translateX(-50%) scale(1);
+  }
+  to {
+    transform: translateX(-50%) translateY(-8px) scale(1.05);
+  }
+}
+
+@keyframes bowl-munch {
+  50% {
+    transform: translate(-50%, -56%) scale(1.1);
+  }
+}
+
+@keyframes bowl-sneeze {
+  25% {
+    transform: translate(-54%, -50%) rotate(-6deg);
+  }
+  75% {
+    transform: translate(-46%, -50%) rotate(6deg);
+  }
+}
+
+.frenzy-done {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+}
+
+/* Hearts and stars floating up from a caught snack. */
+.frenzy-float {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: float-up 1.1s ease forwards;
+  z-index: 2;
+}
+
+.frenzy-float img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.frenzy-float b {
+  font-family: var(--font-round);
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow:
+    0 2px 0 rgba(120, 60, 20, 0.55),
+    0 0 8px rgba(120, 60, 20, 0.35);
+}
+
+.frenzy-float.is-star img {
+  width: 42px;
+  height: 42px;
+}
+
+/* Junk in the bowl: the minus point drops with a sulk. */
+.frenzy-float.is-sad {
+  animation: sad-drop 1.1s ease forwards;
+}
+
+.frenzy-float.is-sad b {
+  font-size: 26px;
+  color: #eaf4ff;
+  text-shadow:
+    0 2px 0 rgba(60, 90, 130, 0.6),
+    0 0 8px rgba(60, 90, 130, 0.4);
+}
+
+@keyframes sad-drop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -60%) scale(0.7);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, 60%) scale(0.9) rotate(10deg);
+  }
+}
+
+@keyframes float-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -240%) scale(0.9);
+  }
+}
+
+/* The celebration rain of stars and hearts when the toy is full. */
+.frenzy-rain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.frenzy-rain img {
+  position: absolute;
+  top: -12%;
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  animation: rain-fall linear infinite;
+}
+
+@keyframes rain-fall {
+  from {
+    transform: translateY(0) rotate(-14deg);
+  }
+  to {
+    transform: translateY(120vh) rotate(16deg);
+  }
+}
+
+.hatch-preview-actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Take the photo home: plain still or a meadow postcard. */
+.hatch-preview-save {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.save-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  background: rgba(255, 250, 240, 0.92);
+  box-shadow: var(--shadow);
+  font-family: var(--font-round);
+  font-weight: 800;
+  font-size: 16px;
+  color: #5a4632;
+  cursor: pointer;
+}
+
+.save-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.save-chip .icon {
+  font-size: 20px;
+}
+
+@media (max-width: 560px) {
+  .puzzle-piece {
+    width: 68px;
+    height: 68px;
+  }
+
+  .care-tool {
+    width: 76px;
+    height: 76px;
+  }
+
+  .mg-lead {
+    font-size: 18px;
+  }
+
+  .mg-progress {
+    flex-basis: 84px;
+  }
+
+  .mg-banner {
+    font-size: 18px;
+    padding: 10px 18px;
+  }
+
+  .mg-banner img {
+    width: 34px;
+    height: 34px;
+  }
+
+  .frenzy-snack.is-golden {
+    width: 58px;
+    height: 58px;
+  }
+
+  .save-chip {
+    font-size: 14px;
+    padding: 8px 14px;
+  }
+}
+
+/* Phone: the tap pill must fit three buttons in one row. */
+@media (max-width: 560px) {
+  .pilot-choice {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 30px;
+    padding: 12px;
+    width: min(360px, calc(100vw - 20px));
+  }
+
+  .pilot-choice-name {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pilot-choice .big-button,
+  .pilot-choice .big-button.primary {
+    min-width: 74px;
+    min-height: 74px;
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+
+  .pilot-choice .big-button .icon {
+    font-size: 26px;
+  }
+
+  .pilot-choice .mg-button-sprite {
+    width: 34px;
+    height: 34px;
+  }
+
+  .pilot-dismiss {
+    position: absolute;
+    top: -14px;
+    right: -6px;
+  }
+}
+
+/* Landscape phone: the minigames turn sideways — header on top, stage in the
+   middle, tools stacked beside it so nothing squashes. */
+@media (orientation: landscape) and (max-height: 540px) {
+  /* The overlays already are positioned (absolute inset 0); the floating
+     header anchors to them without any extra positioning. */
+  .care-room,
+  .frenzy,
+  .puzzle {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left));
+  }
+
+  /* The header floats over the scene: every vertical pixel goes to the game. */
+  .care-room .mg-head,
+  .frenzy .mg-head,
+  .puzzle .mg-head {
+    position: absolute;
+    top: 6px;
+    left: max(10px, env(safe-area-inset-left));
+    z-index: 6;
+    width: auto;
+    max-width: min(58%, 380px);
+    flex-basis: auto;
+    gap: 8px;
+    padding: 3px 12px 3px 3px;
+    border-width: 2px;
+    background: rgba(255, 250, 240, 0.88);
+  }
+
+  .care-room .mg-head .icon-button,
+  .frenzy .mg-head .icon-button,
+  .puzzle .mg-head .icon-button {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    border-width: 3px;
+    font-size: 19px;
+  }
+
+  .care-room .mg-lead,
+  .frenzy .mg-lead,
+  .puzzle .mg-lead {
+    font-size: 14px;
+  }
+
+  .care-room .mg-progress,
+  .frenzy .mg-progress,
+  .puzzle .mg-progress {
+    flex-basis: 64px;
+    height: 12px;
+  }
+
+  .care-room .mg-progress-icon,
+  .frenzy .mg-progress-icon,
+  .puzzle .mg-progress-icon {
+    width: 24px;
+    right: -10px;
+  }
+
+  .care-stage {
+    flex: 0 1 auto;
+    width: auto;
+    height: 100%;
+    aspect-ratio: 5 / 4;
+    max-width: none;
+  }
+
+  .care-tools {
+    flex-direction: column;
+    gap: 8px;
+    align-self: center;
+  }
+
+  .care-tool {
+    width: 62px;
+    height: 62px;
+    padding: 6px;
+    border-radius: 18px;
+  }
+
+  .care-room .mg-done,
+  .puzzle .mg-done {
+    flex-direction: column;
+    align-self: center;
+    gap: 8px;
+  }
+
+  .care-room .mg-done .big-button,
+  .puzzle .mg-done .big-button {
+    min-height: 56px;
+    padding: 8px 14px;
+    font-size: 15px;
+  }
+
+  .frenzy-stage {
+    flex: 1;
+    height: 100%;
+    max-width: min(92vw, 760px);
+  }
+
+  /* Cells must stay clear of the floating header: nudge the board down. */
+  .puzzle-board {
+    width: auto;
+    height: calc(100% - 40px);
+    margin-top: 40px;
+    aspect-ratio: 1 / 1;
+  }
+
+  .puzzle-tray {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-self: center;
+    max-width: none;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 4px;
+  }
+
+  .puzzle-piece {
+    width: 62px;
+    height: 62px;
+  }
+
+  .mg-banner {
+    top: 38%;
+    font-size: 17px;
+    padding: 8px 16px;
+  }
+
+  .mg-banner img {
+    width: 30px;
+    height: 30px;
+  }
+
+  .hatch-preview-art {
+    max-height: 38vh;
+  }
+}
+
+/* Tablet and desktop: washing, feeding, and the puzzle use the whole
+   frame instead of a phone-sized card floating in the meadow. */
+@media (min-width: 700px) and (min-height: 560px) {
+  .care-room,
+  .frenzy,
+  .puzzle {
+    padding: 16px 22px max(18px, env(safe-area-inset-bottom));
+    gap: 14px;
+  }
+
+  .care-room .mg-head,
+  .frenzy .mg-head,
+  .puzzle .mg-head {
+    max-width: none;
+    width: 100%;
+  }
+
+  .care-stage,
+  .frenzy-stage {
+    max-width: none;
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .puzzle {
+    align-items: stretch;
+  }
+
+  .puzzle-board {
+    width: min(68vh, 88vw);
+    align-self: center;
+  }
+
+  .puzzle-tray {
+    max-width: none;
+    gap: 14px;
+  }
+
+  .puzzle-piece {
+    width: 104px;
+    height: 104px;
+  }
+
+  .frenzy-snack {
+    width: 78px;
+    height: 78px;
+  }
+
+  .frenzy-snack.is-sock,
+  .frenzy-snack.is-golden {
+    width: 88px;
+    height: 88px;
+  }
+
+  .frenzy-bowl {
+    width: 176px;
+    height: 202px;
+  }
+
+  .frenzy-toy {
+    width: calc(150px * var(--frenzy-toy-scale, 1));
+    height: calc(150px * var(--frenzy-toy-scale, 1));
+    bottom: 38px;
+  }
+
+  .frenzy-dish {
+    width: 150px;
+  }
+
+  .care-tool {
+    width: 108px;
+    height: 108px;
+  }
+}
+
+/* Wide landscape tablet/desktop: tools sit beside the wash scene.
+   Grid keeps the header a compact bar (same as feeding) instead of a
+   stretched flex line that ate a third of the screen. */
+@media (min-width: 960px) and (min-height: 600px) {
+  .care-room {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .care-room .mg-head {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    width: 100%;
+    max-width: none;
+    align-self: start;
+  }
+
+  .care-stage {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+    height: auto;
+  }
+
+  .care-tools,
+  .care-room .mg-done {
+    grid-column: 2;
+    grid-row: 2;
+    flex-direction: column;
+    justify-content: center;
+    align-self: stretch;
+    gap: 16px;
+    padding-inline: 8px;
+  }
+
+  .care-tool {
+    width: 118px;
+    height: 118px;
+  }
+
+  .frenzy-bowl {
+    width: 200px;
+    height: 228px;
+  }
+
+  .frenzy-toy {
+    width: calc(172px * var(--frenzy-toy-scale, 1));
+    height: calc(172px * var(--frenzy-toy-scale, 1));
+    bottom: 44px;
+  }
+
+  .frenzy-dish {
+    width: 168px;
+  }
+
+  .frenzy-snack {
+    width: 88px;
+    height: 88px;
+  }
+
+  .puzzle {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    justify-items: stretch;
+    padding-top: 16px;
+  }
+
+  .puzzle .mg-head {
+    position: absolute;
+    top: 14px;
+    left: max(18px, env(safe-area-inset-left));
+    z-index: 6;
+    grid-column: auto;
+    width: auto;
+    max-width: min(52%, 420px);
+    padding: 4px 14px 4px 4px;
+  }
+
+  .puzzle-board {
+    grid-column: 1;
+    grid-row: 1;
+    width: auto;
+    height: 100%;
+    max-height: 100%;
+    max-width: 100%;
+    aspect-ratio: 1 / 1;
+    justify-self: center;
+    align-self: center;
+  }
+
+  .puzzle-tray,
+  .puzzle .mg-done {
+    grid-column: 2;
+    grid-row: 1;
+    flex-direction: column;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: center;
+    align-self: stretch;
+    max-width: none;
+    max-height: 100%;
+    overflow-y: auto;
+    gap: 14px;
+    padding-inline: 10px;
+  }
+
+  .puzzle-piece {
+    width: 118px;
+    height: 118px;
+  }
 }

@@ -50,8 +50,12 @@ export type DrawingData = {
   accentColor: string;
   /** Neural restyle already painted the face; skip glued-on eyes and feet. */
   painted?: boolean;
+  /** Full OpenRouter still, for the roster album and a parent download. */
+  portraitUrl?: string;
   /** Backend-hosted GLB from Meshy. When set, the island loads a 3D mesh. */
   modelUrl?: string;
+  /** Backend-hosted garden postcard: a quiet second OpenRouter generation. */
+  postcardUrl?: string;
   /** Clay egg used only while the real creature is still being made. */
   placeholder?: boolean;
 };
@@ -80,6 +84,8 @@ export type ChudikSpec = {
   drawing?: DrawingData;
   /** Egg on the lawn; the puppet is not ready yet. */
   hatching?: boolean;
+  /** Stylize job to resume Meshy after a reload. */
+  hatchJobId?: string;
 };
 
 const BODY_SHAPES: BodyShape[] = ['blob', 'egg', 'pear', 'round', 'tall'];
@@ -94,6 +100,7 @@ export function generateSpec(options: {
   origin?: ChudikSpec['origin'];
   drawing?: DrawingData;
   hatching?: boolean;
+  hatchJobId?: string;
 }): ChudikSpec {
   const rng = mulberry32(options.seed);
   const kind = options.kindId ? kindById(options.kindId) : pick(rng, KINDS);
@@ -124,6 +131,7 @@ export function generateSpec(options: {
     voice: voiceFromSeed(options.seed, size),
     drawing: options.drawing,
     hatching: options.hatching,
+    hatchJobId: options.hatchJobId,
   };
 
   return spec;

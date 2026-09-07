@@ -8,7 +8,7 @@ This document is an engineering baseline, not a substitute for jurisdiction-spec
 - Do not collect advertising identifiers.
 - Do not add third-party behavioral analytics SDKs to the child experience by default.
 - Original drawings are private processing inputs, not social content.
-- Send AI providers only the image or validated generated text required for the current job. Meshy receives the stylized drawing still only; never names, voice, location, or other child PII.
+- Send AI providers only the image or validated generated text required for the current job. Tripo and Meshy receive the stylized drawing still only; never names, voice, location, or other child PII.
 
 ## Secrets
 
@@ -37,6 +37,7 @@ Job creation still uses an idempotency key so a duplicate submission does not cr
 - Enforce limits on bytes, pixels, dimensions, and processing time.
 - Strip EXIF and other metadata.
 - Reject archives and active content.
+- Before a credit is reserved, the backend asks OpenRouter to allow or block the upload. Canvas drawings and camera/file photos use the same gate. Child scribbles of animals or simple people pass. Sexual content, pornography, real nudes, and graphic gore are rejected with `422 drawing_not_allowed`. The child UI does not name the reason. A blocked upload does not spend a credit. If the gate is down, the drawing is allowed and the skip is logged.
 - Store originals separately from public-delivery artifacts.
 - Scan dependencies and containers in CI.
 

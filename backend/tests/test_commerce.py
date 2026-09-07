@@ -87,6 +87,42 @@ async def test_stylize_without_credits_is_402(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.asyncio
+async def test_stylize_start_spends_the_free_credit(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def hold_job(_job_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.api.stylize.get_settings",
+        lambda: Settings(openrouter_api_key="test-key", environment="production"),
+    )
+    monkeypatch.setattr("app.api.stylize.run_job", hold_job)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post(
+            "/v1/auth/register",
+            json={"email": "parent@example.com", "password": "secret1"},
+        )
+        token = created.json()["token"]
+        started = await client.post(
+            "/v1/generation/stylize",
+            files={"file": ("draw.png", TINY_PNG, "image/png")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        me = await client.get("/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert started.status_code == 202
+    assert started.json()["remaining"] == 0
+    assert me.status_code == 200
+    assert me.json()["remaining"] == 0
+    second = None
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        second = await client.post(
+            "/v1/generation/stylize",
+            files={"file": ("draw.png", TINY_PNG, "image/png")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert second.status_code == 402
+
+
+@pytest.mark.asyncio
 async def test_catalog_lists_four_packs() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/v1/commerce/catalog")
@@ -195,3 +231,16 @@ async def test_operator_sets_price_and_grants_credits(monkeypatch: pytest.Monkey
         )
     assert granted.status_code == 200
     assert granted.json()["remaining"] == 11
+
+
+def test_seed_keeps_operator_prices() -> None:
+    from app.persistence.db import seed_packs, session
+
+    commerce.set_price("pack_5", 490, featured=True, list_price_rub=1990)
+    with session() as db:
+        seed_packs(db)
+    pack = commerce.get_pack("pack_5")
+    assert pack is not None
+    assert pack.price_rub == 490
+    assert pack.list_price_rub == 1990
+    assert pack.featured is True

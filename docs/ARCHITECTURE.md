@@ -48,13 +48,13 @@ The bridge exposes a narrow C-compatible boundary to C#. Domain rules do not liv
 ### Public website (`zoofun-web`) owns
 
 - Parent landing, email registration, and sign-in.
-- Opening the Chudiki island after a backend parent session (`/play`).
+- Opening the Chudiki island after a backend parent session (`/play` → `/island`).
 - The Kenney fixture garden (`/zoo/demo`) as the iteration-00 local demo.
 - `/admin` redirects to SQLAdmin at `/staff`. Visual metrics live at `crm.zooo.fun` (D-018).
 
 The website never calls OpenRouter. Child legal names, voice, and other child PII are not collected. The Chudiki island stores the family zoo on the API for the signed-in child; voice recordings stay on the device. Parents, children, creatures, packs, and payments live in PostgreSQL. SQLAdmin at `/staff` is the write console. CRM at `crm.zooo.fun` reads the same database. When the API host cannot reach OpenRouter directly, the backend uses `OPENROUTER_HTTP_PROXY`.
 
-Cookie consent on the marketing site enables first-party `source=site` events. Child paths `/play` and `/zoo` do not load the site tracker.
+Cookie consent on the marketing site enables first-party `source=site` events. Child paths `/play`, `/zoo`, and `/island` do not load the site tracker.
 
 ## Backend boundaries
 
@@ -104,7 +104,7 @@ Any processing state → retry_wait → same/next safe state
 Any terminal validation failure → failed
 ```
 
-Transitions are persisted. Worker retries must be idempotent. Duplicate client submission must not create a second job. A signed-in parent reserves one generation credit when a job is accepted.
+Transitions are persisted. Worker retries must be idempotent. Duplicate client submission must not create a second job. A signed-in parent reserves one generation credit when a job is accepted after the drawing safety gate. The job payload echoes `remaining` after that reserve and a `mesh_status` (`pending` / `ready` / `skipped` / `failed`) so the island can lock the credit chip immediately. The still marks the job ready; the egg stays in the garden until the mesh finishes.
 
 ## Runtime creature structure
 

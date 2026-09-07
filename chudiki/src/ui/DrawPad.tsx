@@ -1,4 +1,50 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { floodFill, hexRgb } from '../game/drawing/floodFill';
+import { PAPER_HEX, fillPaper, isPaperPixel } from '../game/drawing/paperize';
+
+type DrawTool = 'brush' | 'erase' | 'fill';
+
+function FillIcon({ color }: { color: string }) {
+  return (
+    <svg className="fill-icon" viewBox="0 0 32 32" aria-hidden="true">
+      <path
+        d="M7 20c0 0 1.2-3.2 3.4-4.2 1.6-.7 3.4.2 3.2 2.1-.2 1.6-1.8 2.4-3.2 3.4C8.6 22.4 7.4 24 7 26.2"
+        fill={color}
+        stroke="#34302f"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <ellipse cx="11.2" cy="26.6" rx="5.4" ry="2.4" fill={color} stroke="#34302f" strokeWidth="1.8" />
+      <g transform="rotate(-32 19 13)">
+        <path
+          d="M13.2 11.2c0-3.6 10.2-3.6 10.2 0"
+          fill="none"
+          stroke="#34302f"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+        <path
+          d="M12 11.4h13.4l-1.7 11.2c-.2 1.2-1.4 2.1-2.6 2.1h-4.8c-1.2 0-2.4-.9-2.6-2.1L12 11.4z"
+          fill="#ffc93c"
+          stroke="#34302f"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <rect
+          x="11.3"
+          y="9.4"
+          width="14.8"
+          height="3.3"
+          rx="1.4"
+          fill="#ffe08a"
+          stroke="#34302f"
+          strokeWidth="1.8"
+        />
+        <path d="M14.4 14.2h8.4" stroke={color} strokeWidth="2.4" strokeLinecap="round" />
+      </g>
+    </svg>
+  );
+}
 
 /**
  * The drawing pad. Deliberately plain: a big sheet, fat colours, one undo and
@@ -26,9 +72,16 @@ const MAX_UNDO = 8;
 export type DrawPadProps = {
   onCancel(): void;
   onDone(canvas: HTMLCanvasElement): void;
+  title?: string;
+  doneLabel?: string;
 };
 
-export function DrawPad({ onCancel, onDone }: DrawPadProps) {
+export function DrawPad({
+  onCancel,
+  onDone,
+  title = 'Нарисуй чудика',
+  doneLabel = '✨ Оживить!',
+}: DrawPadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const drawingRef = useRef(false);
@@ -37,7 +90,7 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
 
   const [color, setColor] = useState(PALETTE[0]);
   const [brush, setBrush] = useState(BRUSHES[1]);
-  const [erasing, setErasing] = useState(false);
+  const [tool, setTool] = useState<DrawTool>('brush');
   const [hasArt, setHasArt] = useState(false);
   const [openTool, setOpenTool] = useState<'color' | 'brush' | null>(null);
 
@@ -58,6 +111,8 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
       const previous = canvas.width > 0 ? canvas.toDataURL() : null;
       canvas.width = width;
       canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) fillPaper(ctx, width, height);
 
       if (previous) {
         const image = new Image();
@@ -98,9 +153,9 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
       const scale = canvas.width / (frameRef.current?.getBoundingClientRect().width || 1);
       const width = brush * scale;
 
-      ctx.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = tool === 'erase' ? PAPER_HEX : color;
+      ctx.fillStyle = tool === 'erase' ? PAPER_HEX : color;
       ctx.lineWidth = width;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -118,19 +173,42 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
       }
 
       lastPointRef.current = to;
-      ctx.globalCompositeOperation = 'source-over';
     },
-    [brush, color, erasing],
+    [brush, color, tool],
+  );
+
+  const fillAt = useCallback(
+    (point: { x: number; y: number }) => {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+      if (!canvas || !ctx) return false;
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const changed = floodFill(image.data, canvas.width, canvas.height, point.x, point.y, hexRgb(color));
+      if (!changed) return false;
+      ctx.putImageData(image, 0, 0);
+      return true;
+    },
+    [color],
   );
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     setOpenTool(null);
+    const point = pointFromEvent(event);
+    if (tool === 'fill') {
+      pushUndo();
+      if (!fillAt(point)) {
+        undoStackRef.current.pop();
+        return;
+      }
+      setHasArt(true);
+      return;
+    }
     pushUndo();
     drawingRef.current = true;
     lastPointRef.current = null;
     setHasArt(true);
-    strokeTo(pointFromEvent(event));
+    strokeTo(point);
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -170,7 +248,7 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     pushUndo();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    fillPaper(ctx, canvas.width, canvas.height);
     setHasArt(false);
   };
 
@@ -180,7 +258,7 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
         <button className="icon-button" onClick={onCancel} aria-label="Назад">
           ⬅️
         </button>
-        <h1 className="sheet-title">Нарисуй чудика</h1>
+        <h1 className="sheet-title">{title}</h1>
       </div>
 
       <div className="sheet-body">
@@ -211,7 +289,7 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
             <button
               type="button"
               className="draw-chip"
-              style={{ background: erasing ? '#f4f0e4' : color }}
+              style={{ background: tool === 'erase' ? '#f4f0e4' : color }}
               data-open={openTool === 'color'}
               aria-label="Цвет"
               aria-expanded={openTool === 'color'}
@@ -224,11 +302,11 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
                     key={swatch}
                     className="swatch"
                     style={{ background: swatch }}
-                    data-active={!erasing && color === swatch}
+                    data-active={tool !== 'erase' && color === swatch}
                     aria-label={`Цвет ${swatch}`}
                     onClick={() => {
                       setColor(swatch);
-                      setErasing(false);
+                      if (tool === 'erase') setTool('brush');
                       setOpenTool(null);
                     }}
                   />
@@ -245,7 +323,7 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
               aria-label="Кисть"
               aria-expanded={openTool === 'brush'}
               onClick={() => {
-                setErasing(false);
+                setTool('brush');
                 setOpenTool((current) => (current === 'brush' ? null : 'brush'));
               }}
             >
@@ -257,11 +335,11 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
                   <button
                     key={size}
                     className="brush"
-                    data-active={!erasing && brush === size}
+                    data-active={tool === 'brush' && brush === size}
                     aria-label={`Кисть ${size}`}
                     onClick={() => {
                       setBrush(size);
-                      setErasing(false);
+                      setTool('brush');
                       setOpenTool(null);
                     }}
                   >
@@ -274,11 +352,23 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
 
           <button
             type="button"
+            className="draw-chip draw-chip-fill"
+            data-active={tool === 'fill'}
+            aria-label="Заливка"
+            onClick={() => {
+              setTool('fill');
+              setOpenTool(null);
+            }}
+          >
+            <FillIcon color={color} />
+          </button>
+          <button
+            type="button"
             className="draw-chip draw-chip-erase"
-            data-active={erasing}
+            data-active={tool === 'erase'}
             aria-label="Ластик"
             onClick={() => {
-              setErasing(true);
+              setTool('erase');
               setOpenTool(null);
             }}
           >
@@ -296,7 +386,7 @@ export function DrawPad({ onCancel, onDone }: DrawPadProps) {
             if (canvas) onDone(canvas);
           }}
         >
-          ✨ Оживить!
+          {doneLabel}
         </button>
       </div>
     </div>
@@ -307,8 +397,8 @@ function isBlank(canvas: HTMLCanvasElement): boolean {
   const ctx = canvas.getContext('2d');
   if (!ctx) return true;
   const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  for (let i = 3; i < data.length; i += 4) {
-    if (data[i] > 20) return false;
+  for (let i = 0; i < data.length; i += 4) {
+    if (!isPaperPixel(data[i], data[i + 1], data[i + 2], data[i + 3])) return false;
   }
   return true;
 }

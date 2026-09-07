@@ -48,27 +48,82 @@ PROFILE_PROMPT = (
     "Do not mention the child or invent a biography."
 )
 
-# Recognition before polish: same silhouette and idea, but a finished garden toy.
-# Not a traced scribble, not photoreal fur, not a different animal.
-STYLIZE_PROMPT = (
-    "This is a child's drawing of one imaginary zoo creature. "
-    "Paint it as a finished handmade toy that could live in a sunny picture-book "
-    "garden: soft clay and plush, rounded forms, gentle 3D shading, saturated "
-    "friendly colors like a children's clay-garden set. "
-    "Keep the exact silhouette, colors, limb count, extra parts, and strange "
-    "proportions. Do not turn it into a real zebra, elephant, giraffe, or any "
-    "other real animal. Do not fix the anatomy. "
-    "Interpret every scribble as a finished surface: fill the whole body with "
-    "solid painted volume. Dots become friendly toy eyes. A line becomes a mouth "
-    "or nose. A trunk stays a trunk. "
-    "Do not copy the original sketch. No leftover pencil, marker hatching, "
-    "paper, white halo, sticker outline, or flat unshaded fill. "
-    "Not a photograph, not realistic fur or skin. "
-    "No background scenery, no text, no name, no watermark. "
-    "One creature, full body, centered, transparent background."
+CONTOUR = (
+    "Trace the child's drawing. The outline, colors, limb count, extra parts, "
+    "and marks must match the drawing, not a catalog animal. "
+    "A cat stays that cat. A bird stays that bird. "
+    "Do not straighten, symmetrize, or replace the contour. "
 )
 
-DEFAULT_IMAGE_MODEL = "google/gemini-2.5-flash-image"
+STUDIO = (
+    "Paint a studio product photo of a handmade clay-and-felt figurine. "
+    "Soft clay body, needle-felt wool, googly toy eyes, rounded blobs, "
+    "saturated friendly colors, wrap-around studio light. "
+    "The body is a plump potato of clay with a belly and a back. "
+    "Limbs are round sausages, not fins. "
+    "Camera is three-quarter, about forty degrees off the front. "
+    "You must see the chest, one full flank, and the far hip. "
+    "Not a paper cutout, not a side-on stamp, not a sticker, not a cookie, "
+    "not a plaque, not a relief, not an extruded silhouette. "
+    "No leftover pencil, marker hatching, paper, white halo, or sticker outline. "
+    "Not a photograph of a real animal. Not realistic fur or skin. "
+    "No background scenery, no text, no name, no watermark. "
+    "No drop shadow, no cast shadow, nothing under the feet. "
+    "One figurine, full body, centered, standing, transparent background."
+)
+
+CONTOUR_PROMPT = (
+    "This is a child's drawing of one zoo creature. "
+    + CONTOUR
+    + "Fill the same outline as a clay-and-felt toy. "
+    + STUDIO
+)
+
+# Older "name the animal" prompt. Production and the lab use CONTOUR_PROMPT.
+STYLIZE_PROMPT = (
+    "This is a child's drawing of one zoo creature. "
+    "First name the closest living being in one word: mosquito, fly, butterfly, "
+    "beetle, ladybug, bird, fish, cat, dog, giraffe, or a mix of two. "
+    "Paint a studio product photo of a handmade clay-and-felt figurine of THAT being. "
+    "A four-year-old must be able to name the animal in one word. "
+    "The drawing is a clue, not a logo: keep the child's colors, limb count, "
+    "extra parts, distinctive shapes, and odd features, but resolve scribbles "
+    "into that living toy. Yellow jagged shapes are wings. Thin sticks are "
+    "legs, arms, or a proboscis. A thick outline is paint on clay, not a "
+    "sticker border. "
+    "Do not leave an abstract cloud, flag, cookie, or unlabeled doodle. "
+    "Do not replace the idea with a generic catalog animal of a different kind. "
+    "A three-legged giraffe stays three-legged. Mixed species stay mixed. "
+    "Soft clay body, needle-felt wool, googly toy eyes, rounded blobs, "
+    "saturated friendly colors, wrap-around studio light. "
+    "The body is a plump potato of clay with a belly and a back, like the felt "
+    "toys already standing in a children's zoo. Limbs are round sausages, not fins. "
+    "Camera is three-quarter, about forty degrees off the front. "
+    "You must see the chest, one full flank, and the far hip. "
+    "Not a paper cutout, not a side-on stamp, not a sticker, not a cookie, "
+    "not a plaque, not a relief, not an extruded silhouette. "
+    "Do not copy the original sketch. No leftover pencil, marker hatching, "
+    "paper, white halo, sticker outline, or flat unshaded fill. "
+    "Not a photograph of a real animal. Not realistic fur or skin. "
+    "No background scenery, no text, no name, no watermark. "
+    "One figurine, full body, centered, standing, transparent background."
+)
+
+# Second, quiet generation after the stylize wins: the same figurine painted
+# into the zoo garden. Downloaded as "Открытка из сада" from the roster.
+POSTCARD_PROMPT = (
+    "This is a studio photo of a handmade clay-and-felt toy figurine. "
+    "Paint the SAME figurine standing on a sunny garden meadow in a soft "
+    "storybook 3D cartoon style: bright green grass, colorful round flowers, "
+    "plump bushes, a low wooden fence far behind, warm blue sky with fluffy "
+    "clouds. Keep the figurine exactly as it is: same colors, same shape, "
+    "same googly eyes, same smile, same limbs and proportions. "
+    "Full body, centered, feet on the grass, soft warm daylight, "
+    "a gentle ground shadow. The figurine is the hero and fills about half "
+    "of the frame height. No text, no watermark, no border, no people."
+)
+
+DEFAULT_IMAGE_MODEL = "black-forest-labs/flux.2-pro"
 
 
 class ProviderError(Exception):
@@ -112,23 +167,41 @@ def outbound_proxy(settings: Settings) -> str | None:
     return value or None
 
 
-def _payload(settings: Settings, image_data_url: str) -> dict:
-    model = settings.openrouter_image_model or DEFAULT_IMAGE_MODEL
+def _payload(
+    settings: Settings,
+    image_data_url: str,
+    prompt: str | None = None,
+    model: str | None = None,
+    extras: dict | None = None,
+    *,
+    zdr: bool = True,
+) -> dict:
+    chosen = (model or settings.openrouter_image_model or DEFAULT_IMAGE_MODEL).strip()
+    if "flux" in chosen.lower():
+        zdr = False
     body: dict = {
-        "model": model,
-        "prompt": STYLIZE_PROMPT,
+        "model": chosen,
+        "prompt": prompt or CONTOUR_PROMPT,
         "aspect_ratio": "1:1",
-        "output_format": "png",
-        "background": "transparent",
         "n": 1,
         "input_references": [
             {"type": "image_url", "image_url": {"url": image_data_url}},
         ],
-        "provider": {"zdr": True},
     }
-    if settings.openrouter_image_provider:
-        body["provider"]["only"] = [settings.openrouter_image_provider]
-        body["provider"]["allow_fallbacks"] = False
+    if extras:
+        for key, value in extras.items():
+            if value is not None:
+                body[key] = value
+    elif zdr:
+        body["output_format"] = "png"
+        body["background"] = "transparent"
+    else:
+        body["output_format"] = "png"
+    if zdr:
+        body["provider"] = {"zdr": True}
+        if settings.openrouter_image_provider:
+            body["provider"]["only"] = [settings.openrouter_image_provider]
+            body["provider"]["allow_fallbacks"] = False
     return body
 
 
@@ -179,12 +252,21 @@ def provider_error_from_http(response: httpx.Response) -> ProviderError:
     )
 
 
-async def stylize_drawing(settings: Settings, image_bytes: bytes, media_type: str) -> StyledImage:
+async def stylize_drawing(
+    settings: Settings,
+    image_bytes: bytes,
+    media_type: str,
+    prompt: str | None = None,
+    model: str | None = None,
+    extras: dict | None = None,
+    *,
+    zdr: bool = True,
+) -> StyledImage:
     if not settings.openrouter_api_key.strip():
         raise ProviderError("openrouter is not configured", status_code=503)
     encoded = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{media_type};base64,{encoded}"
-    body = _payload(settings, data_url)
+    body = _payload(settings, data_url, prompt=prompt, model=model, extras=extras, zdr=zdr)
     model = body["model"]
     async with httpx.AsyncClient(timeout=120.0, proxy=outbound_proxy(settings)) as client:
         response = await client.post(OPENROUTER_IMAGES_URL, headers=_headers(settings), json=body)

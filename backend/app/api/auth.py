@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from app.accounts.store import ChildProfile, ParentAccount, store
 from app.api.deps import bearer_token, require_session
+from app.ratelimit import enforce
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
@@ -25,6 +26,10 @@ class AuthIn(BaseModel):
         if not separator or not local or "." not in domain:
             raise ValueError("bad_email")
         return email
+
+
+class RegisterIn(AuthIn):
+    marketing_consent: bool = False
 
 
 class EmailIn(BaseModel):
@@ -71,7 +76,8 @@ async def lookup(body: EmailIn) -> LookupOut:
 
 
 @router.post("/replace-password", response_model=SessionOut)
-async def replace_password(body: AuthIn) -> SessionOut:
+async def replace_password(body: AuthIn, request: Request) -> SessionOut:
+    enforce(request, "auth", limit=20)
     try:
         session = store.replace_password(str(body.email), body.password)
     except ValueError as exc:
@@ -83,9 +89,14 @@ async def replace_password(body: AuthIn) -> SessionOut:
 
 
 @router.post("/register", response_model=SessionOut)
-async def register(body: AuthIn) -> SessionOut:
+async def register(body: RegisterIn, request: Request) -> SessionOut:
+    enforce(request, "auth", limit=20)
     try:
-        session = store.register(str(body.email), body.password)
+        session = store.register(
+            str(body.email),
+            body.password,
+            marketing_consent=body.marketing_consent,
+        )
     except ValueError as exc:
         code = str(exc)
         if code == "email_taken":
@@ -100,7 +111,9 @@ async def register(body: AuthIn) -> SessionOut:
 
 
 @router.post("/login", response_model=SessionOut)
-async def login(body: AuthIn) -> SessionOut:
+async def login(body: AuthIn, request: Request) -> SessionOut:
+    # Brute force protection; legit parents never hit twenty tries a minute.
+    enforce(request, "auth", limit=20)
     try:
         session = store.login(str(body.email), body.password)
     except ValueError as exc:

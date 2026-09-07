@@ -32,28 +32,36 @@ export type QualityHints = {
 
 const PHONE_UA = /Android.+Mobile|iPhone|iPod/i;
 
-export function settingsFromHints(hints: QualityHints): QualitySettings {
-  const phone =
-    hints.saveData ||
-    (hints.deviceMemory !== undefined && hints.deviceMemory <= 4) ||
-    PHONE_UA.test(hints.userAgent) ||
-    (hints.coarsePointer && hints.shortSide <= 520);
+export function settingsFromHints(
+  hints: QualityHints,
+  force: QualityTier | null = null,
+): QualitySettings {
+  const phone = force
+    ? force === 'low'
+    : hints.saveData ||
+      (hints.deviceMemory !== undefined && hints.deviceMemory <= 4) ||
+      PHONE_UA.test(hints.userAgent) ||
+      (hints.coarsePointer && hints.shortSide <= 520);
 
   if (phone) {
+    // Phones skip the heavy PostFx passes (AO, bloom, shafts), but keep a
+    // retina canvas, one 2048 shadow raster and the PCFSoft filter: the soft
+    // 3x3 tap is a handful of texture reads on a sparse lawn and removes the
+    // blocky shadow edges that made toys read as flat stickers.
     return {
       tier: 'low',
-      pixelRatio: Math.min(hints.devicePixelRatio || 1, 1),
-      antialias: false,
-      shadows: false,
-      shadowMapSize: 512,
-      softShadows: false,
+      pixelRatio: Math.min(hints.devicePixelRatio || 1, 2),
+      antialias: true,
+      shadows: true,
+      shadowMapSize: 2048,
+      softShadows: true,
       gtao: false,
       bloom: false,
       shafts: false,
-      grassStep: 1.05,
-      grassBlades: 3,
+      grassStep: 0.85,
+      grassBlades: 4,
       paintedGrass: false,
-      grassReceivesShadow: false,
+      grassReceivesShadow: true,
     };
   }
 
@@ -93,8 +101,19 @@ export function detectHints(): QualityHints {
 
 let cached: QualitySettings | null = null;
 
+/** Dev-only override so a laptop can preview the phone garden: ?quality=low */
+function forcedTier(): QualityTier | null {
+  try {
+    if (!import.meta.env?.DEV) return null;
+    const value = new URLSearchParams(window.location.search).get('quality');
+    return value === 'low' || value === 'high' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Resolved once per page load — the renderer cannot change these mid-flight. */
 export function quality(): QualitySettings {
-  cached ??= settingsFromHints(detectHints());
+  cached ??= settingsFromHints(detectHints(), forcedTier());
   return cached;
 }

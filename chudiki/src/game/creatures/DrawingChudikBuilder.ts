@@ -7,6 +7,28 @@ import type { ChudikRig } from './ChudikBuilder';
 
 const meshyLoader = new GLTFLoader();
 
+export async function preloadMeshyModel(url: string): Promise<boolean> {
+  try {
+    await loadMeshyGltf(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function loadMeshyGltf(url: string) {
+  let last: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await meshyLoader.loadAsync(url);
+    } catch (error) {
+      last = error;
+      await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)));
+    }
+  }
+  throw last instanceof Error ? last : new Error('glb missing');
+}
+
 /**
  * Grows a creature out of a child's drawing.
  *
@@ -238,6 +260,31 @@ function addFeet(
   ctx.disposables.push(mesh.geometry);
 }
 
+function paintWaitRing(
+  ctx: CanvasRenderingContext2D,
+  fill: number,
+  spin: number,
+  ready: boolean,
+) {
+  const size = 128;
+  const center = size / 2;
+  const radius = 46;
+  ctx.clearRect(0, 0, size, size);
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 9;
+  ctx.strokeStyle = ready ? 'rgba(255, 224, 110, 0.38)' : 'rgba(255, 250, 230, 0.3)';
+  ctx.beginPath();
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  const amount = Math.max(0.05, Math.min(1, fill));
+  const start = -Math.PI / 2 + (ready ? 0 : spin);
+  ctx.lineWidth = 12;
+  ctx.strokeStyle = ready ? '#ffe066' : '#6dff88';
+  ctx.beginPath();
+  ctx.arc(center, center, radius, start, start + Math.PI * 2 * amount);
+  ctx.stroke();
+}
+
 /** A clay egg on the lawn while the real puppet is still being made. */
 function buildEggChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
   const root = new THREE.Group();
@@ -247,7 +294,7 @@ function buildEggChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
   root.add(bounce);
   bounce.add(squash);
 
-  const scale = 2.15 * spec.size;
+  const scale = 4.3 * spec.size;
   const disposables: Array<THREE.BufferGeometry | THREE.Material | THREE.Texture> = [];
   const shell = new THREE.SphereGeometry(scale * 0.4, 22, 16);
   shell.scale(0.78, 1.14, 0.78);
@@ -280,28 +327,70 @@ function buildEggChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
   const crackMat = new THREE.MeshBasicMaterial({
     color: 0x3a2418,
     transparent: true,
-    opacity: 0,
+    opacity: 1,
     depthWrite: false,
   });
   disposables.push(crackMat);
-  const cracks: THREE.Mesh[] = [];
+  const cracks: THREE.Group[] = [];
   const crackMarks = [
-    { y: 0.48, z: 0.31, rotZ: 0.15, rotX: 0.2, h: 0.42 },
-    { y: 0.4, z: 0.28, rotZ: -0.55, rotX: -0.1, h: 0.32 },
-    { y: 0.55, z: 0.26, rotZ: 0.8, rotX: 0.05, h: 0.28 },
+    { x: 0.02, y: 0.5, z: 0.3, yaw: 0, rotZ: 0.18, rotX: 0.16, h: 0.4, branch: 0.55 },
+    { x: 0.22, y: 0.44, z: 0.16, yaw: 0.85, rotZ: -0.42, rotX: 0.1, h: 0.32, branch: -0.7 },
+    { x: -0.2, y: 0.56, z: 0.14, yaw: -0.7, rotZ: 0.62, rotX: -0.06, h: 0.3, branch: 0.8 },
+    { x: 0.1, y: 0.4, z: -0.26, yaw: 2.5, rotZ: -0.22, rotX: 0.18, h: 0.34, branch: 0.4 },
+    { x: -0.08, y: 0.6, z: -0.22, yaw: 3.2, rotZ: 0.48, rotX: 0, h: 0.26, branch: -0.5 },
+    { x: -0.24, y: 0.38, z: 0.06, yaw: -1.3, rotZ: -0.58, rotX: 0.12, h: 0.33, branch: 0.9 },
+    { x: 0.16, y: 0.64, z: 0.02, yaw: 0.35, rotZ: 0.12, rotX: -0.18, h: 0.24, branch: -0.35 },
+    { x: 0.04, y: 0.46, z: 0.28, yaw: 0.15, rotZ: 1.05, rotX: 0.04, h: 0.22, branch: 0.25 },
   ];
   for (const mark of crackMarks) {
-    const geo = new THREE.BoxGeometry(scale * 0.018, scale * mark.h, scale * 0.018);
-    const crack = new THREE.Mesh(geo, crackMat);
-    crack.position.set(0, mark.y * scale, mark.z * scale);
-    crack.rotation.z = mark.rotZ;
-    crack.rotation.x = mark.rotX;
-    crack.userData.chudikId = spec.id;
-    squash.add(crack);
-    cracks.push(crack);
-    disposables.push(geo);
+    const group = new THREE.Group();
+    group.position.set(mark.x * scale, mark.y * scale, mark.z * scale);
+    group.rotation.y = mark.yaw;
+    group.visible = false;
+    group.userData.chudikId = spec.id;
+    const stem = new THREE.Mesh(
+      new THREE.BoxGeometry(scale * 0.02, scale * mark.h, scale * 0.02),
+      crackMat,
+    );
+    stem.rotation.z = mark.rotZ;
+    stem.rotation.x = mark.rotX;
+    stem.userData.chudikId = spec.id;
+    const branch = new THREE.Mesh(
+      new THREE.BoxGeometry(scale * 0.018, scale * mark.h * 0.55, scale * 0.018),
+      crackMat,
+    );
+    branch.position.y = scale * mark.h * 0.08;
+    branch.rotation.z = mark.rotZ + mark.branch;
+    branch.rotation.x = mark.rotX * 0.4;
+    branch.userData.chudikId = spec.id;
+    group.add(stem, branch);
+    squash.add(group);
+    cracks.push(group);
+    disposables.push(stem.geometry, branch.geometry);
   }
 
+  const ringCanvas = document.createElement('canvas');
+  ringCanvas.width = 128;
+  ringCanvas.height = 128;
+  const ringCtx = ringCanvas.getContext('2d');
+  const ringTex = new THREE.CanvasTexture(ringCanvas);
+  ringTex.colorSpace = THREE.SRGBColorSpace;
+  const ring = new THREE.Mesh(
+    new THREE.CircleGeometry(scale * 0.58, 40),
+    new THREE.MeshBasicMaterial({
+      map: ringTex,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.04;
+  ring.userData.chudikId = spec.id;
+  bounce.add(ring);
+  disposables.push(ring.geometry, ring.material, ringTex);
+
+  let shown = 0;
   return {
     root,
     bounce,
@@ -312,12 +401,24 @@ function buildEggChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
     wings: [],
     tail: null,
     height: scale * 0.92,
-    radius: scale * 0.38,
-    setHatchLook(progress: number) {
-      crackMat.opacity = Math.max(0, Math.min(1, progress));
-      for (const crack of cracks) {
-        crack.scale.setScalar(0.35 + progress * 0.65);
+    radius: scale * 0.42,
+    setHatchLook(look) {
+      const next = Math.max(0, Math.min(cracks.length, look.cracks));
+      for (let i = 0; i < cracks.length; i += 1) {
+        const crack = cracks[i];
+        const on = i < next;
+        crack.visible = on;
+        if (on && i >= shown) crack.userData.pop = 1;
+        const pop = typeof crack.userData.pop === 'number' ? crack.userData.pop : 0;
+        crack.scale.setScalar(on ? 1 + pop * 0.45 : 1);
+        crack.userData.pop = Math.max(0, pop - 0.05);
       }
+      shown = next;
+      if (ringCtx) {
+        paintWaitRing(ringCtx, look.fill, look.spin, look.ready);
+        ringTex.needsUpdate = true;
+      }
+      ring.rotation.z = look.ready ? 0 : look.spin * 0.15;
     },
     dispose() {
       for (const item of disposables) item.dispose();
@@ -372,7 +473,7 @@ function buildMeshyChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
   };
 
   let cancelled = false;
-  void meshyLoader.loadAsync(drawing.modelUrl!).then((gltf) => {
+  void loadMeshyGltf(drawing.modelUrl!).then((gltf) => {
     if (cancelled) return;
     holder.clear();
     placeholder.geometry.dispose();

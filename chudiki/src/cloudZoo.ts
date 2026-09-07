@@ -8,7 +8,12 @@ type ZooResponse = {
 
 const PULL_MS = 4000;
 
-export async function pullCloudZoo(): Promise<StoredCreature[] | null> {
+export type CloudZoo = {
+  childId: string;
+  creatures: StoredCreature[];
+};
+
+export async function pullCloudZoo(): Promise<CloudZoo | null> {
   if (!parentToken()) return null;
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), PULL_MS);
@@ -19,7 +24,11 @@ export async function pullCloudZoo(): Promise<StoredCreature[] | null> {
     });
     if (!response.ok) return null;
     const body = (await response.json()) as ZooResponse;
-    return Array.isArray(body.creatures) ? body.creatures : [];
+    if (typeof body.child_id !== 'string' || !body.child_id) return null;
+    return {
+      childId: body.child_id,
+      creatures: Array.isArray(body.creatures) ? body.creatures : [],
+    };
   } catch {
     return null;
   } finally {

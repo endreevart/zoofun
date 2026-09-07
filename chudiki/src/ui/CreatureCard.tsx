@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { kindById, type ChudikSpec } from '../game/creatures/ChudikSpec';
+import { isParkResidentId } from '../game/creatures/residents';
 import { VoiceRecorder } from '../game/audio/VoiceRecorder';
 import { ParentGate } from './ParentGate';
 
@@ -142,10 +143,12 @@ export function CreatureCard({
             <span>Вести от третьего лица</span>
           </button>
 
-          <button className="action danger" onClick={() => setShowGate(true)}>
-            <span className="icon">👋</span>
-            <span>Отпустить домой</span>
-          </button>
+          {isParkResidentId(spec.id) ? null : (
+            <button className="action danger" onClick={() => setShowGate(true)}>
+              <span className="icon">👋</span>
+              <span>Отпустить домой</span>
+            </button>
+          )}
         </div>
 
         {problem && (

@@ -3,6 +3,7 @@ import { EYE } from '../core/palette';
 import { bakePaintables, blobGeometry, createToyMaterial, Paintable } from '../core/geometry';
 import { mulberry32, range } from '../core/rng';
 import type { BodyShape, ChudikSpec } from './ChudikSpec';
+import type { HatchLook } from './hatch';
 
 /**
  * Turns a spec into a small puppet. Everything is procedural geometry: no
@@ -24,8 +25,8 @@ export type ChudikRig = {
   height: number;
   /** Horizontal footprint, used for tap targets and spacing. */
   radius: number;
-  /** Cracks on a waiting egg. Missing on hatched puppets. */
-  setHatchLook?(progress: number): void;
+  /** Cracks and the wait ring on a waiting egg. Missing on hatched puppets. */
+  setHatchLook?(look: HatchLook): void;
   dispose(): void;
 };
 

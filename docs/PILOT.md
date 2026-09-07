@@ -29,7 +29,7 @@ These remain in the approved product scope but are **not implemented in this ite
 
 Pilot fixtures are bundled read-only content (`StreamingAssets/VirtualZoo/Fixtures`). That folder is not the writable cache for later generated animals.
 
-The public website (`zoofun-web`) and the Chudiki playground are a separate slice from Unity iteration 01. Website commerce is D-016 and does not replace or advance the Unity review gate. The island may attach a Meshy GLB when `MESHY_API_KEY` is set (D-015); that does not change the Unity 2.5D contract.
+The public website (`zoofun-web`) and the Chudiki playground are a separate slice from Unity iteration 01. Website commerce is D-016 and does not replace or advance the Unity review gate. The island may attach a Tripo GLB when `TRIPO_API_KEY` is set, with Meshy 7 as spare (D-015); that does not change the Unity 2.5D contract.
 
 ## After `PASS`
 

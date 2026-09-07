@@ -365,7 +365,7 @@ def site(period: int = 30) -> dict:
             )
         ).scalars().all()
         auth_views = [row for row in views if _path_matches(_path_of(row.payload), ("/auth",))]
-        play_views = [row for row in views if _path_matches(_path_of(row.payload), ("/play",))]
+        play_views = [row for row in views if _path_matches(_path_of(row.payload), ("/play", "/island"))]
         registered = db.scalar(
             select(func.count()).select_from(ParentRow).where(ParentRow.created_at >= start)
         ) or 0

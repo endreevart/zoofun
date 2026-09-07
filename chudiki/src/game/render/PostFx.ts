@@ -82,6 +82,19 @@ const GradingShader = {
 
 export type PostFxQuality = 'high' | 'low';
 
+/** Dev-only A/B switch: ?msaa=0 turns target multisampling off. */
+function msaaSamples(): number {
+  try {
+    if (import.meta.env?.DEV) {
+      const value = new URLSearchParams(window.location.search).get('msaa');
+      if (value !== null) return Math.max(0, Number(value) || 0);
+    }
+  } catch {
+    /* SSR/tests */
+  }
+  return 4;
+}
+
 export class PostFx {
   readonly composer: EffectComposer;
   private gtao?: GTAOPass;
@@ -98,7 +111,20 @@ export class PostFx {
   ) {
     const size = renderer.getSize(new THREE.Vector2());
 
-    this.composer = new EffectComposer(renderer);
+    // The composer draws into an offscreen target, so the canvas's own MSAA
+    // never applies — the phone garden shipped with staircase edges. 4x MSAA
+    // on the target is resolved by the GPU (near-free on tile GPUs). Only the
+    // light tier gets it: the GTAO/bloom stack of the high tier corrupts the
+    // frame when its source target is multisampled, and that tier already
+    // smooths edges with its own post passes.
+    const pixelRatio = renderer.getPixelRatio();
+    const target = new THREE.WebGLRenderTarget(size.x * pixelRatio, size.y * pixelRatio, {
+      type: THREE.HalfFloatType,
+      samples: settings.tier === 'low' ? msaaSamples() : 0,
+    });
+    target.texture.name = 'EffectComposer.rt1';
+
+    this.composer = new EffectComposer(renderer, target);
     this.composer.addPass(new RenderPass(scene, camera));
 
     if (settings.gtao) {

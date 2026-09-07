@@ -15,8 +15,8 @@ A child makes an imaginary animal and sees that same idea become alive inside a 
 ## Primary journey
 
 1. The child draws a little in the app or photographs a paper drawing.
-2. The app confirms the drawing and opens a magical creation sequence.
-3. A portal, egg, or workshop remains visible while generation happens in the background.
+2. The app paints a still of the toy and shows it. After submit there is no cancel — only forward into the garden.
+3. An egg stays in the garden while the 3D mesh finishes in the background. While waiting, the child can assemble a jigsaw puzzle of the painted still (4 pieces, then 9).
 4. The finished creature appears in the zoo without a loading-screen break.
 5. It moves autonomously and reacts to food, water, washing, and sleep.
 6. Tapping it opens a fantastical card and optional narrated playback.
@@ -30,7 +30,7 @@ The generated result must preserve the child's silhouette, colors, unusual featu
 
 ### The world is authored; the residents are generated
 
-Artists build and optimize the zoo. AI produces constrained creature assets and text. Generating the entire world or full 3D creatures is outside this pilot.
+Artists build and optimize the zoo. AI produces constrained creature assets and text. Generating the entire world or full 3D creatures is outside this pilot. The web island also ships a few bundled park animals, so every garden is already inhabited before the first drawing. They do not spend a credit and cannot be deleted.
 
 ### Short, calm sessions
 
@@ -38,7 +38,7 @@ The product supports gentle return sessions rather than dark patterns. No streak
 
 ### Care is simple
 
-Pilot care contains only feeding, water, and washing. Each action must have immediate visual and audio feedback and must never imply that an animal suffers because the child was away.
+Pilot care contains only feeding, water, and washing. Each action must have immediate visual and audio feedback and must never imply that an animal suffers because the child was away. On the web island, washing and feeding for drawn creatures are playful 2D scenes (scrub the mud off; catch falling snacks with the bowl) with no fail state and no timers.
 
 ### Private by default
 

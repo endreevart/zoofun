@@ -89,23 +89,19 @@ def session() -> Iterator[Session]:
 
 
 def seed_packs(db: Session) -> None:
-    existing = {row.id: row for row in db.scalars(select(PackRow)).all()}
+    existing = set(db.scalars(select(PackRow.id)))
     for pack_id, animals, price, featured in DEFAULT_PACKS:
-        row = existing.get(pack_id)
-        if row is None:
-            db.add(
-                PackRow(
-                    id=pack_id,
-                    animals=animals,
-                    price_rub=price,
-                    list_price_rub=0,
-                    featured=featured,
-                )
+        if pack_id in existing:
+            continue
+        db.add(
+            PackRow(
+                id=pack_id,
+                animals=animals,
+                price_rub=price,
+                list_price_rub=0,
+                featured=featured,
             )
-        elif row.price_rub != price or row.animals != animals or row.featured != featured:
-            row.price_rub = price
-            row.animals = animals
-            row.featured = featured
+        )
 
 
 def apply_migrations() -> None:

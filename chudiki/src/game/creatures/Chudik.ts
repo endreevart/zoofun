@@ -4,7 +4,14 @@ import type { WalkableQuery } from '../world/World';
 import { buildChudik, type ChudikRig } from './ChudikBuilder';
 import { buildDrawingChudik } from './DrawingChudikBuilder';
 import type { ChudikSpec, DrawingData } from './ChudikSpec';
-import { crackAmount, hatchFromTap, hatchFromWait, warmEgg } from './hatch';
+import {
+  cracksFromHeat,
+  hatchFill,
+  hatchFromTap,
+  hatchFromWait,
+  type HatchLook,
+  warmEgg,
+} from './hatch';
 
 type Behaviour = 'idle' | 'walk' | 'react' | 'arriving';
 
@@ -64,7 +71,9 @@ export class Chudik {
   private moveScale = 1;
   private hatchHeat = 0;
   private hatchWait = 0;
+  private hatchAge = 0;
   private hatchKick = 0;
+  private hatchPainted = false;
   private hatchReady: DrawingData | null = null;
 
   constructor(spec: ChudikSpec, world: WalkableQuery, spawn: THREE.Vector3) {
@@ -88,7 +97,7 @@ export class Chudik {
 
     this.target.copy(this.rig.root.position);
     this.behaviourTimer = range(this.rng, 0.2, 2.5);
-    if (this.isHatching && spec.drawing && !spec.drawing.placeholder) {
+    if (this.isHatching && spec.drawing?.modelUrl) {
       this.hatchReady = spec.drawing;
     }
   }
@@ -211,19 +220,37 @@ export class Chudik {
     }
   }
 
+  private hatchLook(): HatchLook {
+    const ready = this.hatchReady !== null;
+    return {
+      cracks: cracksFromHeat(this.hatchHeat, ready),
+      fill: hatchFill(this.hatchAge, this.hatchPainted, ready),
+      spin: this.hatchAge,
+      ready,
+    };
+  }
+
   /** Child tapped the egg. Returns true when it should open now. */
   nudgeHatch(): boolean {
     if (!this.isHatching) return false;
     this.hatchHeat = warmEgg(this.hatchHeat);
     this.hatchKick = 1;
-    this.rig.setHatchLook?.(crackAmount(this.hatchHeat, this.hatchReady !== null));
+    this.rig.setHatchLook?.(this.hatchLook());
     return hatchFromTap(this.hatchHeat, this.hatchReady !== null);
+  }
+
+  /** OpenRouter painted; the egg is still waiting for the finished puppet. */
+  noteHatchPainted() {
+    if (!this.isHatching) return;
+    this.hatchPainted = true;
+    this.rig.setHatchLook?.(this.hatchLook());
   }
 
   /** The finished puppet is ready; the egg can open when tapped or after a beat. */
   prepareHatch(drawing: DrawingData) {
     this.hatchReady = drawing;
-    this.rig.setHatchLook?.(crackAmount(this.hatchHeat, true));
+    this.hatchPainted = true;
+    this.rig.setHatchLook?.(this.hatchLook());
   }
 
   takeHatch(): DrawingData | null {
@@ -261,6 +288,8 @@ export class Chudik {
   }
 
   private updateEgg(dt: number, elapsed: number) {
+    this.hatchAge += dt;
+    this.rig.setHatchLook?.(this.hatchLook());
     if (this.behaviour === 'arriving') {
       this.updateArrival(dt);
       return;
@@ -272,7 +301,6 @@ export class Chudik {
     this.rig.squash.rotation.z = sway + tap;
     this.rig.squash.scale.set(1 + this.hatchKick * 0.08, 1 - this.hatchKick * 0.06, 1 + this.hatchKick * 0.08);
     this.rig.bounce.position.y = Math.abs(tap) * 0.35;
-    this.rig.setHatchLook?.(crackAmount(this.hatchHeat, this.hatchReady !== null));
   }
 
   private updateArrival(dt: number) {

@@ -11,7 +11,7 @@ The parent landing lives in `zoofun-web`. The playable island lives in `chudiki`
 ## Decision
 
 - Parent email registration and login go to the FastAPI accounts module.
-- After a session is created, the site opens `/play`, which loads Chudiki.
+- After a session is created, the site checks the parent session on `/play` and sends the browser to `/island`.
 - `/zoo/demo` and `/join/demo` stay as the local Kenney demo.
 - Child legal names, voice, and other child PII are not collected.
 - OpenRouter stays backend-only.

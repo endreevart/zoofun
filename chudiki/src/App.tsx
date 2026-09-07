@@ -8,12 +8,20 @@ import {
   type ChudikSpec,
 } from './game/creatures/ChudikSpec';
 import { blankEggDrawing, imageToChudik, styledToChudik } from './game/drawing/imageToChudik';
-import { stylizeDrawing } from './game/drawing/stylizeDrawing';
+import { portraitFromImage, portraitUrlOf } from './game/drawing/portrait';
+import { stylizeDrawing, waitForMesh } from './game/drawing/stylizeDrawing';
+import { eggCanOpen } from './game/creatures/hatch';
+import { paperizeCanvas } from './game/drawing/paperize';
+import { preloadMeshyModel } from './game/creatures/DrawingChudikBuilder';
 import {
   deleteVoiceRecording,
   saveVoiceRecording,
 } from './game/persistence/zooStore';
 import { DrawPad } from './ui/DrawPad';
+import { HatchPreview } from './ui/HatchPreview';
+import { HatchPuzzle } from './ui/HatchPuzzle';
+import { CareRoom } from './ui/CareRoom';
+import { FeedFrenzy } from './ui/FeedFrenzy';
 import { CreatureCard } from './ui/CreatureCard';
 import { RosterSheet } from './ui/RosterSheet';
 import { TuningPanel } from './ui/TuningPanel';
@@ -23,12 +31,15 @@ import { WalkPad } from './ui/WalkPad';
 import { CareHud } from './ui/CareHud';
 import { HudIcon } from './ui/HudIcon';
 import { PilotChoice } from './ui/PilotChoice';
-import { bootstrapParentSession } from './parentSession';
-import { readQuota, type Quota } from './game/commerce';
+import { bootstrapParentSession, PAID_FLASH_KEY, siteHomeUrl } from './parentSession';
+import { applyRemaining, canStartCreation, readQuota, spendOneCredit, type Quota } from './game/commerce';
 import { PackSheet } from './ui/PackSheet';
+import { QuotaDock } from './ui/QuotaDock';
 import { isTvReceiver, TvReceiver } from './ui/TvReceiver';
 
-type Screen = 'zoo' | 'draw' | 'roster';
+type Screen = 'zoo' | 'draw' | 'roster' | 'preview';
+
+type HatchLook = { id: string; src: string | null; name: string };
 
 type FullscreenDocument = Document & {
   webkitFullscreenElement?: Element | null;
@@ -104,8 +115,26 @@ export function App() {
   const [loadProgress, setLoadProgress] = useState(0);
   const [cinema, setCinema] = useState(false);
   const [quota, setQuota] = useState<Quota | null>(null);
-  const [shopOpen, setShopOpen] = useState(false);
+  const [pendingBirth, setPendingBirth] = useState(false);
+  const pendingBirthRef = useRef(false);
+  const [hatchLook, setHatchLook] = useState<HatchLook | null>(null);
+  const hatchLookRef = useRef<HatchLook | null>(null);
+  const [puzzleOpen, setPuzzleOpen] = useState(false);
+  const [careSpec, setCareSpec] = useState<ChudikSpec | null>(null);
+  const [frenzySpec, setFrenzySpec] = useState<ChudikSpec | null>(null);
+  const [puzzleSpec, setPuzzleSpec] = useState<ChudikSpec | null>(null);
+  const [shopOpen, setShopOpen] = useState(() => {
+    try {
+      return import.meta.env.DEV && new URLSearchParams(window.location.search).has('shop');
+    } catch {
+      return false;
+    }
+  });
+  const previewEggs = import.meta.env.DEV
+    ? Number.parseInt(new URLSearchParams(window.location.search).get('eggs') ?? '', 10)
+    : Number.NaN;
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [parentEntry] = useState(() => bootstrapParentSession());
   const appRef = useRef<HTMLDivElement | null>(null);
 
   const refreshQuota = useCallback(async () => {
@@ -123,6 +152,7 @@ export function App() {
 
   useEffect(() => {
     if (screen !== 'zoo') setActionsOpen(false);
+    if (screen !== 'preview') setPuzzleOpen(false);
   }, [screen]);
 
   useEffect(() => {
@@ -143,6 +173,24 @@ export function App() {
     void game.start((fraction) => setLoadProgress(fraction)).then(() => {
       setReady(true);
       setRecordedIds(new Set(game.getRecordedIds()));
+      for (const pending of game.pendingHatches()) {
+        void waitForMesh(pending.jobId)
+          .then(async (mesh) => {
+            if (!eggCanOpen(mesh.mesh, mesh.modelUrl)) return;
+            if (mesh.modelUrl) await preloadMeshyModel(mesh.modelUrl);
+            const drawing = {
+              ...pending.drawing,
+              ...(mesh.modelUrl ? { modelUrl: mesh.modelUrl, placeholder: undefined } : {}),
+              ...(mesh.postcardUrl ? { postcardUrl: mesh.postcardUrl } : {}),
+            };
+            game.prepareHatch(pending.id, { drawing }, { open: true });
+          })
+          .catch(() => {
+            // The job is gone (API restart). Hatch what we have: the painted
+            // extrude. A shut egg forever is worse than a missing mesh.
+            game.prepareHatch(pending.id, { drawing: pending.drawing }, { open: true });
+          });
+      }
     });
 
     return () => {
@@ -233,6 +281,24 @@ export function App() {
     window.setTimeout(() => setToast((current) => (current === message ? null : current)), 3200);
   }, []);
 
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(PAID_FLASH_KEY) !== '1') return;
+    } catch {
+      return;
+    }
+    flash('Оплата прошла. Кредиты уже на аккаунте.');
+    void refreshQuota();
+    const timer = window.setTimeout(() => {
+      try {
+        sessionStorage.removeItem(PAID_FLASH_KEY);
+      } catch {
+        /* ignore */
+      }
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [flash, refreshQuota]);
+
   const toggleFullscreen = useCallback(() => {
     if (currentFullscreen()) {
       setCinema(false);
@@ -255,16 +321,31 @@ export function App() {
   }, []);
 
   const canCreate = useCallback(() => {
-    if (quota && quota.remaining <= 0) {
-      setShopOpen(true);
+    const signedIn = Boolean(bootstrapParentSession().token);
+    if (!signedIn && !import.meta.env.DEV) {
+      flash('Зайди с сайта — тогда чудик появится в объёме.');
+      return false;
+    }
+    const locked = pendingBirthRef.current || pendingBirth;
+    if (!canStartCreation({ remaining: quota?.remaining ?? null, pendingBirth: locked })) {
+      if (locked) {
+        flash('Подожди чуть-чуть — рисунок ещё отправляется.');
+        return false;
+      }
+      if (quota && quota.remaining <= 0) {
+        setShopOpen(true);
+        return false;
+      }
       return false;
     }
     return true;
-  }, [quota]);
+  }, [flash, pendingBirth, quota]);
   const processArtwork = useCallback(
-    async (source: HTMLCanvasElement | HTMLImageElement) => {
+    async (raw: HTMLCanvasElement | HTMLImageElement) => {
+      const source = raw instanceof HTMLCanvasElement ? paperizeCanvas(raw) : raw;
       if (!canCreate()) return;
       const game = gameRef.current;
+      if (!game) return;
       const seed = randomSeed();
       const spec = generateSpec({
         id: makeId(),
@@ -276,58 +357,155 @@ export function App() {
         drawing: blankEggDrawing(),
       });
 
-      setScreen('zoo');
       setBusy(null);
-      if (game) {
-        await game.addCreature(spec);
-        flash('Яйцо на поляне. Постучи — вылупится скорее!');
-      }
+      pendingBirthRef.current = true;
+      setPendingBirth(true);
+      setQuota((current) => spendOneCredit(current));
 
+      const showLook = (look: HatchLook | null) => {
+        hatchLookRef.current = look;
+        setHatchLook(look);
+      };
+      const watchingThis = () => hatchLookRef.current?.id === spec.id;
+      const enterGarden = () => {
+        showLook(null);
+        setScreen('zoo');
+        game.focusOn(spec.id);
+      };
+
+      showLook({ id: spec.id, src: null, name: spec.name });
+      setScreen('preview');
+
+      let accepted = false;
       try {
         const local = await imageToChudik(source);
         if (!local.ok) {
-          if (game) await game.removeCreature(spec.id);
+          showLook(null);
           setScreen('draw');
           flash(FAILURE_MESSAGES[local.reason] ?? 'Не получилось разобрать рисунок.');
           return;
         }
 
-        if (!game) return;
         let painted = local.drawing;
         const ready = async (
           styled: Extract<Awaited<ReturnType<typeof stylizeDrawing>>, { ok: true }>,
         ) => {
           const fromStyle = await styledToChudik(styled.image);
           if (fromStyle.ok) painted = fromStyle.drawing;
-          if (styled.modelUrl) painted = { ...painted, modelUrl: styled.modelUrl };
+          const portraitUrl = portraitFromImage(styled.image);
+          if (styled.modelUrl) {
+            await preloadMeshyModel(styled.modelUrl);
+            painted = { ...painted, modelUrl: styled.modelUrl };
+          }
+          if (portraitUrl) painted = { ...painted, portraitUrl };
+          if (styled.postcardUrl) painted = { ...painted, postcardUrl: styled.postcardUrl };
           const name = styled.name || spec.name;
           const kindId = styled.kindId || spec.kindId;
-          game.prepareHatch(spec.id, { drawing: painted, name, kindId });
+          game.prepareHatch(
+            spec.id,
+            { drawing: painted, name, kindId },
+            { open: eggCanOpen(styled.mesh, styled.modelUrl) },
+          );
         };
 
         const styled = await stylizeDrawing(source, {
-          onImage: () => {
-            flash('Греется. Постучи по яйцу!');
+          onAccepted: async ({ remaining, jobId }) => {
+            accepted = true;
+            spec.hatchJobId = jobId;
+            if (typeof remaining === 'number') {
+              setQuota((current) => applyRemaining(current, remaining));
+            } else {
+              void refreshQuota();
+            }
+            await game.addCreature(spec);
+          },
+          onImage: (paintedStill) => {
+            game.noteHatchPainted(spec.id);
+            showLook({
+              id: spec.id,
+              src: paintedStill.image.src,
+              name: paintedStill.name || spec.name,
+            });
           },
         });
         if (styled.ok) {
+          const left = styled.remaining;
+          if (typeof left === 'number') {
+            setQuota((current) => applyRemaining(current, left));
+          }
           await ready(styled);
-          flash('Почти! Постучи — или подожди чуть-чуть.');
+          if (styled.mesh === 'pending') {
+            void waitForMesh(styled.jobId)
+              .then(async (mesh) => {
+                if (!eggCanOpen(mesh.mesh, mesh.modelUrl)) return;
+                await ready({
+                  ...styled,
+                  modelUrl: mesh.modelUrl,
+                  mesh: mesh.mesh,
+                  postcardUrl: mesh.postcardUrl ?? styled.postcardUrl,
+                });
+              })
+              .catch(async () => {
+                // Polling died; open the egg with the painted extrude.
+                await ready({ ...styled, mesh: 'failed' });
+              });
+          }
+          if (!watchingThis()) {
+            flash(
+              styled.modelUrl
+                ? 'Почти! Постучи — или подожди чуть-чуть.'
+                : styled.mesh === 'failed'
+                  ? 'Картинка готова, объём не вышел. Постучи.'
+                  : 'Картинка готова. Объём долепится в саду.',
+            );
+          }
+        } else if (styled.reason === 'not_allowed') {
+          showLook(null);
+          setScreen('draw');
+          flash('Такой рисунок нельзя. Нарисуй зверушку.');
         } else if (styled.reason === 'no_credits') {
+          showLook(null);
+          setScreen('zoo');
           setShopOpen(true);
           flash('Нужен пакет — бесплатный зверь уже создан.');
-          game.prepareHatch(spec.id, { drawing: local.drawing });
-        } else if (styled.reason !== 'unavailable') {
-          game.prepareHatch(spec.id, { drawing: local.drawing });
+        } else if (accepted && styled.reason === 'timeout') {
+          if (!hatchLookRef.current?.src) enterGarden();
+          flash('Ещё лепится. Подожди у яйца.');
+        } else if (accepted) {
+          await game.removeCreature(spec.id);
+          showLook(null);
+          setScreen('draw');
+          flash('Не получилось. Попытка вернулась.');
+        } else if (!bootstrapParentSession().token && import.meta.env.DEV) {
+          await game.addCreature(spec);
+          game.prepareHatch(spec.id, { drawing: local.drawing }, { open: true });
+          showLook(null);
+          setScreen('zoo');
           flash('Постучи по яйцу — там твой рисунок.');
+        } else if (!bootstrapParentSession().token || styled.reason === 'not_signed_in') {
+          showLook(null);
+          setScreen('zoo');
+          flash('Зайди с сайта — тогда чудик появится в объёме.');
+        } else if (styled.reason === 'unavailable') {
+          showLook(null);
+          setScreen('draw');
+          flash('Сейчас нельзя создать чудика. Попробуй позже.');
         } else {
-          game.prepareHatch(spec.id, { drawing: local.drawing });
+          showLook(null);
+          setScreen('draw');
+          flash('Не получилось обработать рисунок.');
         }
       } catch (error) {
         console.error('[drawing] processing failed', error);
+        if (accepted) {
+          await game.removeCreature(spec.id);
+        }
+        showLook(null);
         flash('Что-то пошло не так с рисунком.');
         setScreen('zoo');
       } finally {
+        pendingBirthRef.current = false;
+        setPendingBirth(false);
         setBusy(null);
         void refreshQuota();
       }
@@ -397,6 +575,11 @@ export function App() {
   return (
     <div className="app" ref={appRef}>
       <div className="stage" ref={stageRef} />
+      {parentEntry.fromSite && screen !== 'draw' && screen !== 'preview' ? (
+        <a className="site-back" href={siteHomeUrl()}>
+          На сайт
+        </a>
+      ) : null}
 
       {screen === 'zoo' && ready && (
         <>
@@ -413,6 +596,30 @@ export function App() {
             <PilotChoice
               spec={offerSpec}
               onPilot={() => startPilot(offerSpec.id)}
+              onWash={
+                portraitUrlOf(offerSpec.drawing)
+                  ? () => {
+                      setCareSpec(offerSpec);
+                      setOfferSpec(null);
+                    }
+                  : null
+              }
+              onFeedGame={
+                portraitUrlOf(offerSpec.drawing)
+                  ? () => {
+                      setFrenzySpec(offerSpec);
+                      setOfferSpec(null);
+                    }
+                  : null
+              }
+              onPuzzle={
+                portraitUrlOf(offerSpec.drawing)
+                  ? () => {
+                      setPuzzleSpec(offerSpec);
+                      setOfferSpec(null);
+                    }
+                  : null
+              }
               onDismiss={() => setOfferSpec(null)}
             />
           )}
@@ -424,6 +631,12 @@ export function App() {
             </button>
           )}
 
+          {quota ? (
+            <QuotaDock remaining={quota.remaining} onTopUp={() => setShopOpen(true)} />
+          ) : Number.isFinite(previewEggs) ? (
+            <QuotaDock remaining={previewEggs} onTopUp={() => setShopOpen(true)} />
+          ) : null}
+
           <div className={`toolbar-dock${actionsOpen ? ' is-open' : ''}`}>
             <button
               className="toolbar-scrim"
@@ -432,19 +645,28 @@ export function App() {
               onClick={() => setActionsOpen(false)}
             />
             <div className="toolbar">
-              <div className="toolbar-side toolbar-side-left">
-                <button
-                  className="big-button ghost"
-                  onClick={() => {
-                    setActionsOpen(false);
-                    stopPilot();
-                    gameRef.current?.showWholeZoo();
-                  }}
-                >
-                  <HudIcon name="zoo" />
-                  <span>Весь зоопарк</span>
-                </button>
-              </div>
+              <button
+                className="big-button ghost"
+                onClick={() => {
+                  setActionsOpen(false);
+                  stopPilot();
+                  gameRef.current?.showWholeZoo();
+                }}
+              >
+                <HudIcon name="zoo" />
+                <span>Весь зоопарк</span>
+              </button>
+
+              <button
+                className="big-button ghost"
+                onClick={() => {
+                  setActionsOpen(false);
+                  setScreen('roster');
+                }}
+              >
+                <HudIcon name="roster" />
+                <span>Мои чудики</span>
+              </button>
 
               <button
                 className="big-button primary"
@@ -458,7 +680,18 @@ export function App() {
                 <span>Нарисовать</span>
               </button>
 
-              <div className="toolbar-side toolbar-side-right">
+              <button
+                className="big-button"
+                onClick={() => {
+                  setActionsOpen(false);
+                  if (!canCreate()) return;
+                  fileInputRef.current?.click();
+                }}
+              >
+                <HudIcon name="photo" />
+                <span>Фото рисунка</span>
+              </button>
+
               <CareHud
                 joy={joy}
                 feeding={feeding}
@@ -475,45 +708,6 @@ export function App() {
                   }
                 }}
               />
-
-              <button
-                className="big-button"
-                onClick={() => {
-                  setActionsOpen(false);
-                  if (!canCreate()) return;
-                  fileInputRef.current?.click();
-                }}
-              >
-                <HudIcon name="photo" />
-                <span>Фото рисунка</span>
-              </button>
-
-              <button
-                className="big-button ghost"
-                onClick={() => {
-                  setActionsOpen(false);
-                  setScreen('roster');
-                }}
-              >
-                <HudIcon name="roster" />
-                <span>Мои чудики</span>
-              </button>
-
-              {quota ? (
-                <button
-                  className="big-button quota-chip"
-                  type="button"
-                  onClick={() => {
-                    setActionsOpen(false);
-                    setShopOpen(true);
-                  }}
-                  aria-label={`Можно создать ещё ${quota.remaining}`}
-                >
-                  <span className="icon">✦</span>
-                  <span>Ещё {quota.remaining}</span>
-                </button>
-              ) : null}
-              </div>
             </div>
             <button
               className="toolbar-fab"
@@ -539,6 +733,75 @@ export function App() {
         />
       )}
 
+      {screen === 'preview' && hatchLook ? (
+        puzzleOpen && hatchLook.src ? (
+          <HatchPuzzle
+            src={hatchLook.src}
+            name={hatchLook.name}
+            onBack={() => setPuzzleOpen(false)}
+            onForward={() => {
+              const id = hatchLook.id;
+              hatchLookRef.current = null;
+              setHatchLook(null);
+              setPuzzleOpen(false);
+              setScreen('zoo');
+              gameRef.current?.focusOn(id);
+            }}
+          />
+        ) : (
+          <HatchPreview
+            src={hatchLook.src}
+            name={hatchLook.name}
+            onPuzzle={hatchLook.src ? () => setPuzzleOpen(true) : undefined}
+            onForward={() => {
+              const id = hatchLook.id;
+              hatchLookRef.current = null;
+              setHatchLook(null);
+              setScreen('zoo');
+              gameRef.current?.focusOn(id);
+            }}
+          />
+        )
+      ) : null}
+
+      {careSpec ? (
+        <CareRoom
+          spec={careSpec}
+          src={portraitUrlOf(careSpec.drawing) ?? ''}
+          onFeed={() => {
+            setFrenzySpec(careSpec);
+            setCareSpec(null);
+          }}
+          onClose={(washed) => {
+            setCareSpec(null);
+            if (washed) gameRef.current?.celebrate(careSpec.id);
+          }}
+        />
+      ) : null}
+
+      {frenzySpec ? (
+        <FeedFrenzy
+          spec={frenzySpec}
+          src={portraitUrlOf(frenzySpec.drawing) ?? ''}
+          onClose={(fed) => {
+            setFrenzySpec(null);
+            if (fed) gameRef.current?.celebrate(frenzySpec.id);
+          }}
+        />
+      ) : null}
+
+      {puzzleSpec && portraitUrlOf(puzzleSpec.drawing) ? (
+        <HatchPuzzle
+          src={portraitUrlOf(puzzleSpec.drawing)!}
+          name={puzzleSpec.name}
+          onBack={() => setPuzzleSpec(null)}
+          onForward={() => {
+            setPuzzleSpec(null);
+            gameRef.current?.celebrate(puzzleSpec.id);
+          }}
+        />
+      ) : null}
+
       {screen === 'roster' && (
         <RosterSheet
           specs={specs}
@@ -553,7 +816,11 @@ export function App() {
       )}
 
       {shopOpen ? (
-        <PackSheet remaining={quota?.remaining ?? 0} onClose={() => setShopOpen(false)} />
+        <PackSheet
+          remaining={quota?.remaining ?? (Number.isFinite(previewEggs) ? previewEggs : 0)}
+          onClose={() => setShopOpen(false)}
+          onError={flash}
+        />
       ) : null}
 
       {cardSpec && (
@@ -590,7 +857,7 @@ export function App() {
         </div>
       )}
 
-      {toast ? <div className="toast">{toast}</div> : null}
+      {toast ? <div className="toast" role="status">{toast}</div> : null}
 
       <div className="admin-dock">
         {screen === 'zoo' && ready && (

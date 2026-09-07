@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { HERO_CAMERA, HERO_FOCUS } from '../world/layout';
+import { IDLE_AFTER } from './cameraIdle';
 
 /**
  * Camera controller tuned for small hands: orbit with one finger, pinch to get
@@ -15,8 +16,6 @@ const LIMITS = {
   panRadius: 24,
 };
 
-/** Seconds of no touch before the camera starts a slow lap of the island. */
-const IDLE_AFTER = 9;
 /** How long the camera lingers between two garden spots. */
 const TOUR_SEGMENT = 8.2;
 
@@ -86,6 +85,7 @@ export class CameraRig {
   private idleTimer = 0;
   private touring = false;
   private tourTime = 0;
+  private holdIdle = false;
 
   private flight: {
     fromTarget: THREE.Vector3;
@@ -128,6 +128,15 @@ export class CameraRig {
     this.touring = false;
     this.autoSpin = 0;
   };
+
+  /** Keep the camera still while an egg is being made. */
+  setHoldIdle(hold: boolean) {
+    this.holdIdle = hold;
+    if (hold) {
+      this.idleTimer = 0;
+      this.touring = false;
+    }
+  }
 
   /** When false, one-finger drag is left to the layout editor. Pinch still pans. */
   setPrimaryOrbit(enabled: boolean) {
@@ -379,6 +388,7 @@ export class CameraRig {
 
   private updateIdleTour(dt: number) {
     const busy =
+      this.holdIdle ||
       !this.primaryOrbit ||
       this.pointers.size > 0 ||
       this.walkForward !== 0 ||

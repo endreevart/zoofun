@@ -91,7 +91,7 @@ class AccountStore:
             db.execute(delete(ChildRow))
             db.execute(delete(ParentRow))
 
-    def register(self, email: str, password: str) -> Session:
+    def register(self, email: str, password: str, *, marketing_consent: bool = False) -> Session:
         key = email.strip().lower()
         if len(password) < 6:
             raise ValueError("password_short")
@@ -106,6 +106,7 @@ class AccountStore:
                         password_hash=hash_password(password),
                         quota_total=1,
                         generation_used=0,
+                        marketing_consent_at=time.time() if marketing_consent else None,
                     )
                     child = ChildRow(
                         id=secrets.token_hex(8),
@@ -126,7 +127,7 @@ class AccountStore:
                 "parent registered",
                 parent_id=opened.parent_id,
                 child_id=opened.child_id,
-                payload={"email": key},
+                payload={"email": key, "marketing_consent": marketing_consent},
             )
             return opened
         return self.login(email, password)

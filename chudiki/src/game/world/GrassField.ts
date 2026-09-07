@@ -53,17 +53,14 @@ export class GrassField {
 
   private clear() {
     if (this.blades) {
-      let geometry: THREE.BufferGeometry | null = null;
-      let material: THREE.Material | null = null;
+      const junk: Array<THREE.BufferGeometry | THREE.Material> = [];
       this.blades.traverse((object) => {
         const mesh = object as THREE.InstancedMesh;
         if (!mesh.isInstancedMesh) return;
-        geometry = mesh.geometry;
-        material = mesh.material as THREE.Material;
+        junk.push(mesh.geometry, mesh.material as THREE.Material);
       });
       this.blades.removeFromParent();
-      geometry?.dispose();
-      material?.dispose();
+      for (const item of junk) item.dispose();
       this.blades = null;
     }
     if (this.painted) {
