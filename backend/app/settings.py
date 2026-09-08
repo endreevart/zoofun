@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     meshy_api_key: str = Field(default="", repr=False)
     meshy_http_proxy: str = Field(default="", repr=False)
     tripo_api_key: str = Field(default="", repr=False)
+    # Empty: reuse OPENROUTER_HTTP_PROXY. The RU API host cannot keep a
+    # stable TCP write to Tripo in AWS Oregon; the EU proxy can.
+    tripo_http_proxy: str = Field(default="", repr=False)
     studio3d_api_key: str = Field(default="", repr=False)
     fal_api_key: str = Field(default="", repr=False)
     # Which 3D provider to use: tripo | meshy | studio3d | fal

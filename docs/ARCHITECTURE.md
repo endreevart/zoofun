@@ -52,7 +52,7 @@ The bridge exposes a narrow C-compatible boundary to C#. Domain rules do not liv
 - The Kenney fixture garden (`/zoo/demo`) as the iteration-00 local demo.
 - `/admin` redirects to SQLAdmin at `/staff`. Visual metrics live at `crm.zooo.fun` (D-018).
 
-The website never calls OpenRouter. Child legal names, voice, and other child PII are not collected. The Chudiki island stores the family zoo on the API for the signed-in child; voice recordings stay on the device. Parents, children, creatures, packs, and payments live in PostgreSQL. SQLAdmin at `/staff` is the write console. CRM at `crm.zooo.fun` reads the same database. When the API host cannot reach OpenRouter directly, the backend uses `OPENROUTER_HTTP_PROXY`.
+The website never calls OpenRouter. Child legal names, voice, and other child PII are not collected. The Chudiki island stores the family zoo on the API for the signed-in child; voice recordings stay on the device. Parents, children, creatures, packs, and payments live in PostgreSQL. SQLAdmin at `/staff` is the write console. CRM at `crm.zooo.fun` reads the same database. When the API host cannot reach OpenRouter or Tripo directly, the backend uses `OPENROUTER_HTTP_PROXY` (Tripo can override with `TRIPO_HTTP_PROXY`). Meshy stays on a direct path unless `MESHY_HTTP_PROXY` is set.
 
 Cookie consent on the marketing site enables first-party `source=site` events. Child paths `/play`, `/zoo`, and `/island` do not load the site tracker.
 

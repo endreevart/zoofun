@@ -29,6 +29,15 @@ class TripoError(Exception):
     pass
 
 
+def tripo_proxy(settings: Settings) -> str | None:
+    """EU/US proxy. Own URL if set, otherwise the OpenRouter proxy."""
+    own = settings.tripo_http_proxy.strip()
+    if own:
+        return own
+    shared = settings.openrouter_http_proxy.strip()
+    return shared or None
+
+
 def _auth(settings: Settings) -> dict[str, str]:
     return {"Authorization": f"Bearer {settings.tripo_api_key.strip()}"}
 
@@ -77,27 +86,33 @@ async def image_to_glb(
 
     model = str((overrides or {}).get("model") or DEFAULT_MODEL)
     headers = _headers(settings)
-    timeout = httpx.Timeout(30.0, read=90.0)
+    # Write used to inherit the 30s default and kill the PNG upload to Oregon
+    # on a stalled TCP window. The EU proxy is the path; 90s is the backstop.
+    timeout = httpx.Timeout(connect=30.0, write=90.0, read=90.0, pool=30.0)
     started = time.monotonic()
+    proxy = tripo_proxy(settings)
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        file_token = await _upload_file(client, settings, image_bytes, media_type)
-        payload: dict = {
-            "input": file_token,
-            "model": model,
-            "texture": True,
-            "pbr": False,
-            "texture_quality": "standard",
-            "texture_alignment": "original_image",
-            "face_limit": TARGET_FACES,
-            "enable_image_autofix": True,
-        }
-        if not model.startswith("v2.5"):
-            payload["geometry_quality"] = "standard"
+    async with httpx.AsyncClient(timeout=timeout, proxy=proxy) as client:
+        try:
+            file_token = await _upload_file(client, settings, image_bytes, media_type)
+            payload: dict = {
+                "input": file_token,
+                "model": model,
+                "texture": True,
+                "pbr": False,
+                "texture_quality": "standard",
+                "texture_alignment": "original_image",
+                "face_limit": TARGET_FACES,
+                "enable_image_autofix": True,
+            }
+            if not model.startswith("v2.5"):
+                payload["geometry_quality"] = "standard"
 
-        resp = await client.post(
-            f"{API_BASE}/generation/image-to-model", headers=headers, json=payload
-        )
+            resp = await client.post(
+                f"{API_BASE}/generation/image-to-model", headers=headers, json=payload
+            )
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            raise TripoError(f"network: {type(exc).__name__}") from exc
         if resp.status_code >= 400:
             raise TripoError(f"create failed status={resp.status_code}: {resp.text[:300]}")
         body = resp.json()
@@ -105,7 +120,13 @@ async def image_to_glb(
         if not task_id:
             raise TripoError(f"no task_id in response: {body}")
         create_s = round(time.monotonic() - started, 2)
-        logger.info("tripo task created id=%s model=%s create_s=%.1f", task_id, model, create_s)
+        logger.info(
+            "tripo task created id=%s model=%s create_s=%.1f proxy=%s",
+            task_id,
+            model,
+            create_s,
+            bool(proxy),
+        )
 
         queue_s: float | None = None
         elapsed = 0.0
@@ -129,7 +150,10 @@ async def image_to_glb(
                 if not model_url:
                     raise TripoError("success but no model_url")
                 down_at = time.monotonic()
-                glb_resp = await client.get(model_url)
+                try:
+                    glb_resp = await client.get(model_url)
+                except (httpx.TimeoutException, httpx.TransportError) as exc:
+                    raise TripoError(f"glb download network: {type(exc).__name__}") from exc
                 if glb_resp.status_code >= 400 or len(glb_resp.content) < 200:
                     raise TripoError(f"glb download failed status={glb_resp.status_code}")
                 download_s = round(time.monotonic() - down_at, 2)

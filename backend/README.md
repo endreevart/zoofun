@@ -30,7 +30,7 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 `POST /v1/generation/stylize` accepts a PNG/JPEG. The key never goes to the browser. If the key is missing the route returns 503 and the zoo keeps the child's original drawing.
 
-If the API host cannot reach OpenRouter (typical for a server in RU), set `OPENROUTER_HTTP_PROXY` to an EU/US HTTP proxy. The adapter sends provider traffic through that proxy; the Unity and website clients never see it.
+If the API host cannot reach OpenRouter or Tripo (typical for a server in RU), set `OPENROUTER_HTTP_PROXY` to an EU/US HTTP proxy. OpenRouter and Tripo send provider traffic through that proxy; Meshy stays direct unless `MESHY_HTTP_PROXY` is set. The Unity and website clients never see it.
 
 Parent email login for the public website:
 

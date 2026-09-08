@@ -63,6 +63,7 @@ async def test_tripo_image_to_glb(monkeypatch):
 
     def patched_init(self, **kwargs):
         kwargs.pop("timeout", None)
+        kwargs.pop("proxy", None)
         original_init(self, transport=transport, **kwargs)
 
     monkeypatch.setattr(httpx.AsyncClient, "__init__", patched_init)
@@ -93,6 +94,7 @@ async def test_tripo_defaults_to_30(monkeypatch):
 
     def patched_init(self, **kwargs):
         kwargs.pop("timeout", None)
+        kwargs.pop("proxy", None)
         original_init(self, transport=transport, **kwargs)
 
     monkeypatch.setattr(httpx.AsyncClient, "__init__", patched_init)
@@ -111,6 +113,60 @@ async def test_tripo_unconfigured():
 
     with pytest.raises(TripoError, match="unconfigured"):
         await image_to_glb(Settings(tripo_api_key=""), TINY_PNG, "image/png")
+
+
+def test_tripo_proxy_reuses_openrouter_unless_own_set() -> None:
+    from app.providers.tripo import tripo_proxy
+
+    assert tripo_proxy(Settings(openrouter_http_proxy="", tripo_http_proxy="")) is None
+    assert (
+        tripo_proxy(Settings(openrouter_http_proxy="http://proxy.example:3128"))
+        == "http://proxy.example:3128"
+    )
+    assert (
+        tripo_proxy(
+            Settings(
+                tripo_http_proxy="http://tripo-proxy:3128",
+                openrouter_http_proxy="http://proxy.example:3128",
+            )
+        )
+        == "http://tripo-proxy:3128"
+    )
+
+
+@pytest.mark.anyio
+async def test_tripo_client_uses_openrouter_proxy(monkeypatch):
+    from app.providers import tripo
+
+    transport = TripoTransport()
+    seen: dict = {}
+    original_init = httpx.AsyncClient.__init__
+
+    def patched_init(self, **kwargs):
+        seen["proxy"] = kwargs.get("proxy")
+        kwargs.pop("timeout", None)
+        kwargs.pop("proxy", None)
+        original_init(self, transport=transport, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", patched_init)
+    settings = Settings(
+        tripo_api_key="tripo-key",
+        openrouter_http_proxy="http://proxy.example:3128",
+    )
+    await tripo.image_to_glb(settings, TINY_PNG, "image/png")
+    assert seen["proxy"] == "http://proxy.example:3128"
+
+
+@pytest.mark.anyio
+async def test_tripo_write_timeout_is_tripo_error(monkeypatch):
+    from app.providers.tripo import TripoError, image_to_glb
+
+    async def boom(*_args, **_kwargs):
+        raise httpx.WriteTimeout("timed out")
+
+    monkeypatch.setattr("app.providers.tripo._upload_file", boom)
+    with pytest.raises(TripoError, match="network: WriteTimeout"):
+        await image_to_glb(Settings(tripo_api_key="tripo-key"), TINY_PNG, "image/png")
 
 
 # --------------- Studio3D ---------------
