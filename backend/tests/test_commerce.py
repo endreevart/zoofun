@@ -192,6 +192,142 @@ async def test_tbank_notification_credits_once(monkeypatch: pytest.MonkeyPatch) 
     assert fresh.remaining == 6
 
 
+def _unsettled_payment(email: str = "parent@example.com") -> tuple[str, str]:
+    """A parent with a pack that reached T-Bank but was never credited."""
+    session = store.register(email, "secret1")
+    parent, _child = store.session(session.token) or (None, None)
+    assert parent is not None
+    commerce.set_price("pack_5", 490)
+    pack = commerce.get_pack("pack_5")
+    assert pack is not None
+    payment = commerce.create_payment(parent.id, pack)
+    commerce.attach_tbank(payment.id, "77", "https://pay.example/x")
+    return session.token, payment.id
+
+
+def _state(monkeypatch: pytest.MonkeyPatch, status: str, calls: list[str]) -> None:
+    settings = Settings(tbank_terminal_key="term", tbank_password="secret")
+    monkeypatch.setattr("app.commerce.settlement.get_settings", lambda: settings)
+
+    async def answer(_settings, *, tbank_payment_id: str) -> dict:
+        calls.append(tbank_payment_id)
+        return {"Success": True, "Status": status, "PaymentId": tbank_payment_id}
+
+    monkeypatch.setattr("app.commerce.settlement.tbank.get_state", answer)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_credits_a_lost_notification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The money left the card; a missing webhook must not cost the credits."""
+    token, _payment_id = _unsettled_payment()
+    calls: list[str] = []
+    _state(monkeypatch, "CONFIRMED", calls)
+
+    headers = {"Authorization": f"Bearer {token}"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post("/v1/commerce/reconcile", headers=headers)
+        second = await client.post("/v1/commerce/reconcile", headers=headers)
+
+    assert first.status_code == 200
+    assert first.json() == {"credited": 5, "pending": 0, "remaining": 6}
+    # Nothing is left unsettled, so the repeat neither asks nor credits again.
+    assert second.json() == {"credited": 0, "pending": 0, "remaining": 6}
+    assert calls == ["77"]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_keeps_waiting_while_the_bank_says_new(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token, _payment_id = _unsettled_payment()
+    calls: list[str] = []
+    _state(monkeypatch, "NEW", calls)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        answer = await client.post(
+            "/v1/commerce/reconcile",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert answer.json() == {"credited": 0, "pending": 1, "remaining": 1}
+
+
+@pytest.mark.asyncio
+async def test_reconcile_marks_a_rejected_payment_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token, payment_id = _unsettled_payment()
+    calls: list[str] = []
+    _state(monkeypatch, "REJECTED", calls)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        answer = await client.post(
+            "/v1/commerce/reconcile",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert answer.json() == {"credited": 0, "pending": 0, "remaining": 1}
+    settled = commerce.find_by_order(payment_id)
+    assert settled is not None
+    assert settled.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_sweep_credits_a_parent_who_never_came_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.commerce.settlement import reconcile_pending
+
+    token, _payment_id = _unsettled_payment()
+    calls: list[str] = []
+    _state(monkeypatch, "CONFIRMED", calls)
+
+    assert await reconcile_pending(older_than_s=0.0) == 1
+    assert await reconcile_pending(older_than_s=0.0) == 0
+    parent, _child = store.session(token) or (None, None)
+    assert parent is not None
+    assert parent.remaining == 6
+
+
+@pytest.mark.asyncio
+async def test_double_tap_checkout_reuses_the_same_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two taps on "buy" are one purchase, not two payable orders."""
+    monkeypatch.setattr(
+        "app.api.commerce.get_settings",
+        lambda: Settings(tbank_terminal_key="term", tbank_password="secret"),
+    )
+    orders: list[str] = []
+
+    async def fake_init(_settings, **kwargs) -> dict:
+        orders.append(kwargs["order_id"])
+        return {
+            "Success": True,
+            "Status": "NEW",
+            "PaymentId": "77",
+            "PaymentURL": "https://pay.example/x",
+        }
+
+    monkeypatch.setattr("app.api.commerce.tbank.init_payment", fake_init)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post(
+            "/v1/auth/register",
+            json={"email": "parent@example.com", "password": "secret1"},
+        )
+        headers = {"Authorization": f"Bearer {created.json()['token']}"}
+        buy = {"pack_id": "pack_5"}
+        first = await client.post("/v1/commerce/checkout", json=buy, headers=headers)
+        second = await client.post("/v1/commerce/checkout", json=buy, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == second.json()
+    assert len(orders) == 1
+    assert len(commerce.list_payments()) == 1
+
+
 @pytest.mark.asyncio
 async def test_operator_sets_price_and_grants_credits(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(operator_login="admin", operator_password="garden-secret")

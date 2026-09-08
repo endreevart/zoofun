@@ -32,7 +32,14 @@ import { CareHud } from './ui/CareHud';
 import { HudIcon } from './ui/HudIcon';
 import { PilotChoice } from './ui/PilotChoice';
 import { bootstrapParentSession, PAID_FLASH_KEY, siteHomeUrl } from './parentSession';
-import { applyRemaining, canStartCreation, readQuota, spendOneCredit, type Quota } from './game/commerce';
+import {
+  applyRemaining,
+  canStartCreation,
+  readQuota,
+  reconcilePayments,
+  spendOneCredit,
+  type Quota,
+} from './game/commerce';
 import { PackSheet } from './ui/PackSheet';
 import { QuotaDock } from './ui/QuotaDock';
 import { isTvReceiver, TvReceiver } from './ui/TvReceiver';
@@ -40,6 +47,10 @@ import { isTvReceiver, TvReceiver } from './ui/TvReceiver';
 type Screen = 'zoo' | 'draw' | 'roster' | 'preview';
 
 type HatchLook = { id: string; src: string | null; name: string };
+
+/** How long to keep asking the bank after the parent returns from checkout. */
+const PAID_CHECK_TRIES = 8;
+const PAID_CHECK_DELAY_MS = 3000;
 
 type FullscreenDocument = Document & {
   webkitFullscreenElement?: Element | null;
@@ -287,16 +298,51 @@ export function App() {
     } catch {
       return;
     }
-    flash('Оплата прошла. Кредиты уже на аккаунте.');
-    void refreshQuota();
-    const timer = window.setTimeout(() => {
+    const forget = () => {
       try {
         sessionStorage.removeItem(PAID_FLASH_KEY);
       } catch {
         /* ignore */
       }
-    }, 4000);
-    return () => window.clearTimeout(timer);
+    };
+    if (!bootstrapParentSession().token) {
+      forget();
+      return;
+    }
+    let cancelled = false;
+
+    // The bank's notification can be late or lost, so never promise credits
+    // that are not there yet. Ask, wait, and say what is actually true.
+    void (async () => {
+      flash('Проверяем оплату…');
+      for (let attempt = 0; attempt < PAID_CHECK_TRIES && !cancelled; attempt++) {
+        const settled = await reconcilePayments();
+        if (cancelled) return;
+        if (settled) {
+          setQuota((current) => applyRemaining(current, settled.remaining));
+          if (settled.credited > 0) {
+            flash(`Оплата прошла. Новые яйца в саду: ${settled.credited}.`);
+            forget();
+            return;
+          }
+          if (settled.pending === 0) {
+            // Nothing left to wait for: the notification already landed.
+            flash('Оплата прошла. Кредиты на аккаунте.');
+            forget();
+            return;
+          }
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, PAID_CHECK_DELAY_MS));
+      }
+      if (cancelled) return;
+      await refreshQuota();
+      flash('Платёж ещё проверяется. Яйца появятся сами — загляни через минуту.');
+      forget();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [flash, refreshQuota]);
 
   const toggleFullscreen = useCallback(() => {

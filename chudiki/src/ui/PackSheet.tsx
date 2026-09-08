@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchPacks, formatRub, startCheckout, type Pack } from '../game/commerce';
 import { siteHomeUrl } from '../parentSession';
 import { CreditEggs } from './CreditEggs';
@@ -27,6 +27,8 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
   const [packs, setPacks] = useState<Pack[]>(CATALOG_PREVIEW);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, setPending] = useState<Pack | null>(null);
+  // A second tap on the confirm button must not open a second order.
+  const paying = useRef(false);
 
   useEffect(() => {
     void fetchPacks().then((next) => {
@@ -35,12 +37,15 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
   }, []);
 
   const pay = async (pack: Pack) => {
+    if (paying.current) return;
+    paying.current = true;
     setBusy(pack.id);
     const result = await startCheckout(pack.id);
     if (result.ok) {
       window.location.href = result.url;
       return;
     }
+    paying.current = false;
     setBusy(null);
     setPending(null);
     if (result.reason === 'not_signed_in') {

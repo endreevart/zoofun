@@ -27,7 +27,27 @@ celery_app.conf.update(
     # (default is a whole hour). Ten minutes caps how long a crashed worker's
     # job can wait; the startup sweep below usually reclaims it much sooner.
     broker_transport_options={"visibility_timeout": 600},
+    # A lost T-Bank notification must not cost a parent their credits, so the
+    # unsettled payments are re-checked against GetState on a schedule.
+    beat_schedule={
+        "reconcile-pending-payments": {
+            "task": "commerce.reconcile_pending",
+            "schedule": 180.0,
+        }
+    },
 )
+
+
+@celery_app.task(name="commerce.reconcile_pending")
+def reconcile_pending_payments() -> int:
+    """Credit payments T-Bank confirmed but never told us about."""
+    from app.commerce.settlement import reconcile_pending
+
+    try:
+        return asyncio.run(reconcile_pending())
+    except Exception:  # noqa: BLE001 — a failed sweep retries on schedule
+        logger.exception("payment reconciliation sweep failed")
+        return 0
 
 
 @celery_app.task(name="generation.run_stylize_job", bind=True, max_retries=3)

@@ -24,6 +24,9 @@ Accounts, zoos, packs, and payments now live in PostgreSQL. SQLAdmin at `/staff`
 7. No StoreKit, subscriptions, App Store IAP, or child-facing payment forms.
 8. T-Bank keys live only in server `.env`.
 9. Operator admin is SQLAdmin at `/staff`, signed in with `OPERATOR_LOGIN` / `OPERATOR_PASSWORD`. The site `/admin` redirects there. `/v1/operator` stays for scripts. Do not add Forest/Directus/Retool. A CRM for charts may follow later.
+10. The T-Bank notification is a fast path, not the authority. `GetState` decides whether a payment was paid: once when the parent returns from checkout (`POST /v1/commerce/reconcile`) and on a schedule for parents who never came back. A lost notification must never cost a parent their credits.
+11. The island must not claim credits it has not seen. After checkout it reconciles and reports what the ledger actually says.
+12. Repeating checkout for the same parent and pack within a short window returns the existing payment link, so a double tap cannot create two payable orders.
 
 ## Consequences
 
@@ -32,6 +35,9 @@ Accounts, zoos, packs, and payments now live in PostgreSQL. SQLAdmin at `/staff`
 - Stylize reserves a credit when a signed-in parent starts a job; refunds on technical failure before the model runs; does not refund aesthetic dislike.
 - Existing parent zoos migrate: `quota_total = 1`, `generation_used =` current non-resident creature count. Test families may need operator-granted credits.
 - Cursor rules and product docs no longer forbid T-Bank commerce.
+- Credits are granted through one code path (`app/commerce/settlement.apply_state`) shared by the notification and the reconciliation, so the two can never diverge. Granting stays idempotent through the locked `settle_confirmed`.
+- A Celery `beat` container runs the reconciliation sweep. Losing it delays credits to parents who close the browser; it does not lose them.
+- The API logs every non-health request, because "did T-Bank ever call us?" was unanswerable without it.
 
 ## Alternatives
 

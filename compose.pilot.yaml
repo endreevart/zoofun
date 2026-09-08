@@ -33,17 +33,18 @@ services:
       args:
         INSTALL_DEV: "false"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     environment:
       ENVIRONMENT: production
       CORS_ORIGINS: https://zooo.fun,https://www.zooo.fun,https://crm.zooo.fun
       ACCOUNTS_PATH: /app/.data/accounts.json
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-virtual_zoo}:${POSTGRES_PASSWORD:-virtual_zoo_local_only}@postgres:5432/${POSTGRES_DB:-virtual_zoo}
+      # Host comes from .env (RF Postgres via SSH tunnel on the host).
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379/0
       USE_CELERY: "true"
+    extra_hosts:
+      - "host.docker.internal:172.18.0.1"
     env_file:
       - path: .env
         required: false
@@ -72,14 +73,14 @@ services:
       args:
         INSTALL_DEV: "false"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     environment:
       ENVIRONMENT: production
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-virtual_zoo}:${POSTGRES_PASSWORD:-virtual_zoo_local_only}@postgres:5432/${POSTGRES_DB:-virtual_zoo}
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379/0
+    extra_hosts:
+      - "host.docker.internal:172.18.0.1"
     env_file:
       - path: .env
         required: false
@@ -93,24 +94,52 @@ services:
       - local_assets:/data/assets
     restart: unless-stopped
 
+  beat:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "false"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+    extra_hosts:
+      - "host.docker.internal:172.18.0.1"
+    env_file:
+      - path: .env
+        required: false
+    # Only the scheduler: it enqueues the payment reconciliation sweep so a
+    # lost T-Bank notification never leaves paid credits ungranted.
+    command:
+      [
+        "celery",
+        "-A", "app.worker",
+        "beat",
+        "--loglevel", "INFO",
+        "--schedule", "/tmp/celerybeat-schedule",
+      ]
+    restart: unless-stopped
+
   backup:
     image: postgres:17-alpine
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD:-virtual_zoo_local_only}
       POSTGRES_DB: ${POSTGRES_DB:-virtual_zoo}
       POSTGRES_USER: ${POSTGRES_USER:-virtual_zoo}
+      PGHOST: ${POSTGRES_HOST:-host.docker.internal}
+    extra_hosts:
+      - "host.docker.internal:172.18.0.1"
     volumes:
       - pg_backups:/backups
-    # Nightly compressed dump, two weeks kept. Credits and payments are money:
-    # restore with `pg_restore -h postgres -U $POSTGRES_USER -d $POSTGRES_DB -c <file>`.
+    # Nightly dump of the RF Postgres (over WireGuard). Two weeks kept.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         while true; do
-          pg_dump -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -F c \
+          pg_dump -h "$$PGHOST" -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -F c \
             -f "/backups/zoo-$$(date +%Y%m%d-%H%M%S).dump" \
             && echo "backup ok $$(date -Iseconds)" \
             || echo "backup FAILED $$(date -Iseconds)"

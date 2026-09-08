@@ -1,8 +1,9 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -73,6 +74,35 @@ app = FastAPI(
 )
 
 app.add_middleware(SessionMiddleware, secret_key=settings.admin_secret_key)
+
+# Health checks are noise; everything else is the audit trail. Without it a
+# question like "did T-Bank ever call the notification URL?" is unanswerable.
+QUIET_PATHS = {"/health"}
+
+
+@app.middleware("http")
+async def log_request(request: Request, call_next):
+    if request.url.path in QUIET_PATHS:
+        return await call_next(request)
+    started = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "%s %s failed after %.0fms",
+            request.method,
+            request.url.path,
+            (time.monotonic() - started) * 1000,
+        )
+        raise
+    logger.info(
+        "%s %s %s %.0fms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        (time.monotonic() - started) * 1000,
+    )
+    return response
 
 cors_origins = [
     origin.strip()

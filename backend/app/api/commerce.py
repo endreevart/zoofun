@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+import time
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.accounts.store import ChildProfile, ParentAccount
+from app.accounts.store import ChildProfile, ParentAccount, store
 from app.api.deps import require_session
+from app.commerce.settlement import apply_state, reconcile_parent
 from app.commerce.store import Pack, commerce
 from app.ops.log import write_log
 from app.providers import tbank
+from app.ratelimit import enforce
 from app.settings import get_settings
 
 router = APIRouter(prefix="/v1/commerce", tags=["commerce"])
+
+# A parent who taps "buy" twice means one purchase. Within this window the
+# same pack returns the same payment link instead of a second order.
+CHECKOUT_REUSE_SECONDS = 120.0
 
 
 class PackOut(BaseModel):
@@ -73,6 +80,26 @@ async def checkout(
     settings = get_settings()
     if not tbank.configured(settings):
         raise HTTPException(status_code=503, detail="payment_unconfigured")
+
+    reusable = commerce.find_reusable_checkout(
+        parent.id,
+        pack.id,
+        newer_than=time.time() - CHECKOUT_REUSE_SECONDS,
+    )
+    if reusable is not None and reusable.payment_url:
+        write_log(
+            "tbank.init_reused",
+            f"reused {reusable.id} for {pack.id}",
+            payment_id=reusable.id,
+            parent_id=parent.id,
+            payload={"pack_id": pack.id, "order_id": reusable.id},
+        )
+        return CheckoutOut(
+            payment_id=reusable.id,
+            payment_url=reusable.payment_url,
+            amount_rub=reusable.amount_rub,
+            animals=reusable.animals,
+        )
 
     payment = commerce.create_payment(parent.id, pack)
     write_log(
@@ -170,52 +197,35 @@ async def tbank_notification(payload: dict[str, Any]) -> dict[str, str]:
         )
         return {"status": "ok"}
 
-    status = str(payload.get("Status") or "")
-    success = payload.get("Success") in (True, "true", "True")
-    commerce.apply_notify(
-        payment.id,
-        tbank_payment_id=tbank_id or None,
-        tbank_status=status or None,
-    )
-    write_log(
-        "tbank.notify",
-        f"{status} PaymentId={tbank_id}",
-        payment_id=payment.id,
-        parent_id=payment.parent_id,
-        payload=payload,
-    )
-    if status == "CONFIRMED" and success:
-        commerce.settle_confirmed(payment.id)
-        write_log(
-            "payment.confirmed",
-            f"+{payment.animals} credits PaymentId={tbank_id}",
-            payment_id=payment.id,
-            parent_id=payment.parent_id,
-            payload={"PaymentId": tbank_id, "animals": payment.animals},
-        )
-        return {"status": "ok"}
-    if status in {"REJECTED", "CANCELED", "DEADLINE_EXPIRED", "AUTH_FAIL"}:
-        commerce.fail(
-            payment.id,
-            error_code=str(payload.get("ErrorCode") or status),
-            error_message=str(payload.get("Message") or status),
-            tbank_status=status,
-            tbank_payment_id=tbank_id or None,
-        )
-        write_log(
-            "payment.failed",
-            f"{status} PaymentId={tbank_id}",
-            level="warning",
-            payment_id=payment.id,
-            parent_id=payment.parent_id,
-            payload=payload,
-        )
-    if status == "REFUNDED":
-        write_log(
-            "payment.refunded",
-            f"PaymentId={tbank_id}",
-            payment_id=payment.id,
-            parent_id=payment.parent_id,
-            payload=payload,
-        )
+    apply_state(payment, payload, source="notify")
     return {"status": "ok"}
+
+
+class ReconcileOut(BaseModel):
+    credited: int
+    pending: int
+    remaining: int
+
+
+@router.post("/reconcile", response_model=ReconcileOut)
+async def reconcile(
+    request: Request,
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
+) -> ReconcileOut:
+    """Settle this parent's payments from T-Bank's own answer.
+
+    Called when the parent returns from checkout. Without it a lost
+    notification means paid money and no eggs, and the only cure is an
+    operator with database access.
+    """
+    # The island polls this while it waits for the bank; a few dozen calls a
+    # minute is a patient parent, more than that is a script.
+    enforce(request, "reconcile", limit=40)
+    parent, _child = pair
+    credited, pending = await reconcile_parent(parent.id)
+    fresh = store.get(parent.id)
+    return ReconcileOut(
+        credited=credited,
+        pending=pending,
+        remaining=fresh.remaining if fresh else parent.remaining,
+    )

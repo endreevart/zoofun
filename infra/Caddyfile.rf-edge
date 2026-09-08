@@ -1,0 +1,59 @@
+# Public edge in the Russian Federation (178.21.11.219).
+#
+# Children must reach the zoo without a VPN, and personal data of RF citizens
+# stays in RF, so this host terminates TLS and forwards to the application in
+# Amsterdam. It computes nothing: no provider keys, no generation, no Postgres
+# password. The primary database lives on this machine but listens on
+# 127.0.0.1 only and is reached from Amsterdam through an SSH tunnel.
+#
+# Deploy: copy to /etc/caddy/Caddyfile on the RF host, then `caddy reload`.
+
+{
+	servers {
+		protocols h1 h2
+	}
+}
+
+# Access log is not optional here. Without it a question like "did T-Bank ever
+# call the notification URL?" cannot be answered, and that question already
+# cost a parent their credits once.
+(accesslog) {
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 32mb
+			roll_keep 8
+		}
+		format json
+	}
+}
+
+www.zooo.fun {
+	import accesslog
+	redir https://zooo.fun{uri} permanent
+}
+
+zooo.fun {
+	import accesslog
+	reverse_proxy https://72.56.100.86 {
+		header_up Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+		transport http {
+			tls
+			tls_server_name zooo.fun
+		}
+	}
+}
+
+crm.zooo.fun {
+	import accesslog
+	reverse_proxy https://72.56.100.86 {
+		header_up Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+		transport http {
+			tls
+			tls_server_name crm.zooo.fun
+		}
+	}
+}

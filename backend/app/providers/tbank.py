@@ -120,3 +120,30 @@ async def init_payment(
     if not isinstance(payload, dict) or not payload.get("Success"):
         raise TbankError("tbank_init_failed", payload if isinstance(payload, dict) else {})
     return payload
+
+
+async def get_state(settings: Settings, *, tbank_payment_id: str) -> dict[str, Any]:
+    """Ask T-Bank what really happened to a payment.
+
+    The notification is a courtesy, not a guarantee: if it never arrives the
+    money is still taken, so this is the authority the reconciliation uses.
+    """
+    if not configured(settings):
+        raise TbankError("tbank_unconfigured")
+    if not tbank_payment_id.strip():
+        raise TbankError("tbank_no_payment_id")
+    body: dict[str, Any] = {
+        "TerminalKey": settings.tbank_terminal_key.strip(),
+        "PaymentId": tbank_payment_id.strip(),
+    }
+    body["Token"] = sign(body, settings.tbank_password)
+    url = settings.tbank_api_url.rstrip("/") + "/GetState"
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post(url, json=body)
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise TbankError("tbank_bad_response") from exc
+    if not isinstance(payload, dict) or not payload.get("Success"):
+        raise TbankError("tbank_get_state_failed", payload if isinstance(payload, dict) else {})
+    return payload

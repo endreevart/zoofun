@@ -242,6 +242,55 @@ class CommerceStore:
             row = db.get(PaymentRow, order_id)
             return _payment(row) if row else None
 
+    def find_reusable_checkout(
+        self, parent_id: str, pack_id: str, *, newer_than: float
+    ) -> Payment | None:
+        """A checkout the parent can still pay, so a double tap on the buy
+        button does not create a second order they could pay twice."""
+        with session() as db:
+            row = db.scalar(
+                select(PaymentRow)
+                .where(
+                    PaymentRow.parent_id == parent_id,
+                    PaymentRow.pack_id == pack_id,
+                    PaymentRow.status == "pending",
+                    PaymentRow.created_at >= newer_than,
+                    PaymentRow.payment_url.is_not(None),
+                )
+                .order_by(PaymentRow.created_at.desc())
+            )
+            return _payment(row) if row else None
+
+    def list_unsettled(self, *, older_than: float, limit: int = 50) -> list[Payment]:
+        """Payments that reached T-Bank but never reached a final state here.
+        Either the notification is still in flight or it was lost for good."""
+        cap = min(max(limit, 1), 200)
+        with session() as db:
+            rows = db.scalars(
+                select(PaymentRow)
+                .where(
+                    PaymentRow.status == "pending",
+                    PaymentRow.tbank_payment_id.is_not(None),
+                    PaymentRow.created_at <= older_than,
+                )
+                .order_by(PaymentRow.created_at)
+                .limit(cap)
+            ).all()
+            return [_payment(row) for row in rows]
+
+    def list_unsettled_for_parent(self, parent_id: str) -> list[Payment]:
+        with session() as db:
+            rows = db.scalars(
+                select(PaymentRow)
+                .where(
+                    PaymentRow.parent_id == parent_id,
+                    PaymentRow.status == "pending",
+                    PaymentRow.tbank_payment_id.is_not(None),
+                )
+                .order_by(PaymentRow.created_at)
+            ).all()
+            return [_payment(row) for row in rows]
+
     def list_payments(self, *, limit: int = 50) -> list[Payment]:
         cap = min(max(limit, 1), 200)
         with session() as db:

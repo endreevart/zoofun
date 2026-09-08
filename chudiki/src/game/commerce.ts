@@ -45,6 +45,38 @@ export async function readQuota(token: string): Promise<Quota | null> {
   }
 }
 
+export type Reconciled = {
+  /** Credits granted by this call, i.e. a notification that never arrived. */
+  credited: number;
+  /** Payments still waiting for an answer from the bank. */
+  pending: number;
+  remaining: number;
+};
+
+/** Ask the backend to settle this parent's payments against T-Bank. */
+export async function reconcilePayments(): Promise<Reconciled | null> {
+  try {
+    const response = await fetch(`${API_BASE}/v1/commerce/reconcile`, {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    if (!response.ok) return null;
+    const body = (await response.json()) as {
+      credited?: unknown;
+      pending?: unknown;
+      remaining?: unknown;
+    };
+    if (typeof body.remaining !== 'number') return null;
+    return {
+      credited: typeof body.credited === 'number' ? body.credited : 0,
+      pending: typeof body.pending === 'number' ? body.pending : 0,
+      remaining: body.remaining,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchPacks(): Promise<Pack[]> {
   const response = await fetch(`${API_BASE}/v1/commerce/catalog`);
   if (!response.ok) return [];

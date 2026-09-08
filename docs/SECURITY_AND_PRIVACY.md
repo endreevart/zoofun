@@ -12,7 +12,7 @@ This document is an engineering baseline, not a substitute for jurisdiction-spec
 
 ## Secrets
 
-- Provider and storage keys exist only in secret storage or local `.env` files excluded from Git.
+- Provider and storage keys exist only in secret storage or local `.env` files excluded from Git. The EU HTTP proxy URL for OpenRouter/Tripo stays there too.
 - Mobile builds contain public API base URLs only.
 - Rotate any credential that appears in source, logs, screenshots, issue text, or MCP configuration.
 - Development and production credentials must be separate and least-privileged.
@@ -29,7 +29,9 @@ This document is an engineering baseline, not a substitute for jurisdiction-spec
 
 **Status: accepted (D-016).** First generation is free. Packs of 5 / 10 / 15 / 20 are paid through АО «ТБанк». The API owns `quota_total` and `generation_used`. Delete does not restore a credit. Card data never touches our servers. T-Bank and operator tokens stay in `.env`.
 
-Job creation still uses an idempotency key so a duplicate submission does not create a second job.
+Job creation still uses an idempotency key so a duplicate submission does not create a second job. Checkout is likewise deduplicated: the same parent and pack within two minutes returns the existing payment link.
+
+Paid money always becomes credits. The T-Bank notification may be lost, so `GetState` is the authority: the parent's payments are reconciled when they return from checkout and by a scheduled sweep otherwise. Granting is idempotent, and the island never reports credits it has not read back from the API.
 
 ## Upload and artifact safety
 
