@@ -8,7 +8,11 @@ from app.persistence.models import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Migrations also run inside the API lifespan. The default
+    # disable_existing_loggers=True would silence every logger uvicorn and the
+    # app already configured, including the access log — which is exactly how
+    # production ended up with no request trail at all.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 if not config.get_main_option("sqlalchemy.url"):
     config.set_main_option("sqlalchemy.url", sync_database_url())
 
