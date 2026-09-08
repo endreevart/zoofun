@@ -122,11 +122,17 @@ async def init_payment(
     return payload
 
 
-async def get_state(settings: Settings, *, tbank_payment_id: str) -> dict[str, Any]:
+async def get_state(
+    settings: Settings, *, tbank_payment_id: str, timeout_s: float = 20.0
+) -> dict[str, Any]:
     """Ask T-Bank what really happened to a payment.
 
     The notification is a courtesy, not a guarantee: if it never arrives the
     money is still taken, so this is the authority the reconciliation uses.
+    It is also the only thing a forged notification cannot lie about.
+
+    ``timeout_s`` is short on the notification path, where T-Bank drops the
+    connection after ten seconds and redirects the parent anyway.
     """
     if not configured(settings):
         raise TbankError("tbank_unconfigured")
@@ -138,7 +144,7 @@ async def get_state(settings: Settings, *, tbank_payment_id: str) -> dict[str, A
     }
     body["Token"] = sign(body, settings.tbank_password)
     url = settings.tbank_api_url.rstrip("/") + "/GetState"
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    async with httpx.AsyncClient(timeout=timeout_s) as client:
         response = await client.post(url, json=body)
     try:
         payload = response.json()

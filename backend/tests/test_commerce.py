@@ -1,12 +1,13 @@
 import base64
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.accounts.store import store
 from app.commerce.store import commerce
 from app.main import app
-from app.providers.tbank import sign, token_ok
+from app.providers.tbank import TbankError, sign, token_ok
 from app.settings import Settings
 
 TINY_PNG = base64.b64decode(
@@ -158,37 +159,123 @@ async def test_checkout_needs_price_and_tbank(monkeypatch: pytest.MonkeyPatch) -
     assert pending.status_code == 503
 
 
+def _notification(payment_id: str, status: str = "CONFIRMED") -> dict:
+    body = {
+        "TerminalKey": "term",
+        "OrderId": payment_id,
+        "Success": True,
+        "Status": status,
+        "PaymentId": "77",
+        "Amount": 49000,
+    }
+    body["Token"] = sign(body, "secret")
+    assert token_ok(body, "secret")
+    return body
+
+
 @pytest.mark.asyncio
 async def test_tbank_notification_credits_once(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.api.commerce.get_settings",
         lambda: Settings(tbank_terminal_key="term", tbank_password="secret"),
     )
-    session = store.register("parent@example.com", "secret1")
-    parent, _child = store.session(session.token) or (None, None)
-    assert parent is not None
-    commerce.set_price("pack_5", 490)
-    payment = commerce.create_payment(parent.id, commerce.get_pack("pack_5"))
-    commerce.attach_tbank(payment.id, "77", "https://pay.example/x")
-    body = {
-        "TerminalKey": "term",
-        "OrderId": payment.id,
-        "Success": True,
-        "Status": "CONFIRMED",
-        "PaymentId": "77",
-        "Amount": 49000,
-    }
-    body["Token"] = sign(body, "secret")
-    assert token_ok(body, "secret")
+    token, payment_id = _unsettled_payment()
+    calls: list[str] = []
+    _state(monkeypatch, "CONFIRMED", calls)
+    body = _notification(payment_id)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         first = await client.post("/v1/commerce/tbank/notification", json=body)
         second = await client.post("/v1/commerce/tbank/notification", json=body)
     assert first.status_code == 200
+    # Anything but this exact body and T-Bank redelivers hourly for a day.
+    assert first.text == "OK"
     assert second.status_code == 200
-    fresh, _ = store.session(session.token) or (None, None)
+    fresh, _ = store.session(token) or (None, None)
     assert fresh is not None
     assert fresh.quota_total == 6
+    assert fresh.remaining == 6
+    # Both notifications were verified; only the first one granted anything.
+    assert calls == ["77", "77"]
+
+
+@pytest.mark.asyncio
+async def test_notification_credits_nothing_the_bank_denies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A leaked terminal password must not be enough to mint credits."""
+    monkeypatch.setattr(
+        "app.api.commerce.get_settings",
+        lambda: Settings(tbank_terminal_key="term", tbank_password="secret"),
+    )
+    token, payment_id = _unsettled_payment()
+    calls: list[str] = []
+    # Correctly signed and claiming CONFIRMED, but the bank knows better.
+    _state(monkeypatch, "NEW", calls)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        answer = await client.post(
+            "/v1/commerce/tbank/notification",
+            json=_notification(payment_id),
+        )
+
+    assert answer.status_code == 200
+    assert calls == ["77"]
+    fresh, _ = store.session(token) or (None, None)
+    assert fresh is not None
+    assert fresh.remaining == 1
+
+
+async def _notify(payment_id: str) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        answer = await client.post(
+            "/v1/commerce/tbank/notification",
+            json=_notification(payment_id),
+        )
+    assert answer.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_notification_is_dropped_when_the_bank_denies_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GetState answered, and the answer is that no such payment was made."""
+    monkeypatch.setattr(
+        "app.api.commerce.get_settings",
+        lambda: Settings(tbank_terminal_key="term", tbank_password="secret"),
+    )
+    token, payment_id = _unsettled_payment()
+
+    async def deny(_settings, *, tbank_payment_id: str, timeout_s: float = 20.0) -> dict:
+        raise TbankError("tbank_get_state_failed", {"ErrorCode": "8"})
+
+    monkeypatch.setattr("app.commerce.settlement.tbank.get_state", deny)
+    await _notify(payment_id)
+
+    fresh, _ = store.session(token) or (None, None)
+    assert fresh is not None
+    assert fresh.remaining == 1
+
+
+@pytest.mark.asyncio
+async def test_notification_still_credits_when_the_bank_is_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nobody can forge an outage, and a parent who paid must not wait for it."""
+    monkeypatch.setattr(
+        "app.api.commerce.get_settings",
+        lambda: Settings(tbank_terminal_key="term", tbank_password="secret"),
+    )
+    token, payment_id = _unsettled_payment()
+
+    async def unreachable(_settings, *, tbank_payment_id: str, timeout_s: float = 20.0) -> dict:
+        raise httpx.ConnectError("no route to host")
+
+    monkeypatch.setattr("app.commerce.settlement.tbank.get_state", unreachable)
+    await _notify(payment_id)
+
+    fresh, _ = store.session(token) or (None, None)
+    assert fresh is not None
     assert fresh.remaining == 6
 
 
@@ -209,7 +296,7 @@ def _state(monkeypatch: pytest.MonkeyPatch, status: str, calls: list[str]) -> No
     settings = Settings(tbank_terminal_key="term", tbank_password="secret")
     monkeypatch.setattr("app.commerce.settlement.get_settings", lambda: settings)
 
-    async def answer(_settings, *, tbank_payment_id: str) -> dict:
+    async def answer(_settings, *, tbank_payment_id: str, timeout_s: float = 20.0) -> dict:
         calls.append(tbank_payment_id)
         return {"Success": True, "Status": status, "PaymentId": tbank_payment_id}
 

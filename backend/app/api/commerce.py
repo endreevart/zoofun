@@ -6,11 +6,12 @@ import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.accounts.store import ChildProfile, ParentAccount, store
 from app.api.deps import require_session
-from app.commerce.settlement import apply_state, reconcile_parent
+from app.commerce.settlement import reconcile_parent, verify_notification
 from app.commerce.store import Pack, commerce
 from app.ops.log import write_log
 from app.providers import tbank
@@ -22,6 +23,13 @@ router = APIRouter(prefix="/v1/commerce", tags=["commerce"])
 # A parent who taps "buy" twice means one purchase. Within this window the
 # same pack returns the same payment link instead of a second order.
 CHECKOUT_REUSE_SECONDS = 120.0
+
+
+def _ack() -> PlainTextResponse:
+    """T-Bank counts a notification as delivered only when the body is exactly
+    ``OK`` — uppercase, no markup. Anything else and it redelivers for a
+    month."""
+    return PlainTextResponse("OK")
 
 
 class PackOut(BaseModel):
@@ -170,7 +178,13 @@ async def checkout(
 
 
 @router.post("/tbank/notification")
-async def tbank_notification(payload: dict[str, Any]) -> dict[str, str]:
+async def tbank_notification(payload: dict[str, Any]) -> PlainTextResponse:
+    """Take a notification as a hint and ask T-Bank what is actually true.
+
+    The signature only proves the sender knows the terminal password, and that
+    password lives in a bank cabinet a human can leak, so credits are granted
+    on ``GetState``. A forged notification buys nothing but a wasted call.
+    """
     settings = get_settings()
     if not tbank.configured(settings):
         raise HTTPException(status_code=503, detail="payment_unconfigured")
@@ -195,10 +209,23 @@ async def tbank_notification(payload: dict[str, Any]) -> dict[str, str]:
             level="warning",
             payload=payload,
         )
-        return {"status": "ok"}
+        return _ack()
 
-    apply_state(payment, payload, source="notify")
-    return {"status": "ok"}
+    write_log(
+        "tbank.notify_received",
+        f"{payload.get('Status') or '?'} PaymentId={tbank_id}",
+        payment_id=payment.id,
+        parent_id=payment.parent_id,
+        payload=payload,
+    )
+    if not payment.tbank_payment_id and tbank_id:
+        # Without the bank's own id there is nothing to ask GetState about.
+        payment = commerce.apply_notify(payment.id, tbank_payment_id=tbank_id) or payment
+    await verify_notification(payment, payload, settings)
+    # Acknowledge either way: the periodic sweep is a better retry than the
+    # bank's hourly one, and an unacknowledged notification comes back for a
+    # month.
+    return _ack()
 
 
 class ReconcileOut(BaseModel):
