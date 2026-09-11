@@ -1153,6 +1153,7 @@ body {
 
 .pad-frame {
   position: relative;
+  z-index: 0;
   flex: 1;
   min-height: 0;
   border: 6px solid #fff;
@@ -1165,6 +1166,7 @@ body {
 .pad-frame canvas {
   position: absolute;
   inset: 0;
+  z-index: 0;
   width: 100%;
   height: 100%;
   touch-action: none;
@@ -1191,55 +1193,145 @@ body {
 
 .draw-tools {
   position: relative;
+  z-index: 40;
+  isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .draw-tool {
-  position: static;
+  position: relative;
+  z-index: 41;
 }
 
-.draw-chip {
-  width: 56px;
-  height: 56px;
-  padding: 0;
-  border: 4px solid rgba(255, 255, 255, 0.95);
-  border-radius: 50%;
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.14);
+.draw-tiles {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  overflow: visible;
+}
+
+.draw-tile,
+.draw-undo,
+.draw-revive {
+  font: inherit;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
-.draw-chip[data-open='true'],
-.draw-chip[data-active='true'] {
-  border-color: #34302f;
-  transform: scale(1.08);
+.draw-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 64px;
+  min-height: 68px;
+  padding: 6px 8px 8px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px rgba(0, 0, 0, 0.06);
+  color: #3b332c;
 }
 
-.draw-chip-brush,
-.draw-chip-fill,
-.draw-chip-erase {
+.draw-tile[data-active='true'],
+.draw-tile[data-open='true'] {
+  background: #ffe566;
+  box-shadow: 0 2px rgba(210, 160, 20, 0.35);
+}
+
+.draw-tile-label {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.draw-tool-ico {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.draw-undo {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 18px;
-  background: var(--paper);
-  font-size: 26px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: #e4ebf6;
+  color: #4a5b78;
+  font-size: 22px;
+  flex-shrink: 0;
 }
 
-.draw-chip-brush span {
+.draw-color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85), 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.draw-thick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+}
+
+.draw-thick i {
   display: block;
   border-radius: 50%;
-  background: #34302f;
+  background: #2b2a28;
 }
 
-.draw-chip-fill .fill-icon {
-  display: block;
-  width: 30px;
-  height: 30px;
-  overflow: visible;
+.draw-thick i:nth-child(1) {
+  width: 7px;
+  height: 7px;
+}
+
+.draw-thick i:nth-child(2) {
+  width: 11px;
+  height: 11px;
+}
+
+.draw-thick i:nth-child(3) {
+  width: 15px;
+  height: 15px;
+}
+
+.draw-revive {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 52px;
+  padding: 0 18px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #9be86a, #63c93f);
+  color: #1f3c12;
+  font-size: 18px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.draw-revive .draw-tool-ico {
+  width: 28px;
+  height: 28px;
+}
+
+.draw-revive:disabled {
+  opacity: 0.45;
 }
 
 .draw-pop {
@@ -1254,7 +1346,7 @@ body {
   border-radius: 22px;
   background: rgba(255, 250, 240, 0.96);
   box-shadow: var(--shadow);
-  z-index: 6;
+  z-index: 50;
 }
 
 .draw-pop-brushes {
@@ -1308,130 +1400,186 @@ body {
   background: #34302f;
 }
 
-@media (max-width: 1280px) {
-  .draw-sheet {
-    background: var(--paper);
-  }
+.draw-sheet {
+  background: var(--paper);
+  z-index: 80;
+  overflow: visible;
+}
 
-  .draw-sheet .sheet-header {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 7;
-    padding: max(8px, env(safe-area-inset-top)) 0 0 max(8px, env(safe-area-inset-left));
-    pointer-events: none;
-  }
+.draw-sheet .sheet-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 42;
+  padding: max(8px, env(safe-area-inset-top)) 0 0 max(8px, env(safe-area-inset-left));
+  pointer-events: none;
+}
 
-  .draw-sheet .sheet-header > * {
-    pointer-events: auto;
-  }
+.draw-sheet .sheet-header > * {
+  pointer-events: auto;
+}
 
-  .draw-sheet .sheet-title {
+.draw-sheet .sheet-title {
+  display: none;
+}
+
+.draw-sheet .sheet-body {
+  padding: 0;
+  gap: 0;
+  overflow: visible;
+}
+
+.draw-sheet .pad-frame {
+  z-index: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.draw-sheet .draw-tools {
+  position: absolute;
+  top: auto;
+  left: 50%;
+  right: auto;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  flex-wrap: nowrap;
+  justify-content: center;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(255, 250, 243, 0.96);
+  box-shadow: 0 10px 28px rgba(40, 30, 10, 0.16);
+  z-index: 40;
+  overflow: visible;
+}
+
+.draw-sheet .icon-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  font-size: 22px;
+}
+
+.draw-sheet .draw-pop {
+  top: auto;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  grid-template-columns: repeat(4, 40px);
+}
+
+.draw-sheet .draw-pop-brushes {
+  grid-template-columns: repeat(3, 48px);
+}
+
+.draw-sheet .swatch {
+  width: 40px;
+  height: 40px;
+}
+
+@media (max-width: 720px) {
+  .draw-tile-label {
     display: none;
   }
 
-  .draw-sheet .sheet-body {
-    padding: 0;
-    gap: 0;
-  }
-
-  .draw-sheet .pad-frame {
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
-  .draw-sheet .draw-tools {
-    position: absolute;
-    top: max(8px, env(safe-area-inset-top));
-    left: 50%;
-    transform: translateX(-50%);
-    flex-direction: row;
-    flex-wrap: nowrap;
-    justify-content: center;
-    width: auto;
-    max-width: calc(100vw - 16px);
+  .draw-tile {
+    min-width: 48px;
+    min-height: 48px;
     padding: 6px;
-    border-radius: 22px;
-    background: rgba(255, 250, 240, 0.88);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
-    z-index: 7;
   }
 
-  .draw-sheet .icon-button {
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
-    font-size: 22px;
+  .draw-tool-ico {
+    width: 32px;
+    height: 32px;
   }
 
-  .draw-sheet .draw-chip {
-    width: 48px;
-    height: 48px;
-  }
-
-  .draw-sheet .draw-pop {
-    top: calc(100% + 8px);
-    bottom: auto;
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    grid-template-columns: repeat(4, 40px);
-  }
-
-  .draw-sheet .draw-pop-brushes {
-    grid-template-columns: repeat(3, 48px);
-  }
-
-  .draw-sheet .swatch {
-    width: 40px;
-    height: 40px;
-  }
-
-  .draw-sheet .sheet-footer {
-    position: absolute;
-    top: max(8px, env(safe-area-inset-top));
-    right: max(8px, env(safe-area-inset-right));
-    left: auto;
-    bottom: auto;
-    padding: 0;
-    z-index: 8;
-    pointer-events: none;
-  }
-
-  .draw-sheet .sheet-footer > * {
-    pointer-events: auto;
-  }
-
-  .draw-sheet .icon-button.wide {
-    width: auto;
-    min-width: 0;
-    height: 48px;
-    padding: 0 12px;
-    font-size: 15px;
-    gap: 6px;
+  .draw-revive {
+    min-height: 48px;
+    padding: 0 14px 0 8px;
+    font-size: 16px;
   }
 }
 
 @media (max-width: 520px) {
   .draw-sheet .draw-tools {
-    left: max(64px, calc(env(safe-area-inset-left) + 56px));
-    right: max(132px, calc(env(safe-area-inset-right) + 124px));
-    transform: none;
-    justify-content: flex-end;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    gap: 4px;
+    padding: 6px;
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+  }
+
+  .draw-tiles {
+    gap: 4px;
+  }
+
+  .draw-undo {
+    width: 36px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  .draw-tile {
+    min-width: 38px;
+    min-height: 44px;
+  }
+
+  .draw-tool-ico {
+    width: 28px;
+    height: 28px;
+  }
+
+  .draw-color-dot {
+    width: 22px;
+    height: 22px;
+  }
+
+  .draw-revive {
+    min-height: 44px;
+    padding: 0 10px 0 6px;
+    font-size: 14px;
+    gap: 4px;
+  }
+
+  .draw-revive .draw-tool-ico {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+@media (max-width: 400px) {
+  .draw-revive span {
+    display: none;
+  }
+
+  .draw-revive {
+    padding: 0 10px;
+  }
+
+  .draw-tile-label {
+    display: none;
+  }
+
+  .draw-sheet .draw-tools {
+    bottom: max(6px, env(safe-area-inset-bottom));
+    padding: 6px 8px;
     gap: 6px;
-    max-width: none;
   }
 
-  .draw-sheet .draw-tools .icon-button,
-  .draw-sheet .draw-chip {
-    width: 44px;
-    height: 44px;
+  .draw-tile {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px;
   }
 
-  .draw-sheet .draw-chip-fill .fill-icon {
-    width: 26px;
-    height: 26px;
+  .draw-revive {
+    min-height: 44px;
+    font-size: 15px;
   }
 }
 
