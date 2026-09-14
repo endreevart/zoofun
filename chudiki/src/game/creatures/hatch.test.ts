@@ -29,5 +29,6 @@ assert.equal(hatchFromWait(10, 1, false), false);
 assert.equal(eggCanOpen('pending'), false);
 assert.equal(eggCanOpen('pending', 'https://zooo.fun/model.glb'), true);
 assert.equal(eggCanOpen('ready', 'https://zooo.fun/model.glb'), true);
-assert.equal(eggCanOpen('failed'), true);
-assert.equal(eggCanOpen('skipped'), true);
+assert.equal(eggCanOpen('failed'), false);
+assert.equal(eggCanOpen('skipped'), false);
+assert.equal(eggCanOpen('failed', 'https://zooo.fun/model.glb'), true);

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { assetUrl } from '../../assetUrl';
 import type { IdyllicLibrary } from '../assets/IdyllicLibrary';
-import { InstancedScatter } from '../assets/InstancedScatter';
+import { disposeScatter, InstancedScatter } from '../assets/InstancedScatter';
 import { injectWorldCurve } from '../render/worldCurve';
 import { mulberry32 } from '../core/rng';
 import type { Terrain } from './Terrain';
@@ -57,6 +57,7 @@ export class GrassField {
       this.blades.traverse((object) => {
         const mesh = object as THREE.InstancedMesh;
         if (!mesh.isInstancedMesh) return;
+        mesh.dispose();
         junk.push(mesh.geometry, mesh.material as THREE.Material);
       });
       this.blades.removeFromParent();
@@ -64,7 +65,7 @@ export class GrassField {
       this.blades = null;
     }
     if (this.painted) {
-      this.painted.removeFromParent();
+      disposeScatter(this.painted);
       this.painted = null;
     }
   }

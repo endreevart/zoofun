@@ -74,3 +74,204 @@ async def test_zoo_rejects_anonymous_and_id_mismatch() -> None:
             json={"spec": {"id": "b", "name": "x"}},
         )
         assert mismatch.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_zoo_restores_portrait_when_only_the_egg_was_saved() -> None:
+    import base64
+    import time
+
+    from app.accounts.store import store
+    from app.persistence.db import session
+    from app.persistence.models import StylizeJobRow
+
+    egg = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    still = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    encoded = base64.b64encode(still).decode("ascii")
+    # Meet MIN_STILL_CHARS so CRM/zoo treat this as a real picture.
+    encoded = encoded + encoded * 20
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        token = await _register(client, "egg@example.com")
+        headers = {"Authorization": f"Bearer {token}"}
+        opened = store.register("egg@example.com", "pilot1")
+        with session() as db:
+            db.add(
+                StylizeJobRow(
+                    id="job-egg-restore",
+                    status="ready",
+                    image_base64=encoded,
+                    media_type="image/png",
+                    model_url="https://s3.example/meshes/job-egg-restore.glb",
+                    mesh_status="ready",
+                    parent_id=opened.parent_id,
+                    created_at=time.time(),
+                    updated_at=time.time(),
+                )
+            )
+        store.upsert_creature(
+            opened.child_id,
+            {
+                "spec": {
+                    "id": "ch_egg",
+                    "name": "Мурзик",
+                    "origin": "drawing",
+                    "hatchJobId": "job-egg-restore",
+                    "hatching": False,
+                    "drawing": {"textureUrl": egg, "painted": True},
+                }
+            },
+        )
+        zoo = await client.get("/v1/zoo", headers=headers)
+        assert zoo.status_code == 200
+        drawing = zoo.json()["creatures"][0]["spec"]["drawing"]
+        assert drawing["modelUrl"] == "https://s3.example/meshes/job-egg-restore.glb"
+        assert zoo.json()["creatures"][0]["spec"]["hatching"] is False
+        # Hosted GLB is enough for the lawn; the still is a URL, bytes stay in the database.
+        assert drawing["portraitUrl"] == "/v1/zoo/creatures/ch_egg/portrait"
+        stored = store.list_zoo(opened.child_id)[0]["spec"]["drawing"]
+        assert stored["portraitUrl"] == "/v1/zoo/creatures/ch_egg/portrait"
+        assert stored["modelUrl"] == drawing["modelUrl"]
+        picture = await client.get(
+            "/v1/zoo/creatures/ch_egg/portrait",
+            headers=headers,
+        )
+        assert picture.status_code == 200
+        assert picture.headers["content-type"].startswith("image/")
+
+
+@pytest.mark.asyncio
+async def test_slim_for_wire_does_not_mutate_stored_payload() -> None:
+    from app.accounts.creatures import slim_for_wire
+
+    still = "data:image/png;base64," + ("C" * 900)
+    payload = {
+        "spec": {
+            "id": "x",
+            "drawing": {"textureUrl": still, "modelUrl": "https://s3.example/meshes/x.glb"},
+        }
+    }
+    slim = slim_for_wire(payload)
+    assert payload["spec"]["drawing"]["textureUrl"] == still
+    assert slim["spec"]["drawing"]["textureUrl"] == ""
+    assert slim["spec"]["drawing"]["modelUrl"] == "https://s3.example/meshes/x.glb"
+    assert slim["spec"]["drawing"]["portraitUrl"] == "/v1/zoo/creatures/x/portrait"
+
+
+@pytest.mark.asyncio
+async def test_zoo_omits_inline_stills_when_mesh_is_hosted() -> None:
+    still = "data:image/png;base64," + ("A" * 900)
+    creature = {
+        "spec": {
+            "id": "drawn-mesh",
+            "name": "Шлеп",
+            "origin": "drawing",
+            "drawing": {
+                "textureUrl": still,
+                "portraitUrl": still,
+                "modelUrl": "https://s3.example/meshes/x.glb",
+                "postcardUrl": "https://s3.example/postcards/x.png",
+            },
+        }
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        registered = await client.post(
+            "/v1/auth/register",
+            json={"email": "mesh@example.com", "password": "pilot1"},
+        )
+        assert registered.status_code == 200
+        token = registered.json()["token"]
+        child_id = registered.json()["child"]["id"]
+        headers = {"Authorization": f"Bearer {token}"}
+        saved = await client.put("/v1/zoo/creatures/drawn-mesh", headers=headers, json=creature)
+        assert saved.status_code == 200
+        drawing = saved.json()["creatures"][0]["spec"]["drawing"]
+        assert drawing["modelUrl"] == "https://s3.example/meshes/x.glb"
+        assert drawing["postcardUrl"] == "https://s3.example/postcards/x.png"
+        assert drawing.get("textureUrl") in ("", None)
+        assert drawing["portraitUrl"] == "/v1/zoo/creatures/drawn-mesh/portrait"
+
+        portrait = await client.get(
+            "/v1/zoo/creatures/drawn-mesh/portrait",
+            headers=headers,
+        )
+        assert portrait.status_code == 200
+        assert portrait.headers["content-type"].startswith("image/")
+        assert len(portrait.content) > 8
+
+        via_query = await client.get(
+            "/v1/zoo/creatures/drawn-mesh/portrait",
+            params={"access_token": token},
+        )
+        assert via_query.status_code == 200
+        assert via_query.content == portrait.content
+
+        other = await client.post(
+            "/v1/auth/register",
+            json={"email": "other-mesh@example.com", "password": "pilot1"},
+        )
+        stranger = await client.get(
+            "/v1/zoo/creatures/drawn-mesh/portrait",
+            headers={"Authorization": f"Bearer {other.json()['token']}"},
+        )
+        assert stranger.status_code == 404
+
+        from app.accounts.store import store
+
+        stored = store.list_zoo(child_id)[0]["spec"]["drawing"]
+        assert stored.get("textureUrl") in ("", None)
+        assert stored["portraitUrl"] == "/v1/zoo/creatures/drawn-mesh/portrait"
+
+
+@pytest.mark.asyncio
+async def test_upsert_keeps_stills_when_island_sends_a_slim_row() -> None:
+    still = "data:image/png;base64," + ("B" * 900)
+    fat = {
+        "spec": {
+            "id": "drawn-keep",
+            "name": "Пуфик",
+            "origin": "drawing",
+            "drawing": {
+                "textureUrl": still,
+                "portraitUrl": still,
+                "modelUrl": "https://s3.example/meshes/keep.glb",
+            },
+        }
+    }
+    slim = {
+        "spec": {
+            "id": "drawn-keep",
+            "name": "Пуфик",
+            "origin": "drawing",
+            "drawing": {
+                "textureUrl": "",
+                "modelUrl": "https://s3.example/meshes/keep.glb",
+            },
+        },
+        "lastPosition": {"x": 3.0, "z": 5.0},
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        registered = await client.post(
+            "/v1/auth/register",
+            json={"email": "keepstill@example.com", "password": "pilot1"},
+        )
+        token = registered.json()["token"]
+        child_id = registered.json()["child"]["id"]
+        headers = {"Authorization": f"Bearer {token}"}
+        assert (await client.put("/v1/zoo/creatures/drawn-keep", headers=headers, json=fat)).status_code == 200
+        moved = await client.put("/v1/zoo/creatures/drawn-keep", headers=headers, json=slim)
+        assert moved.status_code == 200
+
+        from app.accounts.store import store
+
+        stored = store.list_zoo(child_id)[0]
+        drawing = stored["spec"]["drawing"]
+        assert stored["lastPosition"] == {"x": 3.0, "z": 5.0}
+        assert drawing["portraitUrl"] == "/v1/zoo/creatures/drawn-keep/portrait"
+        assert drawing["modelUrl"] == "https://s3.example/meshes/keep.glb"
+        assert drawing.get("textureUrl") in ("", None)

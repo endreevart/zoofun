@@ -1,50 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { floodFill, hexRgb } from '../game/drawing/floodFill';
 import { PAPER_HEX, fillPaper, isPaperPixel } from '../game/drawing/paperize';
+import { DrawToolIcon } from './DrawToolIcon';
 
 type DrawTool = 'brush' | 'erase' | 'fill';
-
-function FillIcon({ color }: { color: string }) {
-  return (
-    <svg className="fill-icon" viewBox="0 0 32 32" aria-hidden="true">
-      <path
-        d="M7 20c0 0 1.2-3.2 3.4-4.2 1.6-.7 3.4.2 3.2 2.1-.2 1.6-1.8 2.4-3.2 3.4C8.6 22.4 7.4 24 7 26.2"
-        fill={color}
-        stroke="#34302f"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <ellipse cx="11.2" cy="26.6" rx="5.4" ry="2.4" fill={color} stroke="#34302f" strokeWidth="1.8" />
-      <g transform="rotate(-32 19 13)">
-        <path
-          d="M13.2 11.2c0-3.6 10.2-3.6 10.2 0"
-          fill="none"
-          stroke="#34302f"
-          strokeWidth="2.1"
-          strokeLinecap="round"
-        />
-        <path
-          d="M12 11.4h13.4l-1.7 11.2c-.2 1.2-1.4 2.1-2.6 2.1h-4.8c-1.2 0-2.4-.9-2.6-2.1L12 11.4z"
-          fill="#ffc93c"
-          stroke="#34302f"
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
-        <rect
-          x="11.3"
-          y="9.4"
-          width="14.8"
-          height="3.3"
-          rx="1.4"
-          fill="#ffe08a"
-          stroke="#34302f"
-          strokeWidth="1.8"
-        />
-        <path d="M14.4 14.2h8.4" stroke={color} strokeWidth="2.4" strokeLinecap="round" />
-      </g>
-    </svg>
-  );
-}
 
 /**
  * The drawing pad. Deliberately plain: a big sheet, fat colours, one undo and
@@ -79,8 +38,8 @@ export type DrawPadProps = {
 export function DrawPad({
   onCancel,
   onDone,
-  title = 'Нарисуй чудика',
-  doneLabel = '✨ Оживить!',
+  title = 'Нарисуй зуфуньчика',
+  doneLabel = 'Оживить',
 }: DrawPadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -278,116 +237,135 @@ export function DrawPad({
           )}
         </div>
 
-        <div className="draw-tools">
-          <button className="icon-button" onClick={undo} aria-label="Отменить">
-            ↩️
-          </button>
-          <button className="icon-button" onClick={clear} aria-label="Стереть всё">
-            🧽
-          </button>
-          <div className="draw-tool">
+        <div className="draw-dock">
+          {openTool === 'color' ? (
+            <div className="draw-pop" role="listbox" aria-label="Цвета">
+              {PALETTE.map((swatch) => (
+                <button
+                  key={swatch}
+                  className="swatch"
+                  style={{ background: swatch }}
+                  data-active={tool !== 'erase' && color === swatch}
+                  aria-label={`Цвет ${swatch}`}
+                  onClick={() => {
+                    setColor(swatch);
+                    if (tool === 'erase') setTool('brush');
+                    setOpenTool(null);
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
+          {openTool === 'brush' ? (
+            <div className="draw-pop draw-pop-brushes" role="listbox" aria-label="Толщина">
+              {BRUSHES.map((size) => (
+                <button
+                  key={size}
+                  className="brush"
+                  data-active={brush === size}
+                  aria-label={`Толщина ${size}`}
+                  onClick={() => {
+                    setBrush(size);
+                    setOpenTool(null);
+                  }}
+                >
+                  <span style={{ width: size * 0.8, height: size * 0.8 }} />
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="draw-tools">
+            <button className="draw-undo" type="button" onClick={undo} aria-label="Отменить">
+              ↩
+            </button>
+            <div className="draw-tiles">
+              <button
+                type="button"
+                className="draw-tile"
+                data-active={tool === 'brush'}
+                aria-label="Кисть"
+                onClick={() => {
+                  setTool('brush');
+                  setOpenTool(null);
+                }}
+              >
+                <DrawToolIcon name="brush" />
+                <span className="draw-tile-label">Кисть</span>
+              </button>
+              <button
+                type="button"
+                className="draw-tile"
+                data-active={tool === 'erase'}
+                aria-label="Ластик"
+                onClick={() => {
+                  setTool('erase');
+                  setOpenTool(null);
+                }}
+              >
+                <DrawToolIcon name="erase" />
+                <span className="draw-tile-label">Ластик</span>
+              </button>
+              <button
+                type="button"
+                className="draw-tile"
+                data-active={tool === 'fill'}
+                aria-label="Заливка"
+                onClick={() => {
+                  setTool('fill');
+                  setOpenTool(null);
+                }}
+              >
+                <DrawToolIcon name="fill" />
+                <span className="draw-tile-label">Заливка</span>
+              </button>
+              <button type="button" className="draw-tile" aria-label="Очистить" onClick={clear}>
+                <DrawToolIcon name="clear" />
+                <span className="draw-tile-label">Очистить</span>
+              </button>
+              <button
+                type="button"
+                className="draw-tile"
+                data-open={openTool === 'color'}
+                aria-label="Цвет"
+                aria-expanded={openTool === 'color'}
+                onClick={() => setOpenTool((current) => (current === 'color' ? null : 'color'))}
+              >
+                <span
+                  className="draw-color-dot"
+                  style={{ background: tool === 'erase' ? '#f4f0e4' : color }}
+                />
+                <span className="draw-tile-label">Цвет</span>
+              </button>
+              <button
+                type="button"
+                className="draw-tile"
+                data-open={openTool === 'brush'}
+                aria-label="Толщина"
+                aria-expanded={openTool === 'brush'}
+                onClick={() => setOpenTool((current) => (current === 'brush' ? null : 'brush'))}
+              >
+                <span className="draw-thick" aria-hidden>
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span className="draw-tile-label">Толщина</span>
+              </button>
+            </div>
             <button
+              className="draw-revive"
               type="button"
-              className="draw-chip"
-              style={{ background: tool === 'erase' ? '#f4f0e4' : color }}
-              data-open={openTool === 'color'}
-              aria-label="Цвет"
-              aria-expanded={openTool === 'color'}
-              onClick={() => setOpenTool((current) => (current === 'color' ? null : 'color'))}
-            />
-            {openTool === 'color' ? (
-              <div className="draw-pop" role="listbox" aria-label="Цвета">
-                {PALETTE.map((swatch) => (
-                  <button
-                    key={swatch}
-                    className="swatch"
-                    style={{ background: swatch }}
-                    data-active={tool !== 'erase' && color === swatch}
-                    aria-label={`Цвет ${swatch}`}
-                    onClick={() => {
-                      setColor(swatch);
-                      if (tool === 'erase') setTool('brush');
-                      setOpenTool(null);
-                    }}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="draw-tool">
-            <button
-              type="button"
-              className="draw-chip draw-chip-brush"
-              data-open={openTool === 'brush'}
-              aria-label="Кисть"
-              aria-expanded={openTool === 'brush'}
+              disabled={!hasArt}
               onClick={() => {
-                setTool('brush');
-                setOpenTool((current) => (current === 'brush' ? null : 'brush'));
+                const canvas = canvasRef.current;
+                if (canvas) onDone(canvas);
               }}
             >
-              <span style={{ width: brush * 0.7, height: brush * 0.7 }} />
+              <DrawToolIcon name="sparkle" />
+              <span>{doneLabel}</span>
             </button>
-            {openTool === 'brush' ? (
-              <div className="draw-pop draw-pop-brushes" role="listbox" aria-label="Размер кисти">
-                {BRUSHES.map((size) => (
-                  <button
-                    key={size}
-                    className="brush"
-                    data-active={tool === 'brush' && brush === size}
-                    aria-label={`Кисть ${size}`}
-                    onClick={() => {
-                      setBrush(size);
-                      setTool('brush');
-                      setOpenTool(null);
-                    }}
-                  >
-                    <span style={{ width: size * 0.8, height: size * 0.8 }} />
-                  </button>
-                ))}
-              </div>
-            ) : null}
           </div>
-
-          <button
-            type="button"
-            className="draw-chip draw-chip-fill"
-            data-active={tool === 'fill'}
-            aria-label="Заливка"
-            onClick={() => {
-              setTool('fill');
-              setOpenTool(null);
-            }}
-          >
-            <FillIcon color={color} />
-          </button>
-          <button
-            type="button"
-            className="draw-chip draw-chip-erase"
-            data-active={tool === 'erase'}
-            aria-label="Ластик"
-            onClick={() => {
-              setTool('erase');
-              setOpenTool(null);
-            }}
-          >
-            🩹
-          </button>
         </div>
-      </div>
-
-      <div className="sheet-footer">
-        <button
-          className="icon-button wide go"
-          disabled={!hasArt}
-          onClick={() => {
-            const canvas = canvasRef.current;
-            if (canvas) onDone(canvas);
-          }}
-        >
-          {doneLabel}
-        </button>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { assetUrl } from '../assetUrl';
 
-export type HudIconName = 'zoo' | 'draw' | 'feed' | 'photo' | 'roster';
+export type HudIconName = 'zoo' | 'draw' | 'feed' | 'photo' | 'roster' | 'build';
 
 /** Clay pictures on the zoo buttons so a pre-reader can pick by sight. */
 export function HudIcon({ name }: { name: HudIconName }) {

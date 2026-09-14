@@ -18,6 +18,12 @@ zooo.fun {
 		header -Vary
 	}
 
+	handle /mail* {
+		root * /opt/zoofun-web/public
+		file_server
+		header Cache-Control "public, max-age=604800"
+	}
+
 	handle /staff* {
 		reverse_proxy 127.0.0.1:8000
 	}

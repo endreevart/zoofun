@@ -6,7 +6,9 @@ type ZooResponse = {
   creatures: StoredCreature[];
 };
 
-const PULL_MS = 4000;
+/** Family zoos carry drawing stills; 4s aborted a 40MB pull. */
+const PULL_MS = 120_000;
+const PUSH_MS = 60_000;
 
 export type CloudZoo = {
   childId: string;
@@ -39,7 +41,7 @@ export async function pullCloudZoo(): Promise<CloudZoo | null> {
 export async function pushCloudZoo(creatures: StoredCreature[]): Promise<void> {
   if (!parentToken()) return;
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 8000);
+  const timer = window.setTimeout(() => controller.abort(), PUSH_MS);
   try {
     await fetch(`${API_BASE}/v1/zoo`, {
       method: 'PUT',
@@ -55,7 +57,7 @@ export async function pushCloudZoo(creatures: StoredCreature[]): Promise<void> {
 export async function upsertCloudCreature(record: StoredCreature): Promise<void> {
   if (!parentToken()) return;
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 8000);
+  const timer = window.setTimeout(() => controller.abort(), PUSH_MS);
   try {
     await fetch(`${API_BASE}/v1/zoo/creatures/${encodeURIComponent(record.spec.id)}`, {
       method: 'PUT',

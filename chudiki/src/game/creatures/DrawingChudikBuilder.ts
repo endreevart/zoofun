@@ -18,7 +18,7 @@ export async function preloadMeshyModel(url: string): Promise<boolean> {
 
 async function loadMeshyGltf(url: string) {
   let last: unknown;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     try {
       return await meshyLoader.loadAsync(url);
     } catch (error) {

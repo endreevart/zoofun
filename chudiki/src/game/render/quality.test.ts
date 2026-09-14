@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { settingsFromHints, type QualityHints } from './quality.ts';
+import {
+  lookForHeavyIsland,
+  lookForShell,
+  settingsFromHints,
+  type QualityHints,
+} from './quality.ts';
 
 const desktop: QualityHints = {
   coarsePointer: false,
@@ -33,22 +38,42 @@ assert.equal(desk.tier, 'high');
 assert.equal(desk.bloom, true);
 assert.equal(desk.shadows, true);
 assert.equal(desk.pixelRatio, 1.5);
+assert.equal(desk.composerHalfFloat, true);
+assert.equal(desk.composerSamples, 0);
+assert.equal(desk.maxFps, 0);
 
 const phone = settingsFromHints(iphone);
 assert.equal(phone.tier, 'low');
 assert.equal(phone.bloom, false);
 assert.equal(phone.shafts, false);
 assert.equal(phone.shadows, true);
-assert.equal(phone.softShadows, true, 'PCFSoft is cheap and hides blocky edges');
-assert.equal(phone.antialias, true);
-assert.equal(phone.pixelRatio, 2);
+assert.equal(phone.softShadows, false, 'PCFSoft plus a 2048 map is the iPhone hitch');
+assert.equal(phone.antialias, false, 'canvas MSAA is unused once PostFx owns the frame');
+assert.equal(phone.pixelRatio, 1.25);
+assert.equal(phone.shadowMapSize, 1024);
+assert.equal(phone.composerHalfFloat, false, 'HalfFloat MSAA targets go black on iOS');
+assert.equal(phone.composerSamples, 0);
+assert.equal(phone.maxFps, 30);
+assert.equal(phone.grassReceivesShadow, false);
 assert.ok(phone.grassStep > desk.grassStep);
 assert.ok(phone.grassBlades < desk.grassBlades);
 
+const safari = settingsFromHints({ ...iphone, deviceMemory: undefined });
+assert.equal(safari.tier, 'low');
+assert.equal(safari.pixelRatio, 1.25);
+
 const forcedLow = settingsFromHints(desktop, 'low');
 assert.equal(forcedLow.tier, 'low');
+assert.equal(forcedLow.composerHalfFloat, false);
 const forcedHigh = settingsFromHints(iphone, 'high');
 assert.equal(forcedHigh.tier, 'high');
+
+const recovered = settingsFromHints(desktop, 'high', true);
+assert.equal(recovered.tier, 'low');
+assert.equal(recovered.shadows, false);
+assert.equal(recovered.pixelRatio, 1);
+assert.equal(recovered.composerHalfFloat, false);
+assert.equal(recovered.maxFps, 30);
 
 const tablet = settingsFromHints(ipad);
 assert.equal(tablet.tier, 'high');
@@ -57,3 +82,33 @@ assert.equal(tablet.bloom, true);
 
 const saver = settingsFromHints({ ...desktop, saveData: true });
 assert.equal(saver.tier, 'low');
+assert.equal(saver.pixelRatio, 1.25);
+
+const heavy = lookForHeavyIsland(desk);
+assert.equal(heavy.gtao, false);
+assert.equal(heavy.bloom, false);
+assert.equal(heavy.shafts, false);
+assert.equal(heavy.pixelRatio, 1);
+assert.ok(heavy.shadowMapSize <= 1024);
+assert.equal(heavy.softShadows, false);
+assert.equal(desk.bloom, true);
+assert.equal(desk.softShadows, true);
+
+const gardenPhone = lookForShell(phone, false);
+assert.equal(gardenPhone.pixelRatio, 1.25);
+assert.equal(gardenPhone.composerHalfFloat, false);
+assert.equal(gardenPhone.softShadows, false);
+
+const gardenDesk = lookForShell(desk, false);
+assert.equal(gardenDesk.bloom, true);
+assert.equal(gardenDesk.pixelRatio, 1.5);
+
+const meadowDesk = lookForShell(desk, true);
+assert.equal(meadowDesk.bloom, false);
+assert.equal(meadowDesk.pixelRatio, 1);
+assert.equal(meadowDesk.shadowMapSize, 1024);
+assert.equal(meadowDesk.softShadows, true);
+
+const meadowPhone = lookForShell(phone, true);
+assert.equal(meadowPhone.softShadows, true);
+assert.equal(gardenPhone.softShadows, false);

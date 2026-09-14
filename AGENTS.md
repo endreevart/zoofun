@@ -31,15 +31,15 @@ If code and documentation disagree, stop and surface the mismatch. Do not silent
 
 ## Non-negotiable constraints
 
-- Preserve the child drawing's identity over visual beautification.
+- Preserve the child drawing's identity over visual beautification. A real pet photo keeps that animal's silhouette (D-025).
 - Never place OpenRouter, ElevenLabs, or storage credentials in the client.
 - Never send names, voice samples, precise location, contacts, or other child PII to AI providers.
 - Existing animals must remain usable offline after their assets have been cached.
 - Generation jobs are asynchronous, idempotent, retryable, and observable.
 - A partially downloaded or invalid creature must never appear in the zoo.
-- Web commerce is T-Bank packs and a parent credit ledger (D-016). No StoreKit, subscriptions, or extra worlds.
+- Web commerce is T-Bank packs of 1/5/10/15/20 and a parent credit ledger (D-016, D-024), plus D-020 / D-021 construction copies (`world_diy_garden`, `world_diy_meadow`, `world_diy_grove`). A later island kind needs assets. No StoreKit or subscriptions.
 - MCP is development tooling, not an application runtime dependency.
-- Do not add friends, chat, public content, leagues, or automatic full-3D generation to this pilot.
+- Do not add friends, chat, leagues, or automatic full-3D generation to this pilot. Anonymized garden postcards may appear on the marketing site (D-022); original drawings stay private.
 - Compilation without visual and runtime verification is not done.
 
 ## Destructive and external actions

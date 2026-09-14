@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlalchemy import func, select
 
-from app.accounts.creatures import without_residents
+from app.accounts.creatures import apply_creature_flags, persist_inline_stills, without_residents
 from app.persistence.db import session
 from app.persistence.models import (
     ChildRow,
@@ -88,14 +88,15 @@ def import_accounts_json(path: Path) -> int:
                 spec = record.get("spec") if isinstance(record, dict) else None
                 if not isinstance(spec, dict) or not isinstance(spec.get("id"), str):
                     continue
-                db.add(
-                    CreatureRow(
-                        child_id=str(child_id),
-                        spec_id=spec["id"],
-                        name=_creature_name(record),
-                        payload=record,
-                    )
+                row = CreatureRow(
+                    child_id=str(child_id),
+                    spec_id=spec["id"],
+                    name=_creature_name(record),
+                    payload=record,
                 )
+                persist_inline_stills(row)
+                apply_creature_flags(row)
+                db.add(row)
     logger.info("imported parents from json count=%s", imported)
     return imported
 

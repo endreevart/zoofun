@@ -120,7 +120,7 @@ export function HatchPuzzle({
         <button className="icon-button" type="button" onClick={onBack} aria-label="Назад">
           ⬅️
         </button>
-        <p className="mg-lead">{solved ? 'Собрал!' : `Собери: ${name ?? 'чудик'}`}</p>
+        <p className="mg-lead">{solved ? 'Собрал!' : `Собери: ${name ?? 'зуфуньчик'}`}</p>
         <span className="puzzle-count">
           {placed.size}/{pieces.length}
         </span>

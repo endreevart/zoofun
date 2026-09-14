@@ -35,13 +35,14 @@ If the API host cannot reach OpenRouter or Tripo (typical for a server in RU), s
 Parent email login for the public website:
 
 ```text
-POST /v1/auth/register
-POST /v1/auth/login
+POST /v1/auth/email/start
+POST /v1/auth/email/verify
 GET  /v1/auth/me
 POST /v1/auth/logout
+GET  /v1/auth/oauth/yandex/start
 ```
 
-Accounts persist in PostgreSQL (local default is `backend/.data/zoo.sqlite`). Schema changes go through Alembic (`uv run alembic upgrade head`). Passwords are hashed. A child record holds only a nickname derived from the email local-part, never a legal name. Operator CRUD is SQLAdmin at `/staff`.
+Accounts persist in PostgreSQL (local default is `backend/.data/zoo.sqlite`). Schema changes go through Alembic (`uv run alembic upgrade head`). Login codes are hashed and expire. In development without SMTP they go to an in-process outbox. Production sends from `info@zooo.fun` through Mail.ru (`SMTP_HOST=smtp.mail.ru`, app password). A child record holds only a nickname derived from the email local-part, never a legal name. Operator CRUD is SQLAdmin at `/staff`.
 
 Family zoo (the child's own drawings) for a signed-in child:
 
@@ -49,6 +50,7 @@ Family zoo (the child's own drawings) for a signed-in child:
 GET    /v1/zoo
 PUT    /v1/zoo
 PUT    /v1/zoo/creatures/{id}
+GET    /v1/zoo/creatures/{id}/portrait
 DELETE /v1/zoo/creatures/{id}
 ```
 

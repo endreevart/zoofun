@@ -7,11 +7,16 @@
 One pass only. A second collapse on the same file tears UVs and leaves
 cracks in lily pads, arches and anything thin.
 Hero props want --ratio 0.035–0.05 (~80–150k faces). Do not stack 0.025 then 0.4.
+Thin lawns (meadow isle, garden beds) cannot take a hard COLLAPSE: it punches
+holes. Use --ratio 1 to keep the mesh and only shrink textures.
+Voxel cubes want --planar 8, not COLLAPSE: collapse 0.028 tears the cubes
+apart, planar merges coplanar faces and keeps the silhouette.
 """
 
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -23,7 +28,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("glb", type=Path)
     parser.add_argument("--ratio", type=float, default=0.018)
+    parser.add_argument(
+        "--planar",
+        type=float,
+        default=0,
+        help="If > 0, PLANAR dissolve at this many degrees instead of COLLAPSE.",
+    )
     parser.add_argument("--max-image", type=int, default=1024)
+    parser.add_argument(
+        "--no-recalc-normals",
+        action="store_true",
+        help="Keep authoring normals. Recalc on a Meshy shell flips lawns.",
+    )
     parser.add_argument("--out", type=Path)
     return parser.parse_args(argv)
 
@@ -38,13 +54,24 @@ def main() -> None:
 
     meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
     before = sum(len(obj.data.polygons) for obj in meshes)
+    skip_decimate = args.ratio >= 0.999 and args.planar <= 0
     for obj in meshes:
         bpy.context.view_layer.objects.active = obj
         obj.select_set(True)
-        dec = obj.modifiers.new(name="web_lod", type="DECIMATE")
-        dec.decimate_type = "COLLAPSE"
-        dec.ratio = args.ratio
-        bpy.ops.object.modifier_apply(modifier=dec.name)
+        if not skip_decimate:
+            dec = obj.modifiers.new(name="web_lod", type="DECIMATE")
+            if args.planar > 0:
+                dec.decimate_type = "DISSOLVE"
+                dec.angle_limit = math.radians(args.planar)
+            else:
+                dec.decimate_type = "COLLAPSE"
+                dec.ratio = args.ratio
+            bpy.ops.object.modifier_apply(modifier=dec.name)
+        if not args.no_recalc_normals:
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_all(action="SELECT")
+            bpy.ops.mesh.normals_make_consistent(inside=False)
+            bpy.ops.object.mode_set(mode="OBJECT")
         obj.select_set(False)
     after = sum(len(obj.data.polygons) for obj in meshes)
 

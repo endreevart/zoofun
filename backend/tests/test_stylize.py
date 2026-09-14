@@ -9,14 +9,21 @@ from app.main import app
 from app.providers.openrouter import (
     CONTOUR_PROMPT,
     DEFAULT_IMAGE_MODEL,
+    PET_POSTCARD_PROMPT,
+    PET_SILLY_PROMPT,
+    POSTCARD_PROMPT,
     STYLIZE_PROMPT,
     CreatureProfile,
     ProviderError,
+    normalize_source_kind,
     outbound_proxy,
     parse_image_response,
     parse_profile_response,
+    postcard_prompt_for,
+    profile_prompt_for,
     provider_error_from_http,
     stylize_drawing,
+    stylize_prompt_for,
 )
 from app.settings import Settings
 
@@ -38,6 +45,28 @@ def test_production_still_is_flux_contour() -> None:
     assert "trace the child's drawing" in text
     assert "a bird stays that bird" in text
     assert "clay-and-felt" in text
+
+
+def test_pet_prompt_keeps_silhouette_and_silliness() -> None:
+    text = PET_SILLY_PROMPT.lower()
+    assert "photograph of one real domestic animal" in text
+    assert "not a child's drawing" in text
+    assert "exact silhouette" in text
+    assert "clay-and-felt" in text
+    assert "not a clay-and-felt figurine" in text
+    assert "mismatched oversized cartoon eyes" in text
+    assert "do not add hats" in text
+    assert "transparent background" in text
+    assert "three-quarter" in text
+    assert stylize_prompt_for("drawing") is None
+    assert stylize_prompt_for("pet") == PET_SILLY_PROMPT
+    assert stylize_prompt_for("other") is None
+    assert postcard_prompt_for("drawing") == POSTCARD_PROMPT
+    assert postcard_prompt_for("pet") == PET_POSTCARD_PROMPT
+    assert "child's drawing" in profile_prompt_for("drawing").lower()
+    assert "real pet" in profile_prompt_for("pet").lower()
+    assert normalize_source_kind("PET") == "pet"
+    assert normalize_source_kind(None) == "drawing"
 
 
 def test_production_mesh_is_tripo_30_then_25() -> None:
@@ -189,6 +218,49 @@ async def test_stylize_paints_garden_postcard_quietly(
     assert served.status_code == 200
     assert served.content == TINY_PNG
     assert jobs.postcard_path(settings, "job-postcard").is_file()
+
+
+@pytest.mark.asyncio
+async def test_stylize_job_uses_pet_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from app.providers.moderation import ModerationVerdict
+    from app.providers.openrouter import StyledImage
+
+    raw = base64.b64encode(TINY_PNG).decode("ascii")
+    prompts: list[str | None] = []
+
+    async def fake_stylize(_settings, _image, _kind, prompt=None, **_kwargs):
+        prompts.append(prompt)
+        return StyledImage(png_base64=raw, media_type="image/png", model="stub")
+
+    async def pet_ok(*_args, **_kwargs) -> ModerationVerdict:
+        return ModerationVerdict(allow=True, reason="ok", source="pet")
+
+    settings = Settings(
+        openrouter_api_key="test-key", meshy_api_key="", storage_local_root=str(tmp_path)
+    )
+    monkeypatch.setattr("app.api.stylize.get_settings", lambda: settings)
+    monkeypatch.setattr("app.generation.jobs.get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.stylize.moderate_drawing", pet_ok)
+    monkeypatch.setattr("app.generation.jobs.stylize_drawing", fake_stylize)
+    monkeypatch.setattr("app.generation.jobs.profile_drawing", _fake_profile)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post(
+            "/v1/generation/stylize",
+            files={"file": ("pet.jpg", TINY_PNG, "image/png")},
+            headers={"Idempotency-Key": "job-pet"},
+        )
+        assert created.status_code == 202
+        await jobs.run_job("job-pet")
+        ready = await client.get("/v1/generation/stylize/job-pet")
+
+    assert ready.json()["status"] == "ready"
+    assert prompts == [PET_SILLY_PROMPT, PET_POSTCARD_PROMPT]
+    stored = await jobs.get_job("job-pet")
+    assert stored is not None
+    assert stored.source_kind == "pet"
 
 
 @pytest.mark.asyncio
@@ -417,6 +489,45 @@ async def test_interrupted_media_is_reenqueued_by_sweep(
 
     assert recovered == 1
     assert redispatched == ["job-media"]
+
+
+@pytest.mark.asyncio
+async def test_failed_mesh_is_reenqueued_by_sweep(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An old failed mesh stays a still; the sweep must try the GLB again."""
+    import time as _time
+
+    from app.persistence.db import session
+    from app.persistence.models import StylizeJobRow
+
+    redispatched: list[str] = []
+
+    class FakeTask:
+        @staticmethod
+        def delay(job_id: str) -> None:
+            redispatched.append(job_id)
+
+    monkeypatch.setenv("USE_CELERY", "true")
+    from app.settings import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr("app.worker.run_stylize_job", FakeTask)
+
+    await jobs.create_job(TINY_PNG, job_id="job-mesh-again")
+    with session() as db:
+        row = db.get(StylizeJobRow, "job-mesh-again")
+        row.status = "ready"
+        row.image_base64 = "still"
+        row.mesh_status = "failed"
+        row.postcard_status = "ready"
+        row.updated_at = _time.time() - jobs.STALE_MEDIA_SECONDS - 5
+
+    recovered = jobs.recover_stale_jobs()
+    get_settings.cache_clear()
+
+    assert recovered == 1
+    assert redispatched == ["job-mesh-again"]
 
 
 @pytest.mark.asyncio

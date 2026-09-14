@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { assetUrl } from '../../assetUrl';
+import { quality } from '../render/quality';
 import { stylize, trackRoughness } from '../render/stylized';
 import { dressLotusWater } from '../world/cartoonWater';
+import { disposeObjectResources, materialTextures, TextureDisposer } from './resourceDisposal';
 
 /**
  * Loads the Idyllic Fantasy Nature assets exported by
@@ -42,6 +44,57 @@ const EXTRA_MODELS = [
   { name: 'garden-gate', path: `${assetUrl('models/props/garden-gate.glb')}?feet=1` },
   { name: 'mossflower-hollow', path: assetUrl('models/props/mossflower-hollow.glb') },
   { name: 'wooden-lantern', path: assetUrl('models/props/wooden-lantern.glb') },
+  {
+    name: 'whimsy-isle',
+    path: `${assetUrl('models/props/meadow/whimsy-isle.glb')}?v=raw`,
+    mobilePath: `${assetUrl('models/props/meadow/whimsy-isle-mobile.glb')}?v=mobile4`,
+  },
+  { name: 'whimsywood-tree', path: assetUrl('models/props/meadow/whimsywood-tree.glb') },
+  { name: 'blossom-tree', path: assetUrl('models/props/meadow/blossom-tree.glb') },
+  { name: 'lantern-leaf-tree', path: assetUrl('models/props/meadow/lantern-leaf-tree.glb') },
+  { name: 'luminous-canopy', path: `${assetUrl('models/props/meadow/luminous-canopy.glb')}?v=petals` },
+  { name: 'whimsy-bloom-coral', path: `${assetUrl('models/props/meadow/whimsy-bloom-coral.glb')}?v=petals` },
+  { name: 'blossomback-tortoise', path: `${assetUrl('models/props/meadow/blossomback-tortoise.glb')}?v=petals` },
+  { name: 'pebble-blossom', path: `${assetUrl('models/props/meadow/pebble-blossom.glb')}?v=petals` },
+  { name: 'moonlit-glow', path: `${assetUrl('models/props/meadow/moonlit-glow.glb')}?v=petals` },
+  { name: 'spiral-garden', path: `${assetUrl('models/props/meadow/spiral-garden.glb')}?v=petals` },
+  { name: 'acorn-cottage', path: assetUrl('models/props/meadow/acorn-cottage.glb') },
+  { name: 'mushroom-lantern', path: assetUrl('models/props/meadow/mushroom-lantern.glb') },
+  {
+    name: 'floating-grassland',
+    path: `${assetUrl('models/props/grove/floating-grassland.glb')}?v=raw`,
+    mobilePath: `${assetUrl('models/props/grove/floating-grassland-mobile.glb')}?v=mobile1`,
+  },
+  {
+    name: 'voxel-tree',
+    path: `${assetUrl('models/props/grove/voxel-tree.glb')}?v=lod`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-tree-mobile.glb')}?v=mobile1`,
+  },
+  {
+    name: 'voxel-blossom-tree',
+    path: `${assetUrl('models/props/grove/voxel-blossom-tree.glb')}?v=lod`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-blossom-tree-mobile.glb')}?v=mobile1`,
+  },
+  {
+    name: 'voxel-evergreen',
+    path: `${assetUrl('models/props/grove/voxel-evergreen.glb')}?v=lod`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-evergreen-mobile.glb')}?v=mobile1`,
+  },
+  {
+    name: 'voxel-blossom-canopy',
+    path: `${assetUrl('models/props/grove/voxel-blossom-canopy.glb')}?v=lod`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-blossom-canopy-mobile.glb')}?v=mobile1`,
+  },
+  {
+    name: 'voxel-bloom-garden',
+    path: `${assetUrl('models/props/grove/voxel-bloom-garden.glb')}?v=lod`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-bloom-garden-mobile.glb')}?v=mobile1`,
+  },
+  {
+    name: 'voxel-verdant-garden',
+    path: `${assetUrl('models/props/grove/voxel-verdant-garden.glb')}?v=lod`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-verdant-garden-mobile.glb')}?v=mobile1`,
+  },
 ];
 
 type MaterialSpec = {
@@ -79,17 +132,33 @@ export class IdyllicLibrary {
   private manifest!: Manifest;
   private loader = new GLTFLoader();
   private inflight = new Map<string, Promise<void>>();
+  private ownedTextures = new Set<THREE.Texture>();
+  private textureDisposer = new TextureDisposer();
+  private controller = new AbortController();
+  private disposed = false;
+  private unlinkAbort?: () => void;
 
   static async load(
     onProgress?: (done: number, total: number) => void,
     preload: readonly string[] = ['floating-island'],
+    signal?: AbortSignal,
   ): Promise<IdyllicLibrary> {
     const library = new IdyllicLibrary();
-    const response = await fetch(`${MODEL_PATH}/manifest.json`);
-    if (!response.ok) throw new Error('[idyllic] manifest.json is missing; run export-idyllic-glb.py');
-    library.manifest = (await response.json()) as Manifest;
-    await library.ensureAll(preload, onProgress);
-    return library;
+    const abort = () => library.dispose();
+    signal?.addEventListener('abort', abort, { once: true });
+    library.unlinkAbort = () => signal?.removeEventListener('abort', abort);
+    if (signal?.aborted) library.dispose();
+    try {
+      const response = await fetch(`${MODEL_PATH}/manifest.json`, { signal: library.controller.signal });
+      if (!response.ok) throw new Error('[idyllic] manifest.json is missing; run export-idyllic-glb.py');
+      library.manifest = (await response.json()) as Manifest;
+      await library.ensureAll(preload, onProgress);
+      library.assertActive();
+      return library;
+    } catch (error) {
+      library.dispose();
+      throw error;
+    }
   }
 
   canLoad(name: string): boolean {
@@ -105,6 +174,7 @@ export class IdyllicLibrary {
     names: readonly string[],
     onProgress?: (done: number, total: number) => void,
   ): Promise<void> {
+    this.assertActive();
     const wanted = [...new Set(names)].filter((name) => this.canLoad(name));
     let done = 0;
     const batchSize = 8;
@@ -114,7 +184,7 @@ export class IdyllicLibrary {
           try {
             await this.ensure(name);
           } finally {
-            onProgress?.(++done, wanted.length);
+            if (!this.disposed) onProgress?.(++done, wanted.length);
           }
         }),
       );
@@ -122,6 +192,7 @@ export class IdyllicLibrary {
   }
 
   async ensure(name: string): Promise<void> {
+    this.assertActive();
     if (this.models.has(name)) return;
     const pending = this.inflight.get(name);
     if (pending) return pending;
@@ -132,17 +203,40 @@ export class IdyllicLibrary {
 
   private async loadOne(name: string): Promise<void> {
     const extra = EXTRA_MODELS.find((item) => item.name === name);
+    let scene: THREE.Object3D | undefined;
     try {
-      if (extra) {
-        const gltf = await this.loader.loadAsync(extra.path);
-        this.models.set(name, this.flattenPacked(name, gltf.scene));
-        return;
-      }
-      const gltf = await this.loader.loadAsync(`${MODEL_PATH}/${name}.glb`);
-      this.models.set(name, this.flatten(name, gltf.scene));
+      // GLTFLoader.loadAsync does not expose cancellation. Own the network
+      // request so a world switch stops fetching a 100 MB shell immediately.
+      const path = extra ? extraModelPath(extra) : `${MODEL_PATH}/${name}.glb`;
+      const response = await fetch(path, { signal: this.controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${path}`);
+      const buffer = await response.arrayBuffer();
+      this.assertActive();
+      const gltf = await this.loader.parseAsync(buffer, path.slice(0, path.lastIndexOf('/') + 1));
+      scene = gltf.scene;
+      this.assertActive();
+      // Flattening clones geometry/materials but shares their maps. Keep all
+      // embedded maps alive until the library's last consumer is gone.
+      scene.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (!mesh.material) return;
+        for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          for (const texture of materialTextures(material)) this.ownedTextures.add(texture);
+        }
+      });
+      this.models.set(name, extra ? this.flattenPacked(name, scene) : this.flatten(name, scene));
     } catch (error) {
+      if (this.disposed) throw this.controller.signal.reason;
       console.warn(`[idyllic] could not load ${name}`, error);
+    } finally {
+      if (scene) {
+        disposeObjectResources(scene, { textures: this.disposed, textureDisposer: this.textureDisposer });
+      }
     }
+  }
+
+  private assertActive() {
+    this.controller.signal.throwIfAborted();
   }
 
   get(name: string): IdyllicModel {
@@ -158,6 +252,7 @@ export class IdyllicLibrary {
 
   /** A ground/structure texture from the manifest, e.g. 'grass_albedo'. */
   groundTexture(key: string, repeat = 1): THREE.Texture | null {
+    this.assertActive();
     const file = this.manifest.ground[key];
     if (!file) return null;
     const texture = this.texture(file, key.endsWith('_normal'));
@@ -166,6 +261,7 @@ export class IdyllicLibrary {
     clone.wrapS = THREE.RepeatWrapping;
     clone.wrapT = THREE.RepeatWrapping;
     clone.repeat.set(repeat, repeat);
+    this.ownedTextures.add(clone);
     return clone;
   }
 
@@ -191,6 +287,7 @@ export class IdyllicLibrary {
 
   /** The shared material for a named manifest entry, e.g. 'idy_bridge_wood'. */
   material(name: string): THREE.MeshStandardMaterial {
+    this.assertActive();
     const existing = this.materials.get(name);
     if (existing) return existing;
 
@@ -246,10 +343,13 @@ export class IdyllicLibrary {
     const cached = this.textures.get(file);
     if (cached) return cached;
 
-    const texture = new THREE.TextureLoader().load(`${TEXTURE_PATH}/${file}`);
+    const texture = new THREE.TextureLoader().load(`${TEXTURE_PATH}/${file}`, (loaded) => {
+      if (this.disposed) this.textureDisposer.dispose(loaded);
+    });
     if (!nonColor) texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 4;
     this.textures.set(file, texture);
+    this.ownedTextures.add(texture);
     return texture;
   }
 
@@ -348,15 +448,81 @@ export class IdyllicLibrary {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.controller.abort();
+    this.unlinkAbort?.();
+    this.unlinkAbort = undefined;
     for (const model of this.models.values()) {
       for (const primitive of model.primitives) primitive.geometry.dispose();
     }
     for (const material of this.materials.values()) material.dispose();
-    for (const texture of this.textures.values()) texture.dispose();
+    for (const texture of this.ownedTextures) this.textureDisposer.dispose(texture);
     this.models.clear();
     this.materials.clear();
     this.textures.clear();
+    this.ownedTextures.clear();
+    this.inflight.clear();
   }
+}
+
+type ExtraModel = (typeof EXTRA_MODELS)[number];
+
+const ROOT_MOBILE_MODELS = new Set([
+  'giant-tree',
+  'rustic-bench',
+  'red-mushroom',
+  'sunlit-canopy',
+  'verdant-glow',
+  'mosslit-stones',
+  'garden-blooms',
+  'neon-leaves',
+  'vibrant-bloom',
+  'blooming-bush',
+  'harvest-cradle',
+  'emerald-cascade',
+  'wooden-fence',
+  'lotus-pond',
+  'timber-bridge',
+  'mossy-burrow',
+  'garden-gate',
+  'mossflower-hollow',
+  'wooden-lantern',
+]);
+
+const MEADOW_MOBILE_MODELS = new Set([
+  'whimsywood-tree',
+  'blossom-tree',
+  'lantern-leaf-tree',
+  'luminous-canopy',
+  'whimsy-bloom-coral',
+  'blossomback-tortoise',
+  'pebble-blossom',
+  'moonlit-glow',
+  'spiral-garden',
+  'acorn-cottage',
+  'mushroom-lantern',
+]);
+
+/** Mobile files keep the same texture and silhouette with phone-sized geometry. */
+function extraModelPath(extra: ExtraModel): string {
+  if (quality().tier !== 'low') return extra.path;
+  let mobilePath = 'mobilePath' in extra ? extra.mobilePath : undefined;
+  if (!mobilePath && ROOT_MOBILE_MODELS.has(extra.name)) {
+    mobilePath = `${assetUrl(`models/props/mobile/${extra.name}.glb`)}?v=mobile1`;
+  }
+  if (!mobilePath && MEADOW_MOBILE_MODELS.has(extra.name)) {
+    mobilePath = `${assetUrl(`models/props/meadow/mobile/${extra.name}.glb`)}?v=mobile1`;
+  }
+  if (!mobilePath) return extra.path;
+  try {
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('assetLod') === 'full') {
+      return extra.path;
+    }
+  } catch {
+    /* SSR/tests */
+  }
+  return mobilePath;
 }
 
 /**

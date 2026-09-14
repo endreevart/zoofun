@@ -2,17 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { kindById, type ChudikSpec } from '../game/creatures/ChudikSpec';
 import { isParkResidentId } from '../game/creatures/residents';
 import { VoiceRecorder } from '../game/audio/VoiceRecorder';
+import { CreatureMenuIcon, type CreatureMenuIconName } from './CreatureMenuIcon';
 import { ParentGate } from './ParentGate';
 
 /**
- * A creature's own page: hear its voice, record a new one, find it in the zoo.
- * Deleting is behind a parent gate.
+ * Extra settings for one creature: voice, find, walk, move, or send home.
+ * Opened from the gear on the tap tray (the long press still works too).
  */
 
 const MAX_RECORDING_SECONDS = 5;
 
 export type CreatureCardProps = {
   spec: ChudikSpec;
+  pic: string | null;
   hasRecording: boolean;
   onClose(): void;
   onPlayVoice(): void;
@@ -21,10 +23,14 @@ export type CreatureCardProps = {
   onSaveRecording(recording: { bytes: ArrayBuffer; mimeType: string }): void;
   onClearRecording(): void;
   onDelete(): void;
+  onMove?: () => void;
+  onGardenQuiet?(quiet: boolean): void;
+  onSpeak?(id: 'record'): void;
 };
 
 export function CreatureCard({
   spec,
+  pic,
   hasRecording,
   onClose,
   onPlayVoice,
@@ -33,16 +39,28 @@ export function CreatureCard({
   onSaveRecording,
   onClearRecording,
   onDelete,
+  onMove,
+  onGardenQuiet,
+  onSpeak,
 }: CreatureCardProps) {
   const kind = kindById(spec.kindId);
   const recorderRef = useRef<VoiceRecorder | null>(null);
+  const gardenQuietRef = useRef(onGardenQuiet);
+  gardenQuietRef.current = onGardenQuiet;
   const [recording, setRecording] = useState(false);
   const [countdown, setCountdown] = useState(MAX_RECORDING_SECONDS);
   const [problem, setProblem] = useState<string | null>(null);
   const [showGate, setShowGate] = useState(false);
+  const park = isParkResidentId(spec.id);
 
   // Never leave the microphone open behind us.
-  useEffect(() => () => recorderRef.current?.cancel(), []);
+  useEffect(
+    () => () => {
+      recorderRef.current?.cancel();
+      gardenQuietRef.current?.(false);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!recording) return;
@@ -58,11 +76,14 @@ export function CreatureCard({
 
   const startRecording = async () => {
     setProblem(null);
+    onSpeak?.('record');
+    onGardenQuiet?.(true);
     const recorder = new VoiceRecorder();
     recorderRef.current = recorder;
     const state = await recorder.start();
 
     if (state !== 'recording') {
+      onGardenQuiet?.(false);
       setProblem(
         state === 'denied'
           ? 'Микрофон не разрешён. Разреши доступ в настройках браузера.'
@@ -79,6 +100,7 @@ export function CreatureCard({
   const stopRecording = async () => {
     const recorder = recorderRef.current;
     setRecording(false);
+    onGardenQuiet?.(false);
     if (!recorder) return;
 
     const result = await recorder.stop();
@@ -92,86 +114,114 @@ export function CreatureCard({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="card" onClick={(event) => event.stopPropagation()}>
-        <div className="card-head">
-          <span className="emoji">{kind.emoji}</span>
-          <div style={{ flex: 1 }}>
-            <h2>{spec.name}</h2>
-            <p>
-              {kind.label}
-              {spec.origin === 'drawing' ? ' · из твоего рисунка' : ' · живёт тут давно'}
-            </p>
-          </div>
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть">
-            ✖️
-          </button>
-        </div>
-
-        <div className="card-actions">
-          <button className="action" onClick={onPlayVoice}>
-            <span className="icon">🔊</span>
-            <span>{hasRecording ? 'Послушать твой звук' : 'Послушать голос'}</span>
-          </button>
-
-          {recording ? (
-            <button className="action recording" onClick={() => void stopRecording()}>
-              <span className="icon">⏹️</span>
-              <span>Стоп · {countdown.toFixed(1)} с</span>
-            </button>
+    <>
+      <button className="creature-sheet-scrim" type="button" aria-label="Закрыть" onClick={onClose} />
+      <div
+        className="creature-sheet"
+        role="dialog"
+        aria-label={`Настройки ${spec.name}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="creature-sheet-head">
+          {pic ? (
+            <img className="creature-sheet-face" src={pic} alt="" />
           ) : (
-            <button className="action" onClick={() => void startRecording()}>
-              <span className="icon">🎤</span>
-              <span>{hasRecording ? 'Записать заново' : 'Записать свой звук'}</span>
-            </button>
+            <span className="creature-sheet-face is-emoji">{kind.emoji}</span>
           )}
+          <div className="creature-sheet-titles">
+            <h2>{spec.name}</h2>
+            <p>Настройки зуфуньчика</p>
+          </div>
+          <button className="pilot-tool" type="button" onClick={onClose} aria-label="Закрыть">
+            <CreatureMenuIcon name="close" />
+          </button>
+        </div>
 
-          {hasRecording && !recording && (
-            <button className="action" onClick={onClearRecording}>
-              <span className="icon">↩️</span>
-              <span>Вернуть его родной голос</span>
-            </button>
+        <p className="creature-sheet-label">Голос</p>
+        <div className="creature-sheet-group">
+          <SheetRow
+            icon="listen"
+            label={hasRecording ? 'Послушать твой звук' : 'Послушать голос'}
+            onClick={onPlayVoice}
+          />
+          {recording ? (
+            <SheetRow
+              icon="record"
+              label={`Стоп · ${countdown.toFixed(1)} с`}
+              onClick={() => void stopRecording()}
+              recording
+            />
+          ) : (
+            <SheetRow
+              icon="record"
+              label={hasRecording ? 'Записать заново' : 'Записать свой звук'}
+              onClick={() => void startRecording()}
+            />
           )}
+          {hasRecording && !recording ? (
+            <SheetRow icon="listen" label="Вернуть его родной голос" onClick={onClearRecording} />
+          ) : null}
+        </div>
 
-          <button className="action" onClick={onFind}>
-            <span className="icon">🔍</span>
-            <span>Найти в зоопарке</span>
-          </button>
-
-          <button className="action" onClick={onPilot}>
-            <span className="icon">🕹️</span>
-            <span>Вести от третьего лица</span>
-          </button>
-
-          {isParkResidentId(spec.id) ? null : (
-            <button className="action danger" onClick={() => setShowGate(true)}>
-              <span className="icon">👋</span>
-              <span>Отпустить домой</span>
-            </button>
+        <p className="creature-sheet-label">Управление</p>
+        <div className="creature-sheet-group">
+          <SheetRow icon="find" label="Найти в зоопарке" onClick={onFind} />
+          <SheetRow icon="lead" label="Вести от третьего лица" onClick={onPilot} />
+          {park || !onMove ? null : (
+            <SheetRow icon="move" label="Переместить в другой мир" onClick={onMove} />
           )}
         </div>
 
-        {problem && (
-          <p style={{ marginTop: 14, fontWeight: 800, color: '#c0392b' }}>{problem}</p>
+        {park ? null : (
+          <button className="creature-sheet-home" type="button" onClick={() => setShowGate(true)}>
+            <CreatureMenuIcon name="release" />
+            <span>Отпустить домой</span>
+          </button>
         )}
 
-        {recording && (
-          <p style={{ marginTop: 14, fontWeight: 800 }}>
-            Говори в микрофон — этот звук чудик будет издавать при нажатии.
+        {problem ? <p className="creature-sheet-problem">{problem}</p> : null}
+
+        {recording ? (
+          <p className="creature-sheet-hint">
+            Говори в микрофон — этот звук зуфуньчик будет издавать при нажатии.
           </p>
-        )}
-
-        {showGate && (
-          <ParentGate
-            question={`Отпустить ${spec.name} из зоопарка? Это навсегда.`}
-            onCancel={() => setShowGate(false)}
-            onPass={() => {
-              setShowGate(false);
-              onDelete();
-            }}
-          />
-        )}
+        ) : null}
       </div>
-    </div>
+
+      {showGate && (
+        <ParentGate
+          question={`Отпустить ${spec.name} из зоопарка? Это навсегда.`}
+          onCancel={() => setShowGate(false)}
+          onPass={() => {
+            setShowGate(false);
+            onDelete();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function SheetRow({
+  icon,
+  label,
+  onClick,
+  recording,
+}: {
+  icon: CreatureMenuIconName;
+  label: string;
+  onClick(): void;
+  recording?: boolean;
+}) {
+  return (
+    <button
+      className={`creature-sheet-row${recording ? ' is-recording' : ''}`}
+      type="button"
+      onClick={onClick}
+    >
+      <CreatureMenuIcon name={icon} className="creature-sheet-row-ico" />
+      <span>{label}</span>
+      <CreatureMenuIcon name="chevron" className="creature-sheet-chevron" />
+    </button>
   );
 }

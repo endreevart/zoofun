@@ -33,9 +33,13 @@ def _allow_drawings(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def _reset_rate_limits() -> None:
     """The in-process limiter must not bleed between tests."""
+    from app.accounts import otp
+    from app.mailer import reset_outbox
     from app import ratelimit
 
     ratelimit._local.clear()
+    otp.reset()
+    reset_outbox()
 
 
 @pytest.fixture(autouse=True)
@@ -56,8 +60,14 @@ def isolated_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TRIPO_API_KEY", "")
     monkeypatch.setenv("STUDIO3D_API_KEY", "")
     monkeypatch.setenv("FAL_API_KEY", "")
+    monkeypatch.setenv("YANDEX_CLIENT_ID", "")
+    monkeypatch.setenv("YANDEX_CLIENT_SECRET", "")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("SMTP_HOST", "")
+    monkeypatch.setenv("SMTP_USER", "")
     monkeypatch.delenv("MESH_PROVIDER", raising=False)
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'zoo.sqlite'}")
+    monkeypatch.setenv("STORAGE_LOCAL_ROOT", str(tmp_path / "assets"))
     get_settings.cache_clear()
     reset_engine()
     init_schema()

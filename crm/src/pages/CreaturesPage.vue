@@ -1,6 +1,11 @@
 <template>
   <div class="flex flex-col gap-6">
-    <CrmPageHeader title="Звери" subtitle="Картинки из рисунка. Письма родителям — позже" :count="visible.length">
+    <CrmPageHeader
+      title="Звери"
+      subtitle="По дате появления. Луг на плитке."
+      :count="total"
+      help="Плитки без исходного рисунка. Фильтры — картинка, нейросеть, 3D, луг. Зависшие яйца сверху."
+    >
       <template #actions>
         <div class="flex flex-wrap gap-2">
           <button
@@ -9,7 +14,7 @@
             type="button"
             class="crm-nav-pill-item"
             :class="{ 'is-active': filter === item.key }"
-            @click="filter = item.key"
+            @click="setFilter(item.key)"
           >
             {{ item.label }}
           </button>
@@ -17,70 +22,103 @@
       </template>
     </CrmPageHeader>
 
-    <div v-if="visible.length" class="crm-grid-bento-4">
-      <button
-        v-for="row in visible"
-        :key="`${row.child_id}:${row.spec_id}`"
-        type="button"
-        class="crm-tile creature-card"
-        @click="open = row"
-      >
-        <div class="creature-card-image">
-          <img v-if="row.has_image" :src="imageUrl(row)" :alt="row.name" />
-          <span v-else class="creature-card-empty">Нет картинки</span>
-        </div>
-        <div class="flex items-start justify-between gap-2">
-          <p class="crm-tile-title">{{ row.name }}</p>
-          <span v-if="row.painted" class="crm-tile-kicker">нейросеть</span>
-          <span v-else-if="row.has_model" class="crm-tile-kicker">3D</span>
-        </div>
-        <p class="crm-tile-meta">{{ row.parent_email }}</p>
-        <p class="crm-tile-meta">{{ formatDay(row.created_at) }}</p>
-      </button>
+    <CrmPanel
+      v-if="stuck.length"
+      title="Яйца без 3D-модели"
+      subtitle="Картинка есть, модель зависла или упала. Не рисунок ребёнка."
+      help="Больше 10 минут без модели. В сад такая не попадает. Нажмите — родитель."
+    >
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-muted">
+            <th class="py-2">Родитель</th>
+            <th>Задача</th>
+            <th>Сетка</th>
+            <th>Обновлено</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="row in stuck"
+            :key="row.id"
+            class="parent-row"
+            @click="openParent(row.parent_email)"
+          >
+            <td class="py-2">{{ row.parent_email || "—" }}</td>
+            <td>{{ row.id }}</td>
+            <td>{{ row.mesh_status }} · {{ row.status }}</td>
+            <td>{{ formatWhen(row.updated_at, true) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </CrmPanel>
+
+    <p v-if="loading" class="text-sm text-muted m-0">Загрузка…</p>
+    <div v-else-if="items.length" class="crm-grid-bento-4">
+      <CreatureTile
+        v-for="row in items"
+        :key="creatureKey(row)"
+        :row="row"
+        :ok="imageOk(row)"
+        @open="open = row"
+        @broken="markBroken(row)"
+      />
     </div>
-    <p v-else class="text-sm text-muted m-0">Пока нет зверей с таким фильтром.</p>
+    <p v-else class="text-sm text-muted m-0">Пока нет зверей за этот период с таким фильтром.</p>
+    <CrmPager v-model:offset="offset" :total="total" :rows="PAGE" />
 
     <Drawer v-model:visible="drawerOpen" :header="open?.name ?? 'Зверь'" position="right" class="!w-full md:!w-[28rem]">
       <div v-if="open" class="flex flex-col gap-4">
-        <div class="creature-card-image is-large">
-          <img v-if="open.has_image" :src="imageUrl(open)" :alt="open.name" />
-          <span v-else class="creature-card-empty">Нет картинки</span>
-        </div>
+        <CreatureTile :row="open" :ok="imageOk(open)" large preview @broken="markBroken(open)" />
         <p class="m-0"><span class="text-muted">Родитель</span><br />{{ open.parent_email }}</p>
         <p class="m-0"><span class="text-muted">Профиль</span><br />{{ open.child_nickname || "—" }}</p>
-        <p class="m-0"><span class="text-muted">Когда</span><br />{{ formatDay(open.created_at) }}</p>
+        <p class="m-0"><span class="text-muted">Когда</span><br />{{ formatWhen(open.created_at) }}</p>
+        <p class="m-0"><span class="text-muted">Луг</span><br />{{ open.lawn_title || "—" }}</p>
         <p class="m-0 text-sm text-muted">
-          {{ open.painted ? "Картинка после OpenRouter." : "Свой рисунок, без нейросети." }}
-          {{ open.has_model ? " Есть 3D-модель." : "" }}
+          {{ open.painted ? "Картинку чуть подчистили, силуэт ребёнка сохранён." : "Свой рисунок, как нарисовали." }}
         </p>
+        <CreatureModelLink :row="open" />
       </div>
     </Drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import Drawer from "primevue/drawer";
+import CreatureTile from "@/components/crm/CreatureTile.vue";
+import CreatureModelLink from "@/components/crm/CreatureModelLink.vue";
 import CrmPageHeader from "@/components/crm/CrmPageHeader.vue";
-import { crmApi, readToken, type CreatureRow } from "@/lib/api";
+import CrmPager from "@/components/crm/CrmPager.vue";
+import CrmPanel from "@/components/crm/CrmPanel.vue";
+import { crmApi, type CreatureKind, type CreatureRow, type StuckJob } from "@/lib/api";
+import { creatureKey } from "@/lib/creatureImage";
+import { formatWhen } from "@/lib/when";
+import { usePeriodStore } from "@/stores/period";
 
+const PAGE = 24;
+const period = usePeriodStore();
+const router = useRouter();
 const items = ref<CreatureRow[]>([]);
-const filter = ref<"all" | "image" | "painted" | "model">("all");
+const stuck = ref<StuckJob[]>([]);
+const total = ref(0);
+const offset = ref(0);
+const loading = ref(true);
+const filter = ref<CreatureKind>("all");
 const open = ref<CreatureRow | null>(null);
+const broken = ref(new Set<string>());
 
 const filters = [
   { key: "all" as const, label: "Все" },
   { key: "image" as const, label: "С картинкой" },
   { key: "painted" as const, label: "Нейросеть" },
   { key: "model" as const, label: "3D" },
+  { key: "garden" as const, label: "Остров" },
+  { key: "meadow" as const, label: "Луг" },
+  { key: "grove" as const, label: "Куболесье" },
+  { key: "diy" as const, label: "Сборка" },
 ];
-
-const visible = computed(() => {
-  if (filter.value === "image") return items.value.filter((row) => row.has_image);
-  if (filter.value === "painted") return items.value.filter((row) => row.painted);
-  if (filter.value === "model") return items.value.filter((row) => row.has_model);
-  return items.value;
-});
 
 const drawerOpen = computed({
   get: () => open.value != null,
@@ -89,50 +127,67 @@ const drawerOpen = computed({
   },
 });
 
-function imageUrl(row: CreatureRow) {
-  const token = readToken() ?? "";
-  return `/v1/crm/creatures/${encodeURIComponent(row.child_id)}/${encodeURIComponent(row.spec_id)}/image?access_token=${encodeURIComponent(token)}`;
+function imageOk(row: CreatureRow) {
+  return row.has_image && !broken.value.has(creatureKey(row));
 }
 
-function formatDay(ts: number) {
-  return new Date(ts * 1000).toLocaleDateString("ru-RU");
+function markBroken(row: CreatureRow) {
+  const key = creatureKey(row);
+  if (broken.value.has(key)) return;
+  const next = new Set(broken.value);
+  next.add(key);
+  broken.value = next;
 }
 
-onMounted(async () => {
-  items.value = (await crmApi.creatures()).items;
+function setFilter(next: CreatureKind) {
+  if (filter.value === next) return;
+  filter.value = next;
+  if (offset.value === 0) {
+    void load();
+    return;
+  }
+  offset.value = 0;
+}
+
+function openParent(email: string | null) {
+  if (!email) return;
+  void router.push({ name: "parents", query: { q: email } });
+}
+
+async function load() {
+  loading.value = true;
+  try {
+    const [body, queue] = await Promise.all([
+      crmApi.creatures(period.query, {
+        limit: PAGE,
+        offset: offset.value,
+        kind: filter.value,
+      }),
+      crmApi.stuck({ limit: 20, offset: 0 }),
+    ]);
+    items.value = body.items;
+    total.value = body.total;
+    stuck.value = queue.items;
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(() => {
+  void load();
+});
+
+watch(offset, () => {
+  void load();
 });
 </script>
 
 <style scoped>
-.creature-card {
-  text-align: left;
+.parent-row {
   cursor: pointer;
-  border: none;
 }
 
-.creature-card-image {
-  aspect-ratio: 1;
-  border-radius: 1rem;
-  background: #f6f4f1;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.creature-card-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.creature-card-image.is-large {
-  aspect-ratio: 1;
-  width: 100%;
-}
-
-.creature-card-empty {
-  font-size: 0.75rem;
-  color: var(--crm-muted);
+.parent-row:hover {
+  background: #fafafa;
 }
 </style>

@@ -72,6 +72,17 @@ class Settings(BaseSettings):
     tbank_company_email: str = ""
     public_site_url: str = "https://zooo.fun"
 
+    yandex_client_id: str = ""
+    yandex_client_secret: str = Field(default="", repr=False)
+    yandex_redirect_uri: str = "https://zooo.fun/api/zoo/v1/auth/oauth/yandex/callback"
+
+    # Login codes from the Mail.ru mailbox info@zooo.fun. Empty host skips SMTP in development.
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_user: str = ""
+    smtp_password: str = Field(default="", repr=False)
+    smtp_from: str = "Zooofun <info@zooo.fun>"
+
 
 @lru_cache
 def get_settings() -> Settings:

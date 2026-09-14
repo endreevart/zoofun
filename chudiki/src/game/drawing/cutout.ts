@@ -68,14 +68,64 @@ export function clearBackdrop(data: Uint8ClampedArray, width: number, height: nu
   }
 }
 
+const MIN_KEEP_RATIO = 0.18;
+const MIN_KEEP_PIXELS = 8;
+const MIN_BORDER_BACKDROP = 0.5;
+
+export function opaqueCount(data: Uint8ClampedArray): number {
+  let n = 0;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] >= 20) n += 1;
+  }
+  return n;
+}
+
+function borderBackdropShare(data: Uint8ClampedArray, width: number, height: number): number {
+  if (width <= 0 || height <= 0) return 1;
+  let n = 0;
+  let hits = 0;
+  const check = (x: number, y: number) => {
+    n += 1;
+    if (isBackdrop(data, (y * width + x) * 4)) hits += 1;
+  };
+  for (let x = 0; x < width; x += 1) {
+    check(x, 0);
+    if (height > 1) check(x, height - 1);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    check(0, y);
+    if (width > 1) check(width - 1, y);
+  }
+  return n === 0 ? 1 : hits / n;
+}
+
+/**
+ * Cut studio paper only when the toy would still be recognisable afterwards.
+ * Cropped drawings and pale felt on cream paper used to vanish: the flood
+ * treated the whole picture as backdrop. Keep the original pixels then.
+ */
+export function applySafeCutout(data: Uint8ClampedArray, width: number, height: number): boolean {
+  if (width <= 0 || height <= 0) return false;
+  if (borderBackdropShare(data, width, height) < MIN_BORDER_BACKDROP) return false;
+  const before = opaqueCount(data);
+  const backup = new Uint8ClampedArray(data);
+  clearBackdrop(data, width, height);
+  const after = opaqueCount(data);
+  if (after >= MIN_KEEP_PIXELS && after >= before * MIN_KEEP_RATIO) return true;
+  data.set(backup);
+  return false;
+}
+
 const cache = new Map<string, string>();
 
 /** Browser wrapper: data URL in, transparent data URL out. Falls back to the original. */
 export async function cutoutPortrait(src: string): Promise<string> {
+  if (!src) return src;
   const hit = cache.get(src);
   if (hit) return hit;
   try {
     const image = new Image();
+    if (/^https?:/.test(src)) image.crossOrigin = 'anonymous';
     await new Promise((resolve, reject) => {
       image.onload = resolve;
       image.onerror = reject;
@@ -88,7 +138,11 @@ export async function cutoutPortrait(src: string): Promise<string> {
     if (!context) return src;
     context.drawImage(image, 0, 0);
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-    clearBackdrop(pixels.data, canvas.width, canvas.height);
+    const cut = applySafeCutout(pixels.data, canvas.width, canvas.height);
+    if (!cut) {
+      cache.set(src, src);
+      return src;
+    }
     context.putImageData(pixels, 0, 0);
     const url = canvas.toDataURL('image/png');
     cache.set(src, url);

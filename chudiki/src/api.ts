@@ -1,7 +1,7 @@
 const TOKEN_KEY = 'zoofun-parent-token';
 
-export const API_BASE =
-  (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '/api/zoo';
+const viteEnv = (import.meta as { env?: { VITE_API_BASE?: string } }).env;
+export const API_BASE = viteEnv?.VITE_API_BASE?.replace(/\/$/, '') ?? '/api/zoo';
 
 function readStoredToken(): string | null {
   try {
@@ -27,6 +27,19 @@ export function rememberParentToken(token: string): void {
     /* private mode */
   }
   sessionStorage.setItem(TOKEN_KEY, token);
+}
+
+export function forgetParentToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function authHeaders(extra?: HeadersInit): Headers {

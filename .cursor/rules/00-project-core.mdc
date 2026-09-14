@@ -6,12 +6,12 @@ alwaysApply: true
 # Virtual Zoo core
 
 - Audience is children aged 3–8 with a parent gate. The UI must work for pre-readers.
-- Recognition before polish: the child's drawing must stay recognizable. Do not erase silhouette, colors, unusual features, or the original idea.
+- Recognition before polish: the child's drawing must stay recognizable. Do not erase silhouette, colors, unusual features, or the original idea. A real pet photo keeps that animal's silhouette and markings (D-025).
 - Client stack is Unity 6.3 LTS, C#, and URP. Do not create a Unity project during bootstrap.
 - Backend stack is FastAPI, PostgreSQL, Redis, and Celery as a modular monolith.
 - OpenRouter is called only from the backend. Never from Unity, the Apple bridge, or MCP.
 - Never place provider, storage, or other credentials in Unity, source, or MCP config.
-- Commerce is D-016: first creature free, then T-Bank packs of 5/10/15/20 in RUB. Delete does not restore a credit. No StoreKit, subscriptions, or extra worlds yet.
+- Commerce is D-016 plus D-020, D-021, and D-024: first creature free, T-Bank packs of 1/5/10/15/20 in RUB, repeatable paid DIY copies of garden (`world_diy_garden`), meadow (`world_diy_meadow`), and grove (`world_diy_grove`, Куболесье). A later island kind needs assets and a decision. Delete does not restore a credit. No StoreKit or subscriptions.
 - T-Bank and operator credentials stay in untracked `.env` only. Never in Unity, the island, the website bundle, or MCP.
 - Purchase is parent-session only. The child UI must not collect card data.
 - Keep a stable zoo with 20+ active animals.

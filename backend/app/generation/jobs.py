@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from sqlalchemy import select
+
 from app.accounts.store import store
 from app.ops.log import write_log
 from app.persistence.db import session
@@ -24,11 +26,14 @@ from app.persistence.models import StylizeJobRow
 from app.providers.meshy import JOB_ID_RE
 from app.providers.meshy import image_to_glb as meshy_image_to_glb
 from app.providers.openrouter import (
-    POSTCARD_PROMPT,
     CreatureProfile,
     ProviderError,
+    normalize_source_kind,
+    postcard_prompt_for,
     profile_drawing,
+    profile_prompt_for,
     stylize_drawing,
+    stylize_prompt_for,
 )
 from app.settings import Settings, get_settings
 from app.storage import save_asset
@@ -41,6 +46,53 @@ MeshStatus = Literal["pending", "ready", "skipped", "failed"]
 MAX_UPLOAD_BYTES = 3_000_000
 # A generation older than this in "running" is an orphan of a dead process.
 STALE_RUNNING_SECONDS = 20 * 60
+# Marketing site: newest garden postcards, no names or original drawings.
+GARDEN_FEED_LIMIT = 60
+# Read extra rows so a few studio stills do not shrink the public list.
+GARDEN_FEED_SCAN = 120
+
+
+def public_postcard_src(url: str | None) -> str | None:
+    """Garden stills only. Studio PNGs, drawings, and odd paths stay private."""
+    if not isinstance(url, str):
+        return None
+    src = url.strip()
+    if not src or len(src) > 200 or " " in src or "\\" in src:
+        return None
+    if src.startswith("https://") and "/postcards/" in src:
+        return src
+    prefix = "/v1/generation/stylize/"
+    suffix = "/postcard.png"
+    if src.startswith(prefix) and src.endswith(suffix):
+        job_id = src[len(prefix) : -len(suffix)]
+        if JOB_ID_RE.fullmatch(job_id):
+            return src
+    return None
+
+
+def recent_garden_postcards(limit: int = GARDEN_FEED_LIMIT) -> list[str]:
+    """Newest OpenRouter garden stills, newest first. No parent, name, or job dump."""
+    cap = max(1, min(int(limit), GARDEN_FEED_LIMIT))
+    scan = max(cap, min(GARDEN_FEED_SCAN, GARDEN_FEED_LIMIT * 2))
+    with session() as db:
+        rows = db.execute(
+            select(StylizeJobRow.postcard_url)
+            .where(StylizeJobRow.postcard_status == "ready")
+            .where(StylizeJobRow.postcard_url.is_not(None))
+            .order_by(StylizeJobRow.updated_at.desc())
+            .limit(scan)
+        ).all()
+    items: list[str] = []
+    seen: set[str] = set()
+    for (url,) in rows:
+        src = public_postcard_src(url)
+        if src is None or src in seen:
+            continue
+        seen.add(src)
+        items.append(src)
+        if len(items) >= cap:
+            break
+    return items
 
 
 def postcard_path(settings: Settings, job_id: str) -> Path:
@@ -68,6 +120,7 @@ class StylizeJob:
     postcard_status: MeshStatus = "pending"
     parent_id: str | None = None
     reserved: bool = False
+    source_kind: str = "drawing"
 
 
 def _snapshot(row: StylizeJobRow) -> StylizeJob:
@@ -86,6 +139,7 @@ def _snapshot(row: StylizeJobRow) -> StylizeJob:
         postcard_status=row.postcard_status,  # type: ignore[arg-type]
         parent_id=row.parent_id,
         reserved=row.reserved,
+        source_kind=normalize_source_kind(row.source_kind),
     )
 
 
@@ -115,6 +169,7 @@ async def create_job(
     job_id: str | None = None,
     parent_id: str | None = None,
     reserved: bool = False,
+    source_kind: str = "drawing",
 ) -> StylizeJob:
     if len(image) > MAX_UPLOAD_BYTES:
         raise ValueError("drawing is too large")
@@ -131,6 +186,7 @@ async def create_job(
             status="queued",
             source=image,
             source_type=kind,
+            source_kind=normalize_source_kind(source_kind),
             parent_id=parent_id,
             reserved=reserved,
         )
@@ -171,7 +227,7 @@ def _claim(job_id: str) -> tuple[str, StylizeJob, bytes, str] | tuple[str, None,
         if row.status == "running":
             return "busy", None, None, None
         if row.status == "ready" and row.image_base64 and (
-            row.mesh_status == "pending" or row.postcard_status == "pending"
+            row.mesh_status in {"pending", "failed"} or row.postcard_status == "pending"
         ):
             if not stale:
                 # Freshly touched: another invocation is already regrowing the
@@ -188,7 +244,7 @@ async def _finish_media(job: StylizeJob, cfg: Settings) -> None:
     styled_png = base64.b64decode(job.image_base64 or "")
     media = job.media_type or "image/png"
     tasks = []
-    if job.mesh_status == "pending":
+    if job.mesh_status in {"pending", "failed"}:
         tasks.append(_maybe_meshy(job, cfg, styled_png, media))
     if job.postcard_status == "pending":
         tasks.append(_maybe_postcard(job, cfg, styled_png, media))
@@ -209,11 +265,23 @@ async def run_job(job_id: str, settings: Settings | None = None) -> str:
         await _finish_media(job, cfg)
         return "done"
     assert job is not None and source is not None and source_type is not None
-    logger.info("stylize job %s running", job_id)
+    logger.info("stylize job %s running source=%s", job_id, job.source_kind)
     painted_at = time.monotonic()
+    paint_prompt = stylize_prompt_for(job.source_kind)
+    stylize_call = (
+        stylize_drawing(cfg, source, source_type, prompt=paint_prompt)
+        if paint_prompt
+        else stylize_drawing(cfg, source, source_type)
+    )
+    profile_prompt = profile_prompt_for(job.source_kind)
+    profile_call = (
+        profile_drawing(cfg, source, source_type, prompt=profile_prompt)
+        if job.source_kind == "pet"
+        else profile_drawing(cfg, source, source_type)
+    )
     styled_result, profile_result = await asyncio.gather(
-        stylize_drawing(cfg, source, source_type),
-        profile_drawing(cfg, source, source_type),
+        stylize_call,
+        profile_call,
         return_exceptions=True,
     )
     openrouter_s = round(time.monotonic() - painted_at, 2)
@@ -290,7 +358,12 @@ async def run_job(job_id: str, settings: Settings | None = None) -> str:
         "stylize.ready",
         f"mesh={mesh_status}",
         parent_id=job.parent_id,
-        payload={"openrouter_s": openrouter_s, "meshy_s": meshy_s, "mesh": mesh_status},
+        payload={
+            "openrouter_s": openrouter_s,
+            "meshy_s": meshy_s,
+            "mesh": mesh_status,
+            "source_kind": job.source_kind,
+        },
     )
     return "done"
 
@@ -337,8 +410,13 @@ def recover_stale_jobs() -> int:
         interrupted_media = db.query(StylizeJobRow.id).filter(
             StylizeJobRow.status == "ready",
             StylizeJobRow.image_base64.is_not(None),
-            (StylizeJobRow.mesh_status == "pending")
-            | (StylizeJobRow.postcard_status == "pending"),
+            (
+                (
+                    StylizeJobRow.mesh_status.in_(("pending", "failed"))
+                    & StylizeJobRow.model_url.is_(None)
+                )
+                | (StylizeJobRow.postcard_status == "pending")
+            ),
             StylizeJobRow.updated_at <= now - STALE_MEDIA_SECONDS,
         )
         requeue = [
@@ -369,9 +447,9 @@ def _refund_if_needed(job: StylizeJob) -> None:
 
 
 def _mesh_failed(job: StylizeJob, reason: str) -> None:
-    """The still already won; record why the volume did not arrive."""
-    _update(job.id, mesh_status="failed")
-    logger.warning("stylize job %s meshy failed: %s", job.id, reason)
+    """The still already won. Keep the mesh pending so the sweep tries again."""
+    _update(job.id, mesh_status="pending")
+    logger.warning("stylize job %s meshy failed, will retry: %s", job.id, reason)
     write_log(
         "stylize.mesh_failed",
         reason[:300],
@@ -388,7 +466,7 @@ async def _maybe_postcard(job: StylizeJob, settings: Settings, png: bytes, media
             settings,
             png,
             media,
-            prompt=POSTCARD_PROMPT,
+            prompt=postcard_prompt_for(job.source_kind),
             extras={"output_format": "png"},
         )
     except ProviderError as exc:
@@ -479,8 +557,7 @@ async def _run_mesh_provider(
 
 
 async def _maybe_meshy(job: StylizeJob, settings: Settings, png: bytes, media: str) -> str:
-    """Attach a GLB via the configured 3D provider. The still already won; a
-    mesh failure is logged but never rolls back the generation."""
+    """Attach a GLB. A provider miss stays pending so the garden can still get 3D."""
     provider = _pick_mesh_provider(settings)
     if provider == "none":
         _update(job.id, mesh_status="skipped")
@@ -491,7 +568,7 @@ async def _maybe_meshy(job: StylizeJob, settings: Settings, png: bytes, media: s
     except Exception as exc:
         _mesh_failed(job, f"{provider}: {type(exc).__name__}: {exc}")
         logger.exception("stylize job %s %s mesh failed", job.id, provider)
-        return "failed"
+        return "pending"
     key = f"meshes/{job.id}.glb"
     public = await save_asset(settings, key, glb, "model/gltf-binary")
     _update(

@@ -195,7 +195,7 @@ export function FeedFrenzy({
   const done = score >= FEED_GOAL;
 
   return (
-    <div className="frenzy" role="dialog" aria-label="Покорми чудика">
+    <div className="frenzy" role="dialog" aria-label="Покорми зуфуньчика">
       <div className="mg-head">
         <button
           className="icon-button"

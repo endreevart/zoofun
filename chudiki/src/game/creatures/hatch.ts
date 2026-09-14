@@ -45,10 +45,10 @@ export function hatchFromWait(wait: number, heat: number, ready: boolean): boole
   return wait >= Math.max(0.35, HATCH_WAIT - heat * 2);
 }
 
-/** The egg stays shut until Meshy finishes or gives up. A still is not a puppet. */
+/** The egg stays shut until the GLB is on the creature. A still is not a puppet. */
 export function eggCanOpen(
-  mesh: 'pending' | 'ready' | 'skipped' | 'failed',
+  _mesh: 'pending' | 'ready' | 'skipped' | 'failed',
   modelUrl?: string,
 ): boolean {
-  return Boolean(modelUrl) || mesh !== 'pending';
+  return Boolean(modelUrl);
 }

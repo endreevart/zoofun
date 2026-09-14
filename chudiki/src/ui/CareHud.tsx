@@ -20,7 +20,7 @@ export function CareHud({ joy, feeding, onFeed }: CareHudProps) {
       type="button"
       disabled={feeding}
       onClick={onFeed}
-      aria-label={feeding ? 'Чудики кушают' : `Покормить, еды ${level}`}
+      aria-label={feeding ? 'Зуфунята кушают' : `Покормить, еды ${level}`}
     >
       <HudIcon name="feed" />
       <span className="food-bar" aria-hidden="true">

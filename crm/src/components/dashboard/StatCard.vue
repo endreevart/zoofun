@@ -1,7 +1,13 @@
 <template>
-  <div class="crm-stat crm-animate-in" :class="{ 'is-highlight': highlight, 'is-clickable': clickable }" :style="delayStyle" @click="$emit('click')">
+  <div
+    class="crm-stat crm-animate-in"
+    :class="{ 'is-highlight': highlight, 'is-clickable': clickable }"
+    :style="delayStyle"
+    @click="$emit('click')"
+  >
     <div class="flex items-start gap-2 relative z-[1] w-full">
       <span class="crm-stat-label">{{ label }}</span>
+      <CrmHelp v-if="help" :text="help" :on-accent="highlight" />
       <div v-if="icon" class="crm-stat-icon ml-auto">
         <i :class="icon" />
       </div>
@@ -13,11 +19,13 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import CrmHelp from "@/components/crm/CrmHelp.vue";
 
 const props = defineProps<{
   label: string;
   value: string | number;
   hint?: string;
+  help?: string;
   icon?: string;
   highlight?: boolean;
   clickable?: boolean;

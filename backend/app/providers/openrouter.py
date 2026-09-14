@@ -36,6 +36,9 @@ KIND_IDS = frozenset(
 NAME_RE = re.compile(r"^[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z\-]{1,15}$")
 DEFAULT_PROFILE_MODEL = "google/gemini-2.5-flash"
 
+SOURCE_DRAWING = "drawing"
+SOURCE_PET = "pet"
+
 PROFILE_PROMPT = (
     "This image is a child's drawing of one imaginary zoo creature. "
     "Reply with JSON only, no markdown: "
@@ -46,6 +49,19 @@ PROFILE_PROMPT = (
     "stomper, zippy, eary, horny, sparkle, roundy, tailly. "
     "Pick kind from how the creature looks and would move. "
     "Do not mention the child or invent a biography."
+)
+
+PET_PROFILE_PROMPT = (
+    "This image is a photograph of one real pet that will become a zoo creature. "
+    "Reply with JSON only, no markdown: "
+    '{"name":"...","kind_id":"..."}. '
+    "name: one playful made-up nickname a Russian child would like, 2-12 letters, "
+    "Cyrillic, not the pet's real name, not a real person's first name, "
+    "not a famous character. "
+    "kind_id must be exactly one of: jumper, fluffy, crawler, swimmer, flyer, "
+    "stomper, zippy, eary, horny, sparkle, roundy, tailly. "
+    "Pick kind from how this animal looks and would move. "
+    "Do not mention the child, the home, or invent a biography."
 )
 
 CONTOUR = (
@@ -109,6 +125,42 @@ STYLIZE_PROMPT = (
     "One figurine, full body, centered, standing, transparent background."
 )
 
+# Photograph of a real pet (D-025): keep that animal's silhouette, add
+# foolish cartoon bits. Not the drawing clay-and-felt contour path.
+PET_SILHOUETTE = (
+    "This is a photograph of one real domestic animal, not a child's drawing. "
+    "Keep that exact silhouette, proportions, ear and tail shape, coat colors, "
+    "and unique marks: spots, patches, scars, a folded ear, a collar if present. "
+    "This dog stays that dog. This cat stays that cat. "
+    "Do not replace it with a catalog breed or a different species. "
+    "Do not straighten or symmetrize the outline. "
+)
+
+PET_SILLY = (
+    "Turn it into a goofy cartoon zoo creature, not a realistic animal and not a "
+    "clay-and-felt figurine. Keep the same outline. Add only small foolishness: "
+    "mismatched oversized cartoon eyes on the real eye sockets, a lopsided grin "
+    "or a tiny tongue, slightly rounder cheeks. "
+    "Do not add hats, clothes, extra limbs, wings, or a new body. "
+    "Do not erase the fur pattern or turn the body into a potato. "
+)
+
+PET_STUDIO = (
+    "Paint a studio product still of that cartoon character. "
+    "Saturated friendly colors, wrap-around studio light, soft 3D cartoon surface. "
+    "Camera is three-quarter, about forty degrees off the front. "
+    "You must see the chest, one full flank, and the far hip. "
+    "Not a paper cutout, not a side-on stamp, not a sticker, not a plaque, "
+    "not a relief, not an extruded silhouette. "
+    "Not a photograph of a real animal. No realistic camera grain. "
+    "No leftover room, sofa, hands, leash, floor, or people. "
+    "No background scenery, no text, no name, no watermark. "
+    "No drop shadow, no cast shadow, nothing under the feet. "
+    "One creature, full body, centered, standing, transparent background."
+)
+
+PET_SILLY_PROMPT = PET_SILHOUETTE + PET_SILLY + PET_STUDIO
+
 # Second, quiet generation after the stylize wins: the same figurine painted
 # into the zoo garden. Downloaded as "Открытка из сада" from the roster.
 POSTCARD_PROMPT = (
@@ -122,6 +174,44 @@ POSTCARD_PROMPT = (
     "a gentle ground shadow. The figurine is the hero and fills about half "
     "of the frame height. No text, no watermark, no border, no people."
 )
+
+PET_POSTCARD_PROMPT = (
+    "This is a studio still of a goofy cartoon zoo creature painted from a "
+    "real pet. Paint the SAME character standing on a sunny garden meadow in "
+    "a soft storybook 3D cartoon style: bright green grass, colorful round flowers, "
+    "plump bushes, a low wooden fence far behind, warm blue sky with fluffy "
+    "clouds. Keep the character exactly as it is: same silhouette, same colors, "
+    "same markings, same silly eyes and grin, same limbs and proportions. "
+    "Full body, centered, feet on the grass, soft warm daylight, "
+    "a gentle ground shadow. The creature is the hero and fills about half "
+    "of the frame height. No text, no watermark, no border, no people."
+)
+
+
+def normalize_source_kind(value: object) -> str:
+    """Pet path only on an explicit pet label. Anything else is a drawing."""
+    if isinstance(value, str) and value.strip().lower() == SOURCE_PET:
+        return SOURCE_PET
+    return SOURCE_DRAWING
+
+
+def stylize_prompt_for(source_kind: str) -> str | None:
+    """None lets the adapter use CONTOUR_PROMPT (drawing jobs)."""
+    if normalize_source_kind(source_kind) == SOURCE_PET:
+        return PET_SILLY_PROMPT
+    return None
+
+
+def postcard_prompt_for(source_kind: str) -> str:
+    if normalize_source_kind(source_kind) == SOURCE_PET:
+        return PET_POSTCARD_PROMPT
+    return POSTCARD_PROMPT
+
+
+def profile_prompt_for(source_kind: str) -> str:
+    if normalize_source_kind(source_kind) == SOURCE_PET:
+        return PET_PROFILE_PROMPT
+    return PROFILE_PROMPT
 
 DEFAULT_IMAGE_MODEL = "black-forest-labs/flux.2-pro"
 
@@ -317,9 +407,12 @@ def parse_profile_response(payload: object) -> CreatureProfile:
 
 
 async def profile_drawing(
-    settings: Settings, image_bytes: bytes, media_type: str
+    settings: Settings,
+    image_bytes: bytes,
+    media_type: str,
+    prompt: str | None = None,
 ) -> CreatureProfile | None:
-    """Name and kind from the drawing only. Never send child PII. Soft-fails."""
+    """Name and kind from the drawing or pet photo only. Never send child PII. Soft-fails."""
     if not settings.openrouter_api_key.strip():
         return None
     encoded = base64.b64encode(image_bytes).decode("ascii")
@@ -331,7 +424,7 @@ async def profile_drawing(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": PROFILE_PROMPT},
+                    {"type": "text", "text": prompt or PROFILE_PROMPT},
                     {"type": "image_url", "image_url": {"url": data_url}},
                 ],
             }

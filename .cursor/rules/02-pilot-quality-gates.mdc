@@ -8,6 +8,7 @@ alwaysApply: true
 - A partially downloaded or invalid creature must never appear in the zoo.
 - Existing cached animals must remain usable offline.
 - Compilation, a green editor, or a passing lint run is not a finished result. Review logs, generated assets, Game view, and device/runtime behavior.
-- Do not add friends, chat, public content, leagues, subscriptions, StoreKit, or automatic full-3D generation.
-- Web commerce follows D-016 / ADR-0006. Do not add extra worlds or foreign acquiring without a new decision.
+- Do not add friends, chat, leagues, subscriptions, StoreKit, or automatic full-3D generation.
+- Original drawings and original pet photos stay private. Anonymized garden postcards may appear on the marketing site (D-022). Do not add a social gallery, friends, or account discovery.
+- Web commerce follows D-016 / ADR-0006, D-020, and D-021. Garden, meadow, and grove (Куболесье) are in the shop. Do not add a later biome or foreign acquiring without a new decision and assets.
 - If code and `docs/` disagree, stop and surface the mismatch. Do not silently redefine the product.

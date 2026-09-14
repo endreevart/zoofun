@@ -120,6 +120,11 @@ export function trackRoughness(material: THREE.MeshStandardMaterial) {
   if (authoredRoughness.has(material)) return;
   authoredRoughness.set(material, material.roughness);
   material.roughness = THREE.MathUtils.lerp(material.roughness, 1, tuning.get().matte);
+  const forget = () => {
+    authoredRoughness.delete(material);
+    material.removeEventListener('dispose', forget);
+  };
+  material.addEventListener('dispose', forget);
 }
 
 /** Called once per frame with the key light, which the bleed term needs. */

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { TuningValues } from '../render/tuning';
-import { quality } from '../render/quality';
+import { quality, type QualitySettings } from '../render/quality';
 
 /**
  * Lighting ported from build_scene() in scripts/render-idyllic-world.py.
@@ -35,11 +35,11 @@ export class Lighting {
   private sky: THREE.HemisphereLight;
   private fill: THREE.DirectionalLight;
   private bounce: THREE.DirectionalLight;
+  private hanging = false;
 
-  constructor() {
+  constructor(look: QualitySettings = quality(), hanging = false) {
     this.group.name = 'lighting';
 
-    const look = quality();
     this.sun = new THREE.DirectionalLight(SUN_WARM.clone(), 1);
     this.sun.target.position.copy(FOCUS);
     this.sun.castShadow = look.shadows;
@@ -52,8 +52,15 @@ export class Lighting {
     this.sun.shadow.camera.right = 48;
     this.sun.shadow.camera.top = 48;
     this.sun.shadow.camera.bottom = -48;
-    this.sun.shadow.bias = -0.0012;
-    this.sun.shadow.normalBias = 0.14;
+    // Garden's thick Meshy isle can take a fat bias. Grove paints shadows on a
+    // thin catcher: 14 cm of normalBias pushes the umbra clean off that disc.
+    // Do not infer hanging from a cheap shadow map: phones use 1024 PCF on
+    // every shell, including the fat garden.
+    this.hanging = hanging;
+    this.sun.shadow.bias = this.hanging ? -0.0006 : -0.0012;
+    this.sun.shadow.normalBias = this.hanging ? 0.06 : 0.14;
+    const shadow = this.sun.shadow as { intensity?: number };
+    if (shadow.intensity !== undefined || this.hanging) shadow.intensity = this.hanging ? 0.72 : 1;
     this.sun.shadow.camera.updateProjectionMatrix();
     this.group.add(this.sun);
     this.group.add(this.sun.target);
@@ -89,8 +96,9 @@ export class Lighting {
       FOCUS.z - Math.cos(azimuth) * horizontal * SUN_DISTANCE,
     );
 
-    this.sky.intensity = values.skyIntensity;
-    this.fill.intensity = values.fillIntensity;
-    this.bounce.intensity = values.bounceIntensity;
+    // A little less fill than the garden so umbra still reads, but not ink.
+    this.sky.intensity = values.skyIntensity * (this.hanging ? 0.88 : 1);
+    this.fill.intensity = values.fillIntensity * (this.hanging ? 0.78 : 1);
+    this.bounce.intensity = values.bounceIntensity * (this.hanging ? 0.85 : 1);
   }
 }

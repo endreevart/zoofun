@@ -5,18 +5,22 @@ from __future__ import annotations
 import time
 from typing import Annotated, Any
 
+from urllib.parse import urlsplit
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.accounts.store import ChildProfile, ParentAccount, store
 from app.api.deps import require_session
+from app.commerce.promo import QuoteError, quote_pack
 from app.commerce.settlement import reconcile_parent, verify_notification
 from app.commerce.store import Pack, commerce
 from app.ops.log import write_log
 from app.providers import tbank
 from app.ratelimit import enforce
 from app.settings import get_settings
+from app.worlds import checkout_description, is_world_sku, kind_for_sku, world_title
 
 router = APIRouter(prefix="/v1/commerce", tags=["commerce"])
 
@@ -41,14 +45,51 @@ class PackOut(BaseModel):
     buyable: bool
 
 
+class WorldOut(BaseModel):
+    id: str
+    title: str
+    price_rub: int
+    list_price_rub: int = 0
+    buyable: bool
+    kind_id: str = "garden"
+
+
 class CatalogOut(BaseModel):
     currency: str = "RUB"
     free_animals: int = 1
     packs: list[PackOut]
+    worlds: list[WorldOut] = []
+
+
+def _paid_return_url(request: Request, settings) -> str:
+    origin = (request.headers.get("origin") or "").strip()
+    if not origin:
+        referer = request.headers.get("referer") or ""
+        parts = urlsplit(referer)
+        if parts.scheme and parts.netloc:
+            origin = f"{parts.scheme}://{parts.netloc}"
+    if origin:
+        return f"{origin.rstrip('/')}/?from=site&paid=1"
+    return f"{settings.public_site_url.rstrip('/')}/island/?from=site&paid=1"
 
 
 class CheckoutIn(BaseModel):
     pack_id: str = Field(min_length=3, max_length=32)
+    promo_code: str = Field(default="", max_length=24)
+
+
+class QuoteIn(BaseModel):
+    pack_id: str = Field(min_length=3, max_length=32)
+    promo_code: str = Field(default="", max_length=24)
+
+
+class QuoteOut(BaseModel):
+    pack_id: str
+    animals: int
+    amount_rub: int
+    discount_rub: int
+    promo_code: str
+    list_price_rub: int = 0
 
 
 class CheckoutOut(BaseModel):
@@ -69,14 +110,56 @@ def _pack_out(pack: Pack) -> PackOut:
     )
 
 
+def _world_out(pack: Pack) -> WorldOut:
+    kind = kind_for_sku(pack.id)
+    return WorldOut(
+        id=pack.id,
+        title=world_title(pack.id),
+        price_rub=pack.price_rub,
+        list_price_rub=pack.list_price_rub,
+        buyable=pack.buyable,
+        kind_id=kind.id,
+    )
+
+
+def _quoted(pack: Pack, promo_code: str) -> QuoteOut:
+    try:
+        quoted = quote_pack(pack, promo_code)
+    except QuoteError as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
+    return QuoteOut(
+        pack_id=quoted.pack_id,
+        animals=quoted.animals,
+        amount_rub=quoted.amount_rub,
+        discount_rub=quoted.discount_rub,
+        promo_code=quoted.promo_code,
+        list_price_rub=quoted.list_price_rub,
+    )
+
+
 @router.get("/catalog", response_model=CatalogOut)
 async def catalog() -> CatalogOut:
-    return CatalogOut(packs=[_pack_out(pack) for pack in commerce.list_packs()])
+    return CatalogOut(
+        packs=[_pack_out(pack) for pack in commerce.list_packs()],
+        worlds=[_world_out(item) for item in commerce.list_worlds()],
+    )
+
+
+@router.post("/quote", response_model=QuoteOut)
+async def quote(body: QuoteIn, request: Request) -> QuoteOut:
+    enforce(request, "commerce.quote", limit=40, window_s=60)
+    pack = commerce.get_pack(body.pack_id)
+    if pack is None:
+        raise HTTPException(status_code=404, detail="unknown_pack")
+    if not pack.buyable:
+        raise HTTPException(status_code=400, detail="pack_unpriced")
+    return _quoted(pack, body.promo_code)
 
 
 @router.post("/checkout", response_model=CheckoutOut)
 async def checkout(
     body: CheckoutIn,
+    request: Request,
     pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
 ) -> CheckoutOut:
     parent, _child = pair
@@ -85,14 +168,39 @@ async def checkout(
         raise HTTPException(status_code=404, detail="unknown_pack")
     if not pack.buyable:
         raise HTTPException(status_code=400, detail="pack_unpriced")
+    quoted = _quoted(pack, body.promo_code)
     settings = get_settings()
     if not tbank.configured(settings):
+        if is_world_sku(pack.id) and settings.environment == "development":
+            payment = commerce.create_payment(
+                parent.id,
+                pack,
+                amount_rub=quoted.amount_rub,
+                promo_code=quoted.promo_code,
+                discount_rub=quoted.discount_rub,
+            )
+            commerce.settle_confirmed(payment.id)
+            write_log(
+                "tbank.dev_world",
+                f"dev grant {pack.id}",
+                payment_id=payment.id,
+                parent_id=parent.id,
+                payload={"pack_id": pack.id},
+            )
+            return CheckoutOut(
+                payment_id=payment.id,
+                payment_url=_paid_return_url(request, settings),
+                amount_rub=quoted.amount_rub,
+                animals=pack.animals,
+            )
         raise HTTPException(status_code=503, detail="payment_unconfigured")
 
     reusable = commerce.find_reusable_checkout(
         parent.id,
         pack.id,
         newer_than=time.time() - CHECKOUT_REUSE_SECONDS,
+        amount_rub=quoted.amount_rub,
+        promo_code=quoted.promo_code,
     )
     if reusable is not None and reusable.payment_url:
         write_log(
@@ -109,21 +217,33 @@ async def checkout(
             animals=reusable.animals,
         )
 
-    payment = commerce.create_payment(parent.id, pack)
+    payment = commerce.create_payment(
+        parent.id,
+        pack,
+        amount_rub=quoted.amount_rub,
+        promo_code=quoted.promo_code,
+        discount_rub=quoted.discount_rub,
+    )
     write_log(
         "tbank.init",
-        f"checkout {pack.id} {pack.price_rub}₽",
+        f"checkout {pack.id} {quoted.amount_rub}₽",
         payment_id=payment.id,
         parent_id=parent.id,
-        payload={"pack_id": pack.id, "amount_rub": pack.price_rub, "order_id": payment.id},
+        payload={
+            "pack_id": pack.id,
+            "amount_rub": quoted.amount_rub,
+            "discount_rub": quoted.discount_rub,
+            "promo_code": quoted.promo_code,
+            "order_id": payment.id,
+        },
     )
     site = settings.public_site_url.rstrip("/")
     try:
         payload = await tbank.init_payment(
             settings,
             order_id=payment.id,
-            amount_rub=pack.price_rub,
-            description=f"Zooofun: {pack.animals} животных",
+            amount_rub=quoted.amount_rub,
+            description=checkout_description(pack.id, pack.animals),
             email=parent.email,
             success_url=f"{site}/play?paid=1",
             fail_url=f"{site}/pricing?paid=0",
@@ -172,7 +292,7 @@ async def checkout(
     return CheckoutOut(
         payment_id=payment.id,
         payment_url=url,
-        amount_rub=pack.price_rub,
+        amount_rub=quoted.amount_rub,
         animals=pack.animals,
     )
 
@@ -228,10 +348,18 @@ async def tbank_notification(payload: dict[str, Any]) -> PlainTextResponse:
     return _ack()
 
 
+class WorldInfoOut(BaseModel):
+    id: str
+    title: str
+    sku: str = ""
+
+
 class ReconcileOut(BaseModel):
     credited: int
     pending: int
     remaining: int
+    owned_worlds: list[str] = []
+    worlds: list[WorldInfoOut] = []
 
 
 @router.post("/reconcile", response_model=ReconcileOut)
@@ -255,4 +383,9 @@ async def reconcile(
         credited=credited,
         pending=pending,
         remaining=fresh.remaining if fresh else parent.remaining,
+        owned_worlds=(fresh.owned_worlds if fresh else parent.owned_worlds),
+        worlds=[
+            WorldInfoOut(id=item.id, title=item.title, sku=item.sku)
+            for item in (fresh.worlds if fresh else parent.worlds)
+        ],
     )

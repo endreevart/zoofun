@@ -12,6 +12,7 @@ import {
   type HatchLook,
   warmEgg,
 } from './hatch';
+import { SLIDE_YAWS, stepPoint } from './walkStep';
 
 type Behaviour = 'idle' | 'walk' | 'react' | 'arriving';
 
@@ -46,7 +47,6 @@ export class Chudik {
   private reactTimer = 0;
   private reactDuration = 0;
   private arriveProgress = 0;
-  private rescued = false;
   private careTask: CareTask | null = null;
   /** 1 = just ate, ~0.2 = a bit peckish. Never empty: no one suffers. */
   fullness = 0.42;
@@ -269,6 +269,7 @@ export class Chudik {
       this.applyGround();
       return;
     }
+    this.pushOutIfStuck();
     if (this.behaviour === 'arriving') {
       this.updateArrival(dt);
     } else if (this.behaviour === 'react' && !this.driven) {
@@ -395,31 +396,16 @@ export class Chudik {
     const align = Math.max(0, 1 - Math.abs(turned) / 0.9);
     this.speed = THREE.MathUtils.lerp(this.speed, this.walkSpeed * 1.85 * align, dt * 4);
     const step = Math.max(this.speed * this.moveScale * dt, 0.02);
-    const here = this.rig.root.position;
-    const tryStep = (yaw: number) => {
-      const nextX = here.x + Math.sin(yaw) * step;
-      const nextZ = here.z + Math.cos(yaw) * step;
-      if (!this.world.isWalkable(nextX, nextZ)) return false;
-      here.x = nextX;
-      here.z = nextZ;
-      return true;
-    };
-    if (!tryStep(this.yaw)) {
-      const dodge = this.rng() > 0.5 ? 1 : -1;
-      if (!tryStep(this.yaw + dodge * 0.7) && !tryStep(this.yaw - dodge * 0.7)) {
-        this.yaw += dodge * 0.9;
-        this.targetYaw = this.yaw;
-      }
-    }
+    this.trySlide(step, true);
     this.walkPhase += dt * (4 + this.speed * 3.2);
     this.applyWalkCycle();
   }
 
   /** Third-person: move camera-relative, stay on walkable ground. */
   private updateDrive(dt: number) {
-    const steer = Math.abs(this.driveForward) + Math.abs(this.driveRight);
-    if (steer < 0.05) {
-      this.speed = THREE.MathUtils.lerp(this.speed, 0, dt * 8);
+    const analog = Math.min(1, Math.hypot(this.driveForward, this.driveRight));
+    if (analog < 0.04) {
+      this.speed = THREE.MathUtils.lerp(this.speed, 0, dt * 10);
       this.walkPhase += dt * (4 + this.speed * 3.2);
       this.applyWalkCycle();
       return;
@@ -435,39 +421,20 @@ export class Chudik {
       this.targetYaw = Math.atan2(dir.x, dir.z);
     }
 
-    const turned = this.turnTowards(dt);
+    const turned = this.turnTowards(dt, 5.4);
     const align = Math.max(0.35, 1 - Math.abs(turned) / 1.2);
-    this.speed = THREE.MathUtils.lerp(this.speed, this.walkSpeed * 1.35 * align, dt * 6);
-    const step = Math.max(this.speed * this.moveScale * dt, 0.02);
-    const here = this.rig.root.position;
-    const tryStep = (yaw: number) => {
-      const nextX = here.x + Math.sin(yaw) * step;
-      const nextZ = here.z + Math.cos(yaw) * step;
-      if (!this.world.isWalkable(nextX, nextZ)) return false;
-      here.x = nextX;
-      here.z = nextZ;
-      return true;
-    };
-    if (!tryStep(this.yaw)) {
-      const dodge = this.driveRight >= 0 ? 1 : -1;
-      tryStep(this.yaw + dodge * 0.7) || tryStep(this.yaw - dodge * 0.7);
-    }
+    this.speed = THREE.MathUtils.lerp(
+      this.speed,
+      this.walkSpeed * 1.75 * align * analog,
+      dt * 9,
+    );
+    const step = this.speed * this.moveScale * dt;
+    this.trySlide(step, false);
     this.walkPhase += dt * (4 + this.speed * 3.2);
     this.applyWalkCycle();
   }
 
   private updateWander(dt: number) {
-    const here = this.rig.root.position;
-    if (this.world.isWalkable(here.x, here.z)) {
-      this.rescued = false;
-    } else if (!this.rescued) {
-      this.rescued = true;
-      const safe = this.world.findOpenSpot(this.rng, here);
-      here.copy(safe);
-      this.target.copy(here);
-      this.speed = 0;
-    }
-
     this.behaviourTimer -= dt;
 
     if (this.behaviourTimer <= 0) {
@@ -498,14 +465,7 @@ export class Chudik {
         this.speed = THREE.MathUtils.lerp(this.speed, this.walkSpeed * align, dt * 4);
 
         const step = this.speed * this.moveScale * dt;
-        const nextX = this.rig.root.position.x + Math.sin(this.yaw) * step;
-        const nextZ = this.rig.root.position.z + Math.cos(this.yaw) * step;
-
-        if (this.world.isWalkable(nextX, nextZ)) {
-          this.rig.root.position.x = nextX;
-          this.rig.root.position.z = nextZ;
-        } else {
-          // Blocked: give up on this target and look for another.
+        if (!this.trySlide(step, true)) {
           this.behaviour = 'idle';
           this.behaviourTimer = range(this.rng, 0.4, 1.2);
           this.speed = 0;
@@ -518,6 +478,41 @@ export class Chudik {
 
     this.walkPhase += dt * (4 + this.speed * 3.2);
     this.applyWalkCycle();
+  }
+
+  /** If a DIY house or pond grew under our feet, hop to the nearest lawn. */
+  private pushOutIfStuck() {
+    const here = this.rig.root.position;
+    if (this.world.isWalkable(here.x, here.z)) return;
+    const safe = this.world.findOpenSpot(this.rng, here);
+    here.copy(safe);
+    this.target.copy(here);
+    this.speed = 0;
+  }
+
+  /** Step forward, or slide along a trunk / house instead of freezing in place. */
+  private trySlide(step: number, turn: boolean): boolean {
+    if (step <= 0) return true;
+    if (this.trySlideDistance(step, turn)) return true;
+    return step > 0.05 && this.trySlideDistance(step * 0.4, turn);
+  }
+
+  private trySlideDistance(step: number, turn: boolean): boolean {
+    const here = this.rig.root.position;
+    for (const offset of SLIDE_YAWS) {
+      const yaw = this.yaw + offset;
+      const next = stepPoint(here.x, here.z, yaw, step);
+      if (!this.world.isWalkable(next.x, next.z)) continue;
+      here.x = next.x;
+      here.z = next.z;
+      if (turn && offset !== 0) {
+        this.yaw = yaw;
+        this.targetYaw = this.yaw;
+        this.rig.root.rotation.y = this.yaw;
+      }
+      return true;
+    }
+    return false;
   }
 
   private chooseNewTarget() {
@@ -542,12 +537,12 @@ export class Chudik {
   }
 
   /** Rotates towards `targetYaw`; returns the remaining signed error. */
-  private turnTowards(dt: number): number {
+  private turnTowards(dt: number, rate = 3.2): number {
     let delta = this.targetYaw - this.yaw;
     while (delta > Math.PI) delta -= Math.PI * 2;
     while (delta < -Math.PI) delta += Math.PI * 2;
 
-    const maxTurn = 3.2 * dt;
+    const maxTurn = rate * dt;
     this.yaw += THREE.MathUtils.clamp(delta, -maxTurn, maxTurn);
     this.rig.root.rotation.y = this.yaw;
     return delta;

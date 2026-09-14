@@ -5,7 +5,7 @@ type QuotaDockProps = {
   onTopUp: () => void;
 };
 
-/** Remaining creations as eggs, plus a parent top-up. Lives in the corner. */
+/** Remaining creations as a chudik token, plus a parent top-up. Lives in the corner. */
 export function QuotaDock({ remaining, onTopUp }: QuotaDockProps) {
   const empty = remaining <= 0;
   return (

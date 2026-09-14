@@ -12,6 +12,7 @@ from app.accounts.store import store
 from app.admin import mount_admin
 from app.api.auth import router as auth_router
 from app.api.commerce import router as commerce_router
+from app.api.public import router as public_router
 from app.api.operator import router as operator_router
 from app.api.lab import router as lab_router
 from app.api.stylize import router as stylize_router
@@ -136,6 +137,7 @@ if cors_origins:
 
 app.include_router(auth_router)
 app.include_router(zoo_router)
+app.include_router(public_router)
 app.include_router(stylize_router)
 app.include_router(lab_router)
 app.include_router(tv_router)

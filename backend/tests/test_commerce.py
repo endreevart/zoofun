@@ -124,15 +124,42 @@ async def test_stylize_start_spends_the_free_credit(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
-async def test_catalog_lists_four_packs() -> None:
+async def test_catalog_lists_generation_packs() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/v1/commerce/catalog")
     assert response.status_code == 200
     packs = response.json()["packs"]
-    assert [item["animals"] for item in packs] == [5, 10, 15, 20]
-    assert [item["price_rub"] for item in packs] == [1990, 3490, 4690, 5790]
+    assert [item["animals"] for item in packs] == [1, 5, 10, 15, 20]
+    assert [item["price_rub"] for item in packs] == [99, 399, 3490, 4690, 5790]
     assert all(item["list_price_rub"] == 0 for item in packs)
     assert all(item["buyable"] is True for item in packs)
+    worlds = response.json()["worlds"]
+    assert worlds == [
+        {
+            "id": "world_diy_garden",
+            "title": "Собери сам",
+            "price_rub": 1190,
+            "list_price_rub": 1190,
+            "buyable": True,
+            "kind_id": "garden",
+        },
+        {
+            "id": "world_diy_meadow",
+            "title": "Собери луг",
+            "price_rub": 59,
+            "list_price_rub": 59,
+            "buyable": True,
+            "kind_id": "meadow",
+        },
+        {
+            "id": "world_diy_grove",
+            "title": "Собери куболесье",
+            "price_rub": 59,
+            "list_price_rub": 59,
+            "buyable": True,
+            "kind_id": "grove",
+        },
+    ]
 
 
 @pytest.mark.asyncio
@@ -316,9 +343,21 @@ async def test_reconcile_credits_a_lost_notification(monkeypatch: pytest.MonkeyP
         second = await client.post("/v1/commerce/reconcile", headers=headers)
 
     assert first.status_code == 200
-    assert first.json() == {"credited": 5, "pending": 0, "remaining": 6}
+    assert first.json() == {
+        "credited": 5,
+        "pending": 0,
+        "remaining": 6,
+        "owned_worlds": [],
+        "worlds": [],
+    }
     # Nothing is left unsettled, so the repeat neither asks nor credits again.
-    assert second.json() == {"credited": 0, "pending": 0, "remaining": 6}
+    assert second.json() == {
+        "credited": 0,
+        "pending": 0,
+        "remaining": 6,
+        "owned_worlds": [],
+        "worlds": [],
+    }
     assert calls == ["77"]
 
 
@@ -336,7 +375,13 @@ async def test_reconcile_keeps_waiting_while_the_bank_says_new(
             headers={"Authorization": f"Bearer {token}"},
         )
 
-    assert answer.json() == {"credited": 0, "pending": 1, "remaining": 1}
+    assert answer.json() == {
+        "credited": 0,
+        "pending": 1,
+        "remaining": 1,
+        "owned_worlds": [],
+        "worlds": [],
+    }
 
 
 @pytest.mark.asyncio
@@ -353,7 +398,13 @@ async def test_reconcile_marks_a_rejected_payment_failed(
             headers={"Authorization": f"Bearer {token}"},
         )
 
-    assert answer.json() == {"credited": 0, "pending": 0, "remaining": 1}
+    assert answer.json() == {
+        "credited": 0,
+        "pending": 0,
+        "remaining": 1,
+        "owned_worlds": [],
+        "worlds": [],
+    }
     settled = commerce.find_by_order(payment_id)
     assert settled is not None
     assert settled.status == "failed"
@@ -439,6 +490,33 @@ async def test_operator_sets_price_and_grants_credits(monkeypatch: pytest.Monkey
         headers = {"X-Operator-Token": token}
         ok = await client.get("/v1/operator/overview", headers=headers)
         assert ok.status_code == 200
+        worlds = ok.json()["worlds"]
+        assert worlds == [
+            {
+                "id": "world_diy_garden",
+                "title": "Собери сам",
+                "price_rub": 1190,
+                "list_price_rub": 1190,
+                "buyable": True,
+                "kind_id": "garden",
+            },
+            {
+                "id": "world_diy_meadow",
+                "title": "Собери луг",
+                "price_rub": 59,
+                "list_price_rub": 59,
+                "buyable": True,
+                "kind_id": "meadow",
+            },
+            {
+                "id": "world_diy_grove",
+                "title": "Собери куболесье",
+                "price_rub": 59,
+                "list_price_rub": 59,
+                "buyable": True,
+                "kind_id": "grove",
+            },
+        ]
         priced = await client.put(
             "/v1/operator/packs/pack_10",
             json={"price_rub": 890, "list_price_rub": 3490, "featured": True},
@@ -467,3 +545,6 @@ def test_seed_keeps_operator_prices() -> None:
     assert pack.price_rub == 490
     assert pack.list_price_rub == 1990
     assert pack.featured is True
+    world = commerce.get_pack("world_diy_garden")
+    assert world is not None
+    assert world.list_price_rub == 1190

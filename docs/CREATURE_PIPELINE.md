@@ -2,12 +2,13 @@
 
 ## Goal
 
-Produce a safe, recognizable, technically valid 2.5D creature from an arbitrary child drawing. The pipeline is not asked to construct an animation-ready 3D model.
+Produce a safe, recognizable, technically valid 2.5D creature from a child drawing or from a photograph of a real pet (D-025). The pipeline is not asked to construct an animation-ready 3D model.
 
 ## Input contract
 
 - JPEG, PNG, or HEIC accepted by the upload edge and normalized server-side.
-- A single drawing is preferred, but preprocessing must detect and reject unreadable/empty input gracefully.
+- A single drawing or a single pet is preferred, but preprocessing must detect and reject unreadable/empty input gracefully.
+- The safety gate labels the upload `drawing` or `pet`. Only a clear camera photo of a real domestic animal takes the pet path. Uncertain frames stay on the drawing path.
 - Client strips metadata before upload where possible; server strips remaining metadata.
 - Original input is private and never exposed to other users.
 
@@ -15,9 +16,9 @@ Produce a safe, recognizable, technically valid 2.5D creature from an arbitrary 
 
 1. Validate content type, decoded dimensions, file size, and image integrity.
 2. Normalize orientation and color space.
-3. Correct paper perspective and crop with a child/parent confirmation fallback.
-4. Remove paper background while preserving interior white details.
-5. Generate a polished reference-preserving character through a pinned OpenRouter endpoint.
+3. Safety gate: allow or block, and classify `drawing` vs `pet`.
+4. For a drawing: correct paper perspective and crop with a child/parent confirmation fallback; remove paper background while preserving interior white details. For a pet photo: do not paperize or rewrite the animal as a doodle.
+5. Generate a polished reference-preserving character through a pinned OpenRouter endpoint. Drawings use the clay-felt contour prompt. Pet photos use the silly-silhouette prompt (same outline, small cartoon foolishness).
 6. Validate output dimensions, alpha coverage, silhouette bounds, and file integrity.
 7. Generate a JSON profile constrained by schema and safe vocabulary.
 8. Classify one locomotion enum: `walk`, `hop`, `fly`, or `float`.

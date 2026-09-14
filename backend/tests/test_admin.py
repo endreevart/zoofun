@@ -29,6 +29,8 @@ async def test_staff_login_shows_russian_entities(monkeypatch: pytest.MonkeyPatc
     assert "Дети" in opened.text
     assert "Животные" in opened.text
     assert "Пакеты" in opened.text
+    assert "Острова" in opened.text
+    assert "Купленные миры" in opened.text
     assert "Платежи" in opened.text
     assert "Логи" in opened.text
     get_settings.cache_clear()

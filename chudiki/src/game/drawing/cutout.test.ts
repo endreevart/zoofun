@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { clearBackdrop } from './cutout.ts';
+import { applySafeCutout, clearBackdrop, opaqueCount } from './cutout.ts';
 
 // 7×7 paper sheet with a 3×3 red toy in the middle; its center pixel is
 // white (an eye). The border must go transparent, the eye must survive.
@@ -58,3 +58,40 @@ assert.equal(alphaP(3, 6), 0, 'drop shadow cleared');
 assert.equal(alphaP(1, 6), 0, 'warm shadow edge cleared');
 assert.equal(alphaP(2, 2), 255, 'toy body stays on the photo');
 assert.equal(alphaP(3, 3), 255, 'white eye stays on the photo');
+
+const sheet = (r: number, g: number, b: number) => {
+  const pixels = new Uint8ClampedArray(size * size * 4);
+  for (let i = 0; i < pixels.length; i += 4) {
+    pixels[i] = r;
+    pixels[i + 1] = g;
+    pixels[i + 2] = b;
+    pixels[i + 3] = 255;
+  }
+  return pixels;
+};
+
+// A cream drawing that fills the frame used to be eaten as "paper".
+const cream = sheet(255, 248, 230);
+assert.equal(applySafeCutout(cream, size, size), false, 'pale full-frame drawing is kept');
+assert.equal(opaqueCount(cream), size * size, 'cream pixels stay opaque');
+
+// A red drawing that already touches the edges is not a studio photo.
+const felt = sheet(220, 40, 40);
+assert.equal(applySafeCutout(felt, size, size), false, 'edge-to-edge toy is not cut');
+assert.equal(opaqueCount(felt), size * size, 'saturated cropped drawing stays');
+
+// The red toy on paper still loses the studio card and keeps the body.
+const studio = new Uint8ClampedArray(size * size * 4);
+const write = (x: number, y: number, r: number, g: number, b: number) => {
+  const o = (y * size + x) * 4;
+  studio[o] = r;
+  studio[o + 1] = g;
+  studio[o + 2] = b;
+  studio[o + 3] = 255;
+};
+for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) write(x, y, 255, 250, 240);
+for (let y = 2; y <= 4; y += 1) for (let x = 2; x <= 4; x += 1) write(x, y, 220, 40, 40);
+write(3, 3, 255, 255, 255);
+assert.equal(applySafeCutout(studio, size, size), true, 'studio card around a toy is cut');
+assert.equal(studio[(0 * size + 0) * 4 + 3], 0, 'paper corner still clears');
+assert.equal(studio[(2 * size + 2) * 4 + 3], 255, 'toy on the card still stays');

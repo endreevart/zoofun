@@ -6,13 +6,15 @@ import secrets
 import time
 from dataclasses import dataclass
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
+from app.accounts.worlds import grant_world
 from app.persistence.db import seed_packs, session
 from app.persistence.models import OperatorSessionRow, PackRow, ParentRow, PaymentRow
+from app.worlds import ISLAND_KINDS, is_world_sku
 
 OPERATOR_SESSION_TTL = 60 * 60 * 24 * 30
-PACK_SIZES = (5, 10, 15, 20)
+PACK_SIZES = (1, 5, 10, 15, 20)
 
 
 @dataclass
@@ -48,6 +50,11 @@ class Payment:
     error_message: str | None = None
     last_notify_at: float | None = None
     refunded_at: float | None = None
+    promo_code: str = ""
+    discount_rub: int = 0
+    utm_source: str = ""
+    utm_campaign: str = ""
+    utm_content: str = ""
 
 
 def _pack(row: PackRow) -> Pack:
@@ -76,6 +83,11 @@ def _payment(row: PaymentRow) -> Payment:
         error_message=row.error_message,
         last_notify_at=row.last_notify_at,
         refunded_at=row.refunded_at,
+        promo_code=row.promo_code or "",
+        discount_rub=int(row.discount_rub or 0),
+        utm_source=row.utm_source or "",
+        utm_campaign=row.utm_campaign or "",
+        utm_content=row.utm_content or "",
     )
 
 
@@ -93,7 +105,22 @@ class CommerceStore:
             if not rows:
                 seed_packs(db)
                 rows = db.scalars(select(PackRow)).all()
-            return sorted((_pack(row) for row in rows), key=lambda pack: pack.animals)
+            return sorted(
+                (_pack(row) for row in rows if not is_world_sku(row.id)),
+                key=lambda pack: pack.animals,
+            )
+
+    def list_worlds(self) -> list[Pack]:
+        with session() as db:
+            rows = db.scalars(select(PackRow)).all()
+            if not rows:
+                seed_packs(db)
+                rows = db.scalars(select(PackRow)).all()
+            order = {item.construction_sku: i for i, item in enumerate(ISLAND_KINDS)}
+            return sorted(
+                (_pack(row) for row in rows if is_world_sku(row.id)),
+                key=lambda pack: order.get(pack.id, 99),
+            )
 
     def get_pack(self, pack_id: str) -> Pack | None:
         with session() as db:
@@ -124,16 +151,33 @@ class CommerceStore:
             db.flush()
             return _pack(pack)
 
-    def create_payment(self, parent_id: str, pack: Pack) -> Payment:
+    def create_payment(
+        self,
+        parent_id: str,
+        pack: Pack,
+        *,
+        amount_rub: int | None = None,
+        promo_code: str = "",
+        discount_rub: int = 0,
+    ) -> Payment:
+        charged = pack.price_rub if amount_rub is None else int(amount_rub)
+        if charged < 1:
+            raise ValueError("bad_amount")
         with session() as db:
+            parent = db.get(ParentRow, parent_id)
             row = PaymentRow(
                 id=f"pay_{secrets.token_hex(8)}",
                 parent_id=parent_id,
                 pack_id=pack.id,
                 animals=pack.animals,
-                amount_rub=pack.price_rub,
+                amount_rub=charged,
                 status="created",
                 created_at=time.time(),
+                promo_code=(promo_code or "").strip().upper()[:24],
+                discount_rub=max(0, int(discount_rub)),
+                utm_source=(parent.utm_source if parent else "") or "",
+                utm_campaign=(parent.utm_campaign if parent else "") or "",
+                utm_content=(parent.utm_content if parent else "") or "",
             )
             db.add(row)
             db.flush()
@@ -178,7 +222,10 @@ class CommerceStore:
             row.tbank_status = "CONFIRMED"
             row.error_code = None
             row.error_message = None
-            parent.quota_total += row.animals
+            if is_world_sku(row.pack_id):
+                grant_world(parent, row.pack_id)
+            else:
+                parent.quota_total += row.animals
             db.flush()
             return _payment(row)
 
@@ -243,12 +290,19 @@ class CommerceStore:
             return _payment(row) if row else None
 
     def find_reusable_checkout(
-        self, parent_id: str, pack_id: str, *, newer_than: float
+        self,
+        parent_id: str,
+        pack_id: str,
+        *,
+        newer_than: float,
+        amount_rub: int | None = None,
+        promo_code: str = "",
     ) -> Payment | None:
         """A checkout the parent can still pay, so a double tap on the buy
         button does not create a second order they could pay twice."""
+        code = (promo_code or "").strip().upper()
         with session() as db:
-            row = db.scalar(
+            query = (
                 select(PaymentRow)
                 .where(
                     PaymentRow.parent_id == parent_id,
@@ -256,9 +310,13 @@ class CommerceStore:
                     PaymentRow.status == "pending",
                     PaymentRow.created_at >= newer_than,
                     PaymentRow.payment_url.is_not(None),
+                    func.coalesce(PaymentRow.promo_code, "") == code,
                 )
                 .order_by(PaymentRow.created_at.desc())
             )
+            if amount_rub is not None:
+                query = query.where(PaymentRow.amount_rub == amount_rub)
+            row = db.scalar(query)
             return _payment(row) if row else None
 
     def list_unsettled(self, *, older_than: float, limit: int = 50) -> list[Payment]:

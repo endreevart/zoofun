@@ -5,6 +5,7 @@
  */
 
 import { API_BASE, authHeaders } from './api';
+import { captureFirstUtm, utmPayload } from './utm';
 
 const FLUSH_INTERVAL_MS = 10_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -12,6 +13,7 @@ const MAX_BUFFER = 200;
 
 let sid: string | null = null;
 let source = 'island';
+let worldId = '';
 let buffer: { e: string; ts: number; p?: Record<string, unknown> }[] = [];
 let flushTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -84,6 +86,7 @@ function flush() {
     source,
     device: detectDevice(),
     events,
+    ...utmPayload(),
   });
 
   const url = API_BASE.replace(/\/api\/zoo\/?$/, '') + '/v1/t';
@@ -104,16 +107,30 @@ function flush() {
   }
 }
 
+export function setAnalyticsWorld(id: string) {
+  const next = (id || '').trim();
+  if (worldId === next) return;
+  worldId = next;
+  if (next) track('world.open', { worldId: next });
+}
+
 export function track(event: string, payload?: Record<string, unknown>) {
   if (!sid) return;
   if (buffer.length >= MAX_BUFFER) flush();
-  buffer.push({ e: event, ts: Date.now() / 1000, ...(payload ? { p: payload } : {}) });
+  const p: Record<string, unknown> = { ...(payload ?? {}) };
+  if (worldId && p.worldId == null) p.worldId = worldId;
+  buffer.push({
+    e: event,
+    ts: Date.now() / 1000,
+    ...(Object.keys(p).length ? { p } : {}),
+  });
 }
 
 export function initAnalytics(src: 'island' | 'site' = 'island') {
   if (sid) return; // already initialized
   sid = generateSid();
   source = src;
+  captureFirstUtm();
 
   track('session.start');
 

@@ -31,6 +31,20 @@ def require_session(
     return pair
 
 
+def require_session_image(
+    access_token: Annotated[str, Query()] = "",
+    authorization: Annotated[str | None, Header()] = None,
+) -> tuple[ParentAccount, ChildProfile]:
+    """Bearer or `access_token` so a garden <img> can load the still."""
+    incoming = (access_token or "").strip()
+    if not incoming:
+        incoming = bearer_token(authorization)
+    pair = store.session(incoming)
+    if pair is None:
+        raise HTTPException(status_code=401, detail="not_signed_in")
+    return pair
+
+
 def optional_session(
     authorization: Annotated[str | None, Header()] = None,
 ) -> tuple[ParentAccount, ChildProfile] | None:

@@ -1,4 +1,6 @@
-export type CheckoutFail = 'not_signed_in' | 'unavailable' | 'failed';
+import type { GardenWorld } from './world/gardens';
+
+export type CheckoutFail = 'not_signed_in' | 'unavailable' | 'failed' | 'owned' | 'promo';
 
 export function checkoutFailFromStatus(status: number): CheckoutFail {
   if (status === 401) return 'not_signed_in';
@@ -6,10 +8,18 @@ export function checkoutFailFromStatus(status: number): CheckoutFail {
   return 'failed';
 }
 
+export function checkoutFailFromDetail(detail: unknown): CheckoutFail | null {
+  if (typeof detail !== 'string') return null;
+  if (detail.startsWith('promo_')) return 'promo';
+  return null;
+}
+
 export type Quota = {
   remaining: number;
   quotaTotal: number;
   used: number;
+  ownedWorlds: string[];
+  worlds: GardenWorld[];
 };
 
 /** Server remaining is authoritative. Null remaining means local/unsigned play.
@@ -29,7 +39,7 @@ export function canStartCreation(input: {
 
 export function applyRemaining(quota: Quota | null, remaining: number): Quota | null {
   if (!quota) {
-    return { remaining, quotaTotal: remaining, used: 0 };
+    return { remaining, quotaTotal: remaining, used: 0, ownedWorlds: [], worlds: [] };
   }
   return {
     ...quota,
@@ -41,13 +51,4 @@ export function applyRemaining(quota: Quota | null, remaining: number): Quota | 
 export function spendOneCredit(quota: Quota | null): Quota | null {
   if (!quota) return quota;
   return applyRemaining(quota, Math.max(0, quota.remaining - 1));
-}
-
-/** How many egg tokens to draw for a remaining credit count. */
-export const CREDIT_EGG_MAX = 8;
-
-export function creditEggCounts(remaining: number): { filled: number; extra: number } {
-  const n = Math.max(0, Math.floor(remaining));
-  if (n <= CREDIT_EGG_MAX) return { filled: n, extra: 0 };
-  return { filled: CREDIT_EGG_MAX, extra: n - CREDIT_EGG_MAX };
 }

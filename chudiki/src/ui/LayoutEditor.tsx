@@ -1,8 +1,79 @@
 import { useEffect, useState } from 'react';
-import { renderCatalogThumbs } from '../game/assets/catalogThumbs';
 import type { Game } from '../game/Game';
 import type { LayoutState } from '../game/interaction/LayoutStudio';
-import { CATALOG_MODELS, parseLayoutDocument, propLabel } from '../game/world/layoutAuthored';
+import { catalogForShell, bakedLayoutFile, layoutDownloadName, parseLayoutDocument, propLabel } from '../game/world/layoutAuthored';
+import { studioKindHref } from '../studioMode';
+import { isHangingShell, type WorldShell } from '../game/world/kinds';
+
+export function pickLayoutFile(onDoc: (doc: ReturnType<typeof parseLayoutDocument>) => void | Promise<void>) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json,.json';
+  input.onchange = () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    void file.text().then((text) => {
+      try {
+        void onDoc(parseLayoutDocument(JSON.parse(text)));
+      } catch {
+        /* ignore a broken dump */
+      }
+    });
+  };
+  input.click();
+}
+
+export function StudioWorldSwitch({
+  shell,
+  onDownload,
+  onOpen,
+}: {
+  shell: WorldShell;
+  onDownload?: () => void;
+  onOpen?: () => void;
+}) {
+  return (
+    <>
+      <div className="layout-worlds">
+        <button
+          type="button"
+          className={shell === 'garden' ? 'is-on' : ''}
+          onClick={() => switchStudioWorld('garden', shell)}
+        >
+          Остров
+        </button>
+        <button
+          type="button"
+          className={shell === 'meadow' ? 'is-on' : ''}
+          onClick={() => switchStudioWorld('meadow', shell)}
+        >
+          Луг
+        </button>
+        <button
+          type="button"
+          className={shell === 'grove' ? 'is-on' : ''}
+          onClick={() => switchStudioWorld('grove', shell)}
+        >
+          Куболесье
+        </button>
+      </div>
+      {onOpen || onDownload ? (
+        <div className="layout-files">
+          {onOpen ? (
+            <button type="button" title="Открыть JSON раскладки" onClick={onOpen}>
+              Открыть
+            </button>
+          ) : null}
+          {onDownload ? (
+            <button type="button" title="Скачать JSON раскладки" onClick={onDownload}>
+              ⬇
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
 
 type Props = {
   game: Game;
@@ -17,41 +88,64 @@ export function LayoutEditor({ game }: Props) {
   const [state, setState] = useState<LayoutState>(studio.getState());
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [opening, setOpening] = useState(false);
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const shell = game.worldShell;
 
   useEffect(() => studio.subscribe(() => setState(studio.getState())), [studio]);
 
   useEffect(() => {
-    if (!state.enabled || Object.keys(thumbs).length) return;
-    const names = catalogModelsSafe(game);
+    if (!state.enabled) return;
+    const names = catalogModelsSafe(game).filter((name) => game.library.has(name));
     if (!names.length) return;
-    setThumbs(renderCatalogThumbs(game.library, names));
-  }, [game, state.enabled, thumbs]);
+    setThumbs((prev) => ({ ...prev, ...game.captureCatalogThumbs(names) }));
+  }, [game, state.enabled, catalogBusy]);
 
   if (!state.enabled) {
     return (
-      <button
-        className="layout-toggle"
-        disabled={opening}
-        onClick={() => {
-          void (async () => {
-            setOpening(true);
-            try {
-              await game.library.ensureAll(CATALOG_MODELS);
-              studio.setEnabled(true);
-            } finally {
-              setOpening(false);
-            }
-          })();
-        }}
-        title="Расставить объекты"
-      >
-        {opening ? '…' : '🌲'}
-      </button>
+      <div className="layout-launch">
+        <StudioWorldSwitch shell={shell} />
+        <button
+          className="layout-toggle"
+          disabled={opening}
+          onClick={() => {
+            void (async () => {
+              setOpening(true);
+              try {
+                const catalog = [...catalogForShell(shell)];
+                if (isHangingShell(shell)) {
+                  studio.setEnabled(true);
+                  setCatalogBusy(true);
+                  const quick = catalog.filter(
+                    (name) => name.startsWith('lp_') || name.startsWith('rock') || name === 'mosslit-stones',
+                  );
+                  if (quick.length) {
+                    await game.library.ensureAll(quick);
+                    setThumbs(game.captureCatalogThumbs(quick));
+                  }
+                  await game.library.ensureAll(catalog);
+                  setThumbs(game.captureCatalogThumbs(catalog));
+                  setCatalogBusy(false);
+                } else {
+                  await game.library.ensureAll(catalog);
+                  studio.setEnabled(true);
+                }
+              } finally {
+                setOpening(false);
+                setCatalogBusy(false);
+              }
+            })();
+          }}
+          title="Расставить объекты"
+        >
+          {opening ? '…' : '🌲'}
+        </button>
+      </div>
     );
   }
 
   const selected = studio.selected();
   const selectedPath = studio.selectedPath();
+  const selectedSpawn = studio.selectedSpawn();
 
   return (
     <div
@@ -64,11 +158,16 @@ export function LayoutEditor({ game }: Props) {
           <button onClick={() => studio.setEnabled(false)}>✕</button>
         </div>
       </header>
+      <StudioWorldSwitch shell={shell} />
+
+      {catalogBusy ? <p className="layout-help">Модели луга ещё грузятся — можно ставить, как появятся.</p> : null}
 
       <p className="layout-help">
         {state.tool === 'path'
           ? 'Веди по земле — появится тропинка. Клик по готовой выделяет. Delete стирает. − = ширина. Esc отменяет штрих. Пробел — камера. Расстановка пишется сама.'
-          : 'Клик по земле ставит, перетаскивание двигает. Delete убирает. [ ] поворот, − = размер. Пробел — камера. Расстановка пишется сама — перезагрузка её не сотрёт.'}
+          : state.tool === 'spawn'
+            ? 'Клик по земле — круг, внутри которого будет появляться яйцо. Клик по кругу выделяет, перетаскивание двигает. − = радиус, Delete убирает. Кругов может быть сколько угодно: чем шире круг, тем чаще в нём яйцо. Без кругов яйцо ложится на главную поляну, как раньше.'
+            : 'Клик по земле ставит, перетаскивание двигает. Delete убирает. [ ] поворот, − = размер. Пробел — камера. Расстановка пишется сама — перезагрузка её не сотрёт.'}
       </p>
 
       <div className="layout-tools">
@@ -90,6 +189,13 @@ export function LayoutEditor({ game }: Props) {
         >
           Тропинка
         </button>
+        <button
+          className={state.tool === 'spawn' ? 'is-on' : ''}
+          onClick={() => studio.setTool('spawn')}
+          title="Где появляется новое яйцо"
+        >
+          Место яйца
+        </button>
       </div>
 
       {state.tool === 'path' && (
@@ -101,14 +207,29 @@ export function LayoutEditor({ game }: Props) {
         </div>
       )}
 
-      {state.tool !== 'path' && (
+      {state.tool === 'spawn' && (
+        <div className="layout-path-width">
+          <span>Радиус</span>
+          <button onClick={() => studio.setSpawnRadius(state.spawnRadius * 0.85)}>−</button>
+          <span className="layout-width-value">{state.spawnRadius.toFixed(1)}</span>
+          <button onClick={() => studio.setSpawnRadius(state.spawnRadius * 1.15)}>+</button>
+        </div>
+      )}
+
+      {state.tool !== 'path' && state.tool !== 'spawn' && (
         <div className="layout-catalog">
           {state.catalog.map((model) => (
             <button
               key={model}
               type="button"
               className={`layout-card${state.activeModel === model ? ' is-on' : ''}`}
-              onClick={() => studio.setActiveModel(model)}
+              onClick={() => {
+                void (async () => {
+                  if (!game.library.has(model)) await game.library.ensure(model);
+                  studio.setActiveModel(model);
+                  setThumbs((prev) => ({ ...prev, ...game.captureCatalogThumbs([model]) }));
+                })();
+              }}
             >
               {thumbs[model] ? (
                 <img src={thumbs[model]} alt="" />
@@ -145,33 +266,33 @@ export function LayoutEditor({ game }: Props) {
         </div>
       )}
 
+      {selectedSpawn && (
+        <div className="layout-selected">
+          <span>Место яйца · {selectedSpawn.radius.toFixed(1)} м</span>
+          <div className="layout-actions">
+            <button onClick={() => studio.scaleSelected(0.9)}>−</button>
+            <button onClick={() => studio.scaleSelected(1.1)}>+</button>
+            <button onClick={() => studio.deleteSelected()}>Удалить</button>
+          </div>
+        </div>
+      )}
+
       <footer>
         <span>
           {state.count} шт.
           {state.pathCount ? ` · ${state.pathCount} дор.` : ''}
+          {state.spawnCount ? ` · ${state.spawnCount} ${circles(state.spawnCount)} для яйца` : ''}
           {state.dirty ? ' · пишется…' : ' · в браузере'}
         </span>
         <div className="layout-actions">
           <button
             type="button"
-            title="Открыть скачанный island-layout.json"
-            onClick={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'application/json';
-              input.onchange = () => {
-                const file = input.files?.[0];
-                if (!file) return;
-                void file.text().then((text) => {
-                  try {
-                    studio.importDocument(parseLayoutDocument(JSON.parse(text)));
-                  } catch {
-                    /* ignore a broken dump */
-                  }
-                });
-              };
-              input.click();
-            }}
+            title={`Открыть скачанный ${layoutDownloadName(shell)}`}
+            onClick={() =>
+              pickLayoutFile((doc) => {
+                studio.importDocument(doc);
+              })
+            }
           >
             Открыть
           </button>
@@ -180,7 +301,7 @@ export function LayoutEditor({ game }: Props) {
           </button>
           <button
             onClick={() => studio.save()}
-            title="Скачать JSON. Положи его в public/layout/island-layout.json — тогда парк будет в проекте, не только в этом браузере."
+            title={`Скачать JSON. Положи его в public/${bakedLayoutFile(shell)} — тогда раскладка будет в проекте, не только в этом браузере.`}
           >
             Скачать
           </button>
@@ -190,10 +311,30 @@ export function LayoutEditor({ game }: Props) {
   );
 }
 
+function circles(count: number): string {
+  const tail = count % 100;
+  if (tail >= 11 && tail <= 14) return 'кругов';
+  switch (count % 10) {
+    case 1:
+      return 'круг';
+    case 2:
+    case 3:
+    case 4:
+      return 'круга';
+    default:
+      return 'кругов';
+  }
+}
+
 function catalogModelsSafe(game: Game): string[] {
   try {
     return game.layoutStudio.getState().catalog;
   } catch {
-    return [];
+    return [...catalogForShell(game.worldShell)];
   }
+}
+
+function switchStudioWorld(kind: WorldShell, current: WorldShell) {
+  if (kind === current) return;
+  window.location.assign(studioKindHref(kind));
 }

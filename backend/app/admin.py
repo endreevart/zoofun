@@ -5,9 +5,11 @@ from __future__ import annotations
 from sqladmin import Admin, ModelView
 from sqladmin.authentication import AuthenticationBackend
 from sqladmin.i18n import I18nConfig
+from sqlalchemy import func, select
 from starlette.requests import Request
 
 from app.accounts.passwords import hash_password, looks_hashed
+from app.admin_when import UNIX_TYPE_FORMATTERS
 from app.persistence.db import get_engine
 from app.persistence.models import (
     AnalyticsEventRow,
@@ -20,8 +22,18 @@ from app.persistence.models import (
     ParentRow,
     ParentSessionRow,
     PaymentRow,
+    PromoCodeRow,
+    WorldRow,
 )
 from app.settings import get_settings
+from app.worlds import WORLD_PREFIX, world_title
+
+
+class UnixDates:
+    """Unix-float timestamps as Moscow calendar time, empty when missing."""
+
+    column_type_formatters = UNIX_TYPE_FORMATTERS
+    column_type_formatters_detail = UNIX_TYPE_FORMATTERS
 
 
 class AdminAuth(AuthenticationBackend):
@@ -47,7 +59,7 @@ class AdminAuth(AuthenticationBackend):
         return bool(request.session.get("staff"))
 
 
-class ParentAdmin(ModelView, model=ParentRow):
+class ParentAdmin(UnixDates, ModelView, model=ParentRow):
     name = "Родитель"
     name_plural = "Родители"
     icon = "fa-solid fa-user"
@@ -55,13 +67,14 @@ class ParentAdmin(ModelView, model=ParentRow):
     category_icon = "fa-solid fa-house"
     column_list = [
         ParentRow.email,
+        ParentRow.yandex_id,
         ParentRow.quota_total,
         ParentRow.generation_used,
         ParentRow.last_login_at,
         ParentRow.created_at,
         ParentRow.id,
     ]
-    column_searchable_list = [ParentRow.email, ParentRow.id]
+    column_searchable_list = [ParentRow.email, ParentRow.yandex_id, ParentRow.id]
     column_sortable_list = [
         ParentRow.email,
         ParentRow.quota_total,
@@ -72,6 +85,7 @@ class ParentAdmin(ModelView, model=ParentRow):
     column_labels = {
         ParentRow.id: "ID",
         ParentRow.email: "Почта",
+        ParentRow.yandex_id: "Яндекс ID",
         ParentRow.password_hash: "Пароль (новый текст будет захеширован)",
         ParentRow.quota_total: "Лимит генераций",
         ParentRow.generation_used: "Использовано",
@@ -90,7 +104,7 @@ class ParentAdmin(ModelView, model=ParentRow):
             data["password_hash"] = hash_password(str(raw))
 
 
-class ChildAdmin(ModelView, model=ChildRow):
+class ChildAdmin(UnixDates, ModelView, model=ChildRow):
     name = "Ребёнок"
     name_plural = "Дети"
     icon = "fa-solid fa-child"
@@ -109,7 +123,7 @@ class ChildAdmin(ModelView, model=ChildRow):
     can_export = True
 
 
-class CreatureAdmin(ModelView, model=CreatureRow):
+class CreatureAdmin(UnixDates, ModelView, model=CreatureRow):
     name = "Животное"
     name_plural = "Животные"
     icon = "fa-solid fa-paw"
@@ -136,13 +150,37 @@ class CreatureAdmin(ModelView, model=CreatureRow):
     can_export = True
 
 
-class PackAdmin(ModelView, model=PackRow):
+class _PackKindMixin:
+    """Same `packs` table: generation SKUs vs paid worlds."""
+
+    _worlds_only = False
+
+    def list_query(self, request: Request):  # noqa: ARG002
+        stmt = select(self.model)
+        if self._worlds_only:
+            return stmt.where(PackRow.id.startswith(WORLD_PREFIX))
+        return stmt.where(~PackRow.id.startswith(WORLD_PREFIX))
+
+    def count_query(self, request: Request):  # noqa: ARG002
+        stmt = select(func.count(PackRow.id)).select_from(PackRow)
+        if self._worlds_only:
+            return stmt.where(PackRow.id.startswith(WORLD_PREFIX))
+        return stmt.where(~PackRow.id.startswith(WORLD_PREFIX))
+
+
+class PackAdmin(_PackKindMixin, UnixDates, ModelView, model=PackRow):
     name = "Пакет"
     name_plural = "Пакеты генераций"
     icon = "fa-solid fa-box"
     category = "Коммерция"
     category_icon = "fa-solid fa-ruble-sign"
-    column_list = [PackRow.id, PackRow.animals, PackRow.price_rub, PackRow.list_price_rub, PackRow.featured]
+    column_list = [
+        PackRow.id,
+        PackRow.animals,
+        PackRow.price_rub,
+        PackRow.list_price_rub,
+        PackRow.featured,
+    ]
     column_sortable_list = [PackRow.animals, PackRow.price_rub, PackRow.list_price_rub]
     column_labels = {
         PackRow.id: "Код",
@@ -155,7 +193,67 @@ class PackAdmin(ModelView, model=PackRow):
     can_export = True
 
 
-class PaymentAdmin(ModelView, model=PaymentRow):
+class WorldAdmin(_PackKindMixin, UnixDates, ModelView, model=PackRow):
+    name = "Остров"
+    name_plural = "Острова"
+    icon = "fa-solid fa-map"
+    category = "Коммерция"
+    _worlds_only = True
+    column_list = [PackRow.id, PackRow.price_rub, PackRow.list_price_rub]
+    column_sortable_list = [PackRow.price_rub, PackRow.list_price_rub]
+    column_labels = {
+        PackRow.id: "Остров",
+        PackRow.price_rub: "Цена со скидкой, ₽",
+        PackRow.list_price_rub: "Цена без скидки, ₽",
+        PackRow.animals: "Животных",
+        PackRow.featured: "Отмечен",
+        PackRow.updated_at: "Изменён",
+    }
+    column_formatters = {
+        PackRow.id: lambda m, _a: f"{world_title(m.id)} · {m.id}",
+    }
+    form_columns = [PackRow.id, PackRow.price_rub, PackRow.list_price_rub]
+    form_include_pk = True
+    can_create = False
+    can_delete = False
+    can_export = True
+
+
+WorldAdmin.identity = "world-sku"
+
+
+class FamilyWorldAdmin(UnixDates, ModelView, model=WorldRow):
+    name = "Купленный мир"
+    name_plural = "Купленные миры"
+    icon = "fa-solid fa-leaf"
+    category = "Зоопарк"
+    column_list = [
+        WorldRow.title,
+        WorldRow.sku,
+        WorldRow.id,
+        WorldRow.parent,
+        WorldRow.created_at,
+    ]
+    column_searchable_list = [WorldRow.id, WorldRow.title, WorldRow.sku]
+    column_labels = {
+        WorldRow.parent_id: "Родитель",
+        WorldRow.id: "ID мира",
+        WorldRow.sku: "SKU",
+        WorldRow.title: "Название",
+        WorldRow.layout: "Расстановка",
+        WorldRow.created_at: "Создан",
+        WorldRow.parent: "Родитель",
+    }
+    form_include_pk = True
+    can_export = True
+    can_create = False
+    can_delete = False
+
+
+FamilyWorldAdmin.identity = "family-world"
+
+
+class PaymentAdmin(UnixDates, ModelView, model=PaymentRow):
     name = "Платёж"
     name_plural = "Платежи"
     icon = "fa-solid fa-receipt"
@@ -166,6 +264,8 @@ class PaymentAdmin(ModelView, model=PaymentRow):
         PaymentRow.parent,
         PaymentRow.pack_id,
         PaymentRow.amount_rub,
+        PaymentRow.promo_code,
+        PaymentRow.discount_rub,
         PaymentRow.status,
         PaymentRow.tbank_status,
         PaymentRow.error_code,
@@ -185,6 +285,8 @@ class PaymentAdmin(ModelView, model=PaymentRow):
         PaymentRow.pack_id: "Пакет",
         PaymentRow.animals: "Животных",
         PaymentRow.amount_rub: "Сумма, ₽",
+        PaymentRow.promo_code: "Промокод",
+        PaymentRow.discount_rub: "Скидка, ₽",
         PaymentRow.status: "Статус",
         PaymentRow.created_at: "Создан",
         PaymentRow.tbank_payment_id: "PaymentId Т-Банка",
@@ -199,7 +301,7 @@ class PaymentAdmin(ModelView, model=PaymentRow):
     can_export = True
 
 
-class ParentSessionAdmin(ModelView, model=ParentSessionRow):
+class ParentSessionAdmin(UnixDates, ModelView, model=ParentSessionRow):
     name = "Сессия родителя"
     name_plural = "Сессии родителей"
     icon = "fa-solid fa-key"
@@ -222,7 +324,7 @@ class ParentSessionAdmin(ModelView, model=ParentSessionRow):
     can_export = True
 
 
-class OperatorSessionAdmin(ModelView, model=OperatorSessionRow):
+class OperatorSessionAdmin(UnixDates, ModelView, model=OperatorSessionRow):
     name = "Сессия оператора"
     name_plural = "Сессии оператора"
     icon = "fa-solid fa-user-shield"
@@ -236,7 +338,7 @@ class OperatorSessionAdmin(ModelView, model=OperatorSessionRow):
     can_export = True
 
 
-class AnalyticsSessionAdmin(ModelView, model=AnalyticsSessionRow):
+class AnalyticsSessionAdmin(UnixDates, ModelView, model=AnalyticsSessionRow):
     name = "Сессия"
     name_plural = "Сессии"
     icon = "fa-solid fa-clock"
@@ -250,6 +352,8 @@ class AnalyticsSessionAdmin(ModelView, model=AnalyticsSessionRow):
         AnalyticsSessionRow.device_type,
         AnalyticsSessionRow.os,
         AnalyticsSessionRow.browser,
+        AnalyticsSessionRow.locale,
+        AnalyticsSessionRow.geo_country,
         AnalyticsSessionRow.started_at,
         AnalyticsSessionRow.duration_sec,
     ]
@@ -277,6 +381,8 @@ class AnalyticsSessionAdmin(ModelView, model=AnalyticsSessionRow):
         AnalyticsSessionRow.user_agent: "User-Agent",
         AnalyticsSessionRow.locale: "Локаль",
         AnalyticsSessionRow.ip_hash: "IP (хеш)",
+        AnalyticsSessionRow.geo_country: "Страна",
+        AnalyticsSessionRow.geo_city: "Город",
         AnalyticsSessionRow.started_at: "Начало",
         AnalyticsSessionRow.ended_at: "Конец",
         AnalyticsSessionRow.duration_sec: "Длительность, с",
@@ -289,7 +395,7 @@ class AnalyticsSessionAdmin(ModelView, model=AnalyticsSessionRow):
     page_size = 50
 
 
-class AnalyticsEventAdmin(ModelView, model=AnalyticsEventRow):
+class AnalyticsEventAdmin(UnixDates, ModelView, model=AnalyticsEventRow):
     name = "Событие"
     name_plural = "События"
     icon = "fa-solid fa-bolt"
@@ -328,7 +434,7 @@ class AnalyticsEventAdmin(ModelView, model=AnalyticsEventRow):
     page_size = 100
 
 
-class OpsLogAdmin(ModelView, model=OpsLogRow):
+class OpsLogAdmin(UnixDates, ModelView, model=OpsLogRow):
     name = "Лог"
     name_plural = "Логи"
     icon = "fa-solid fa-clipboard-list"
@@ -368,6 +474,39 @@ class OpsLogAdmin(ModelView, model=OpsLogRow):
     page_size = 100
 
 
+class PromoAdmin(UnixDates, ModelView, model=PromoCodeRow):
+    name = "Промокод"
+    name_plural = "Промокоды"
+    icon = "fa-solid fa-percent"
+    category = "Коммерция"
+    column_list = [
+        PromoCodeRow.code,
+        PromoCodeRow.kind,
+        PromoCodeRow.value,
+        PromoCodeRow.max_redemptions,
+        PromoCodeRow.active,
+        PromoCodeRow.starts_at,
+        PromoCodeRow.ends_at,
+        PromoCodeRow.pack_ids,
+        PromoCodeRow.created_at,
+    ]
+    column_searchable_list = [PromoCodeRow.code, PromoCodeRow.note]
+    column_labels = {
+        PromoCodeRow.code: "Код",
+        PromoCodeRow.kind: "Тип",
+        PromoCodeRow.value: "Значение",
+        PromoCodeRow.max_redemptions: "Лимит гашений",
+        PromoCodeRow.starts_at: "С",
+        PromoCodeRow.ends_at: "До",
+        PromoCodeRow.active: "Активен",
+        PromoCodeRow.pack_ids: "Пакеты",
+        PromoCodeRow.created_at: "Создан",
+        PromoCodeRow.note: "Заметка",
+    }
+    form_include_pk = True
+    can_export = True
+
+
 def mount_admin(app) -> Admin:
     settings = get_settings()
     admin = Admin(
@@ -382,7 +521,10 @@ def mount_admin(app) -> Admin:
     admin.add_view(ChildAdmin)
     admin.add_view(CreatureAdmin)
     admin.add_view(PackAdmin)
+    admin.add_view(WorldAdmin)
+    admin.add_view(FamilyWorldAdmin)
     admin.add_view(PaymentAdmin)
+    admin.add_view(PromoAdmin)
     admin.add_view(ParentSessionAdmin)
     admin.add_view(OperatorSessionAdmin)
     admin.add_view(AnalyticsSessionAdmin)

@@ -1,11 +1,23 @@
 <template>
   <div class="funnel-detail">
-    <CrmPageHeader :title="data?.label ?? 'Воронка'" :subtitle="data?.description" />
+    <CrmPageHeader
+      :title="data?.label ?? 'Воронка'"
+      :subtitle="data?.description"
+      :help="data ? funnelHelp(data.key) : undefined"
+    />
     <div v-if="data" class="crm-grid-charts-2">
-      <StatCard label="До конца" :value="`${data.end_conversion_pct}%`" />
-      <StatCard label="Средний отвал" :value="`${data.avg_step_drop_pct}%`" />
+      <StatCard
+        label="До конца"
+        :value="`${data.end_conversion_pct}%`"
+        help="Доля первого шага, которая дошла до последнего. Для оттока это не «хорошо» — смотри описание воронки."
+      />
+      <StatCard
+        label="Средний отвал"
+        :value="`${data.avg_step_drop_pct}%`"
+        help="Средний процент, который теряем между соседними колонками. Большое число — обрыв на одном шаге."
+      />
     </div>
-    <FunnelColumns v-if="data" class="funnel-detail-columns" :steps="data.steps" />
+    <FunnelColumns v-if="data" class="funnel-detail-columns" :steps="data.steps" :funnel-key="data.key" />
   </div>
 </template>
 
@@ -16,13 +28,16 @@ import CrmPageHeader from "@/components/crm/CrmPageHeader.vue";
 import FunnelColumns from "@/components/dashboard/FunnelColumns.vue";
 import StatCard from "@/components/dashboard/StatCard.vue";
 import { crmApi, type FunnelDetail } from "@/lib/api";
+import { funnelHelp } from "@/lib/funnel-help";
+import { usePeriodStore } from "@/stores/period";
 
 const route = useRoute();
+const period = usePeriodStore();
 const data = ref<FunnelDetail | null>(null);
 
 async function load() {
   const key = String(route.params.key || "product");
-  data.value = await crmApi.funnel(key, key === "product" || key === "death" ? 0 : 30);
+  data.value = await crmApi.funnel(key, period.query);
 }
 
 onMounted(() => {

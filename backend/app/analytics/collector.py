@@ -8,8 +8,10 @@ import time
 
 from sqlalchemy import select
 
+from app.analytics.geo import lookup_country
+from app.analytics.utm import fill_first_utm, normalize_utm
 from app.persistence.db import session
-from app.persistence.models import AnalyticsEventRow, AnalyticsSessionRow
+from app.persistence.models import AnalyticsEventRow, AnalyticsSessionRow, ParentRow
 
 logger = logging.getLogger("virtual_zoo.analytics")
 
@@ -32,6 +34,11 @@ def ingest_batch(
     child_id: str | None = None,
     ip: str = "",
     user_agent: str = "",
+    country_header: str = "",
+    city_header: str = "",
+    utm_source: str = "",
+    utm_campaign: str = "",
+    utm_content: str = "",
 ) -> int:
     """Write a batch of events. Returns the number of events persisted."""
     if not events or not sid:
@@ -40,6 +47,9 @@ def ingest_batch(
     now = time.time()
     source = (source or "unknown")[:16]
     ip_hashed = _ip_hash(ip)
+    geo_country = lookup_country(ip, country_header)
+    geo_city = (city_header or "").strip()[:64] if geo_country else ""
+    utm = normalize_utm(utm_source, utm_campaign, utm_content)
 
     try:
         with session() as db:
@@ -61,6 +71,11 @@ def ingest_batch(
                     user_agent=user_agent[:2000],
                     locale=(device.get("locale") or "")[:10],
                     ip_hash=ip_hashed,
+                    geo_country=geo_country,
+                    geo_city=geo_city,
+                    utm_source=utm.source,
+                    utm_campaign=utm.campaign,
+                    utm_content=utm.content,
                     started_at=now,
                     is_parent_gate=bool(device.get("parentGate")),
                 )
@@ -72,6 +87,21 @@ def ingest_batch(
                     row.parent_id = parent_id
                 if child_id and not row.child_id:
                     row.child_id = child_id
+                if ip_hashed and not row.ip_hash:
+                    row.ip_hash = ip_hashed
+                if geo_country and not row.geo_country:
+                    row.geo_country = geo_country
+                if geo_city and not row.geo_city:
+                    row.geo_city = geo_city
+                fill_first_utm(row, utm)
+
+            if parent_id:
+                parent = db.get(ParentRow, parent_id)
+                if parent is not None:
+                    fill_first_utm(
+                        parent,
+                        normalize_utm(row.utm_source, row.utm_campaign, row.utm_content),
+                    )
 
             # Process events
             written = 0
@@ -80,17 +110,26 @@ def ingest_batch(
                 if not name:
                     continue
                 ts = float(evt.get("ts") or now)
+                extra = evt.get("p")
 
                 if name == "session.heartbeat" or name == "session.end":
                     row.ended_at = ts
                     row.duration_sec = max(0, int(ts - row.started_at))
 
+                extra_world = (
+                    str(extra.get("worldId") or "")[:64] if isinstance(extra, dict) else ""
+                )
+                extra_path = (
+                    str(extra.get("path") or "")[:200] if isinstance(extra, dict) else ""
+                )
                 db.add(AnalyticsEventRow(
                     session_id=sid,
                     parent_id=parent_id,
                     child_id=child_id,
                     event=name,
-                    payload=evt.get("p"),
+                    world_id=extra_world,
+                    path=extra_path,
+                    payload=extra,
                     created_at=ts,
                 ))
                 written += 1

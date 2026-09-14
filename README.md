@@ -1,6 +1,6 @@
 # Virtual Zoo
 
-Virtual Zoo is a child-first game for ages 3–8. A child draws an imaginary animal or photographs a paper drawing; the backend carefully turns it into a recognizable 2.5D creature that appears inside a hand-authored 3D zoo.
+Virtual Zoo is a child-first game for ages 3–8. A child draws an imaginary animal, photographs a paper drawing, or photographs a real pet; the backend carefully turns it into a recognizable 2.5D creature that appears inside a hand-authored 3D zoo.
 
 The current goal is a fast non-commercial pilot for a test group of up to 10 children. The repository is prepared for development in Cursor.
 
@@ -12,7 +12,7 @@ The generated creature must remain recognizable. Visual polish, animation, or te
 
 ## Current pilot
 
-- Draw in the app or photograph a paper drawing.
+- Draw in the app, photograph a paper drawing, or photograph a real pet (web island, D-025).
 - Generate a recognizable transparent 2.5D creature.
 - Place it in one beautiful stylized free-roaming 3D zoo.
 - Keep at least 20 animals simultaneously active with `walk`, `hop`, `fly`, and `float`.

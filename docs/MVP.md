@@ -7,7 +7,7 @@ The active **product** target is the public web zoo. Unity iteration gates in `d
 ## Included
 
 1. In-app drawing with simple brush, eraser, undo, clear, and confirm.
-2. Paper-drawing import through camera or photo picker.
+2. Paper-drawing import through camera or photo picker. On the web island, a camera photo of a real pet may take the silly-silhouette path (D-025).
 3. Basic crop, perspective correction, and background cleanup.
 4. Generated 2.5D creatures with transparent background.
 5. One hand-authored beautiful stylized 3D zoo.
@@ -24,13 +24,13 @@ The active **product** target is the public web zoo. Unity iteration gates in `d
 
 ## Explicitly excluded from this pilot
 
-- Subscriptions, StoreKit, App Store IAP, advertising, and extra worlds for sale (worlds later).
+- Subscriptions, StoreKit, App Store IAP, advertising (worlds: D-020 / D-021 construction copies, bought as many times as the parent wants). Garden, meadow, and grove (Куболесье) are the shipped kinds.
 - Foreign acquiring and non-RUB prices (T-Bank / RUB only for now).
 - Friends, visits, gifting, leagues, public rankings, search, chat, comments, and public galleries.
 - Server-side social moderation workflows required only by user-to-user publishing.
 - Advertising, loot boxes, random paid rewards, and paid stat advantages.
 - Petting, general mini-games, quests, stories, and multi-character narratives.
-- Multiple biomes and user-built terrain.
+- Multiple biomes as player-sculpted terrain. Children may stamp catalog props on paid empty island shells (D-020 / D-021); they do not sculpt the ground. Garden, meadow, and grove are authored kinds. A later biome is a new kind with its own assets.
 - Full automatic 3D reconstruction, arbitrary skeletal auto-rigging, and generative video sprites.
 - Android, Windows, web, visionOS, and multiplayer infrastructure.
 

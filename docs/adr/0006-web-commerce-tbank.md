@@ -16,10 +16,10 @@ Accounts, zoos, packs, and payments now live in PostgreSQL. SQLAdmin at `/staff`
 ## Decision
 
 1. First successful generation on a parent account is free.
-2. Further generations consume credits from packs of 5, 10, 15, or 20 animals.
+2. Further generations consume credits from packs of 1, 5, 10, 15, or 20 animals. After the free creature the island first offers 1 and 5 (D-024).
 3. Credits sit on the parent account. Delete does not return a credit.
 4. Prices are in RUB and are operator-editable. Foreign acquiring and other currencies come later with different prices.
-5. Extra worlds are not sold. Keep the legal hook; do not implement a world shop.
+5. Extra worlds: D-020 DIY gardens of the garden island (`world_diy_garden`, buyable more than once). Further islands are D-021 kinds (own shell + construction SKU). Garden, meadow, and grove (Куболесье) are in the shop; a later kind needs assets and a decision.
 6. Checkout is parent-session only. Card data stays on АО «ТБанк». The zoo may open a short pack sheet; it must not collect card numbers.
 7. No StoreKit, subscriptions, App Store IAP, or child-facing payment forms.
 8. T-Bank keys live only in server `.env`.

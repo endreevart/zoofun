@@ -33,11 +33,20 @@ export class TapController {
     this.element.addEventListener('pointermove', this.onPointerMove);
     this.element.addEventListener('pointerup', this.onPointerUp);
     this.element.addEventListener('pointercancel', this.onCancel);
+    window.addEventListener('pointerup', this.onWindowUp);
+    window.addEventListener('pointercancel', this.onWindowCancel);
   }
 
   private onPointerDown = (event: PointerEvent) => {
+    // A new primary finger means Safari dropped the last pointerup. Start clean
+    // so a swallowed lift cannot freeze every later tap as "multi-touch".
+    if (event.isPrimary) {
+      this.clearLongPress();
+      this.activePointer = null;
+      this.multiTouch = false;
+    }
+
     if (this.activePointer !== null) {
-      // A second finger means the user is framing the shot, not tapping.
       this.multiTouch = true;
       this.clearLongPress();
       return;
@@ -81,6 +90,16 @@ export class TapController {
     }
   };
 
+  private onWindowUp = (event: PointerEvent) => {
+    if (event.pointerId !== this.activePointer) return;
+    this.onPointerUp(event);
+  };
+
+  private onWindowCancel = (event: PointerEvent) => {
+    if (event.pointerId !== this.activePointer) return;
+    this.onCancel();
+  };
+
   private onCancel = () => {
     this.clearLongPress();
     this.activePointer = null;
@@ -99,5 +118,7 @@ export class TapController {
     this.element.removeEventListener('pointermove', this.onPointerMove);
     this.element.removeEventListener('pointerup', this.onPointerUp);
     this.element.removeEventListener('pointercancel', this.onCancel);
+    window.removeEventListener('pointerup', this.onWindowUp);
+    window.removeEventListener('pointercancel', this.onWindowCancel);
   }
 }

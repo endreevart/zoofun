@@ -86,6 +86,15 @@ exports/
 handoff/*.tmp
 handoff/*.log
 handoff/.tmp*
+handoff/evidence/
+handoff/research/
+*.tsbuildinfo
 
 # GitHub rejects files over 100 MB
 **/UNS_HDRI.hdr
+
+# Meadow Meshy isle is the raw ~94 MB dump (thin lawn cannot be collapsed).
+chudiki/public/models/props/meadow/whimsy-isle.glb
+
+# Grove Meshy isle is the raw ~114 MB dump (thin lawn cannot be collapsed).
+chudiki/public/models/props/grove/floating-grassland.glb

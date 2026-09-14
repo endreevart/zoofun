@@ -9,9 +9,10 @@ from pydantic import BaseModel, Field
 
 from app.accounts.store import store
 from app.api.deps import operator_configured, require_operator
-from app.commerce.store import commerce
+from app.commerce.store import Pack, commerce
 from app.providers import tbank
 from app.settings import get_settings
+from app.worlds import kind_for_sku, world_title
 
 router = APIRouter(prefix="/v1/operator", tags=["operator"])
 guarded = APIRouter(dependencies=[Depends(require_operator)])
@@ -45,6 +46,38 @@ class PackOut(BaseModel):
     buyable: bool
 
 
+class WorldOut(BaseModel):
+    id: str
+    title: str
+    price_rub: int
+    list_price_rub: int = 0
+    buyable: bool
+    kind_id: str = "garden"
+
+
+def _pack_out(pack: Pack) -> PackOut:
+    return PackOut(
+        id=pack.id,
+        animals=pack.animals,
+        price_rub=pack.price_rub,
+        list_price_rub=pack.list_price_rub,
+        featured=pack.featured,
+        buyable=pack.buyable,
+    )
+
+
+def _world_out(pack: Pack) -> WorldOut:
+    kind = kind_for_sku(pack.id)
+    return WorldOut(
+        id=pack.id,
+        title=world_title(pack.id),
+        price_rub=pack.price_rub,
+        list_price_rub=pack.list_price_rub,
+        buyable=pack.buyable,
+        kind_id=kind.id,
+    )
+
+
 @router.post("/login", response_model=LoginOut)
 async def login(body: LoginIn) -> LoginOut:
     settings = get_settings()
@@ -74,17 +107,8 @@ async def overview() -> dict:
         "parents": store.count_parents(),
         "tbank": tbank.configured(settings),
         "currency": "RUB",
-        "packs": [
-            PackOut(
-                id=pack.id,
-                animals=pack.animals,
-                price_rub=pack.price_rub,
-                list_price_rub=pack.list_price_rub,
-                featured=pack.featured,
-                buyable=pack.buyable,
-            )
-            for pack in commerce.list_packs()
-        ],
+        "packs": [_pack_out(pack) for pack in commerce.list_packs()],
+        "worlds": [_world_out(item) for item in commerce.list_worlds()],
         "payments": [
             {
                 "id": item.id,
@@ -107,14 +131,7 @@ async def set_pack(pack_id: str, body: PackPriceIn) -> PackOut:
         pack = commerce.set_price(pack_id, body.price_rub, body.featured, body.list_price_rub)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return PackOut(
-        id=pack.id,
-        animals=pack.animals,
-        price_rub=pack.price_rub,
-        list_price_rub=pack.list_price_rub,
-        featured=pack.featured,
-        buyable=pack.buyable,
-    )
+    return _pack_out(pack)
 
 
 @guarded.post("/parents/{parent_id}/credits")

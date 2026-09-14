@@ -86,6 +86,8 @@ export type ChudikSpec = {
   hatching?: boolean;
   /** Stylize job to resume Meshy after a reload. */
   hatchJobId?: string;
+  /** Lawn this creature lives on. Missing means the free garden. */
+  worldId?: string;
 };
 
 const BODY_SHAPES: BodyShape[] = ['blob', 'egg', 'pear', 'round', 'tall'];
@@ -101,6 +103,7 @@ export function generateSpec(options: {
   drawing?: DrawingData;
   hatching?: boolean;
   hatchJobId?: string;
+  worldId?: string;
 }): ChudikSpec {
   const rng = mulberry32(options.seed);
   const kind = options.kindId ? kindById(options.kindId) : pick(rng, KINDS);
@@ -132,6 +135,7 @@ export function generateSpec(options: {
     drawing: options.drawing,
     hatching: options.hatching,
     hatchJobId: options.hatchJobId,
+    worldId: options.worldId,
   };
 
   return spec;

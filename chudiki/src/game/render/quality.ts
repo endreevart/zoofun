@@ -1,6 +1,10 @@
 /**
  * Phone GPUs cannot hold the desktop garden: 2048 soft shadows, bloom,
  * sun shafts and a dense lawn. One cheap tier keeps the island readable.
+ *
+ * iPhone Safari is the hard case. Large render targets, soft shadows and a
+ * dense lawn can exceed a phone's practical GPU budget. The low tier keeps
+ * those allocations bounded; a context-loss fallback removes shadow maps too.
  */
 
 export type QualityTier = 'high' | 'low';
@@ -19,6 +23,12 @@ export type QualitySettings = {
   grassBlades: number;
   paintedGrass: boolean;
   grassReceivesShadow: boolean;
+  /** Half-float composer targets go black on several iOS WebGL paths. */
+  composerHalfFloat: boolean;
+  /** MSAA on the composer target. Keep 0 on phones; it is not free there. */
+  composerSamples: number;
+  /** 0 = uncapped. Phones cap so Safari does not thermal-throttle into black. */
+  maxFps: number;
 };
 
 export type QualityHints = {
@@ -35,33 +45,36 @@ const PHONE_UA = /Android.+Mobile|iPhone|iPod/i;
 export function settingsFromHints(
   hints: QualityHints,
   force: QualityTier | null = null,
+  safeMode = false,
 ): QualitySettings {
-  const phone = force
+  const phone = safeMode || (force
     ? force === 'low'
     : hints.saveData ||
       (hints.deviceMemory !== undefined && hints.deviceMemory <= 4) ||
       PHONE_UA.test(hints.userAgent) ||
-      (hints.coarsePointer && hints.shortSide <= 520);
+      (hints.coarsePointer && hints.shortSide <= 520));
 
   if (phone) {
-    // Phones skip the heavy PostFx passes (AO, bloom, shafts), but keep a
-    // retina canvas, one 2048 shadow raster and the PCFSoft filter: the soft
-    // 3x3 tap is a handful of texture reads on a sparse lawn and removes the
-    // blocky shadow edges that made toys read as flat stickers.
+    // One CSS pixel, plain PCF, 8-bit composer, no canvas MSAA. The garden
+    // PostFx blit ignores the canvas's own MSAA, so that extra buffer was
+    // paid for and never seen — until iOS ran out of GPU memory.
     return {
       tier: 'low',
-      pixelRatio: Math.min(hints.devicePixelRatio || 1, 2),
-      antialias: true,
-      shadows: true,
-      shadowMapSize: 2048,
-      softShadows: true,
+      pixelRatio: safeMode ? 1 : 1.25,
+      antialias: false,
+      shadows: !safeMode,
+      shadowMapSize: safeMode ? 512 : 1024,
+      softShadows: false,
       gtao: false,
       bloom: false,
       shafts: false,
-      grassStep: 0.85,
-      grassBlades: 4,
+      grassStep: 1.15,
+      grassBlades: 3,
       paintedGrass: false,
-      grassReceivesShadow: true,
+      grassReceivesShadow: false,
+      composerHalfFloat: false,
+      composerSamples: 0,
+      maxFps: 30,
     };
   }
 
@@ -81,6 +94,9 @@ export function settingsFromHints(
     grassBlades: 7,
     paintedGrass: true,
     grassReceivesShadow: true,
+    composerHalfFloat: true,
+    composerSamples: 0,
+    maxFps: 0,
   };
 }
 
@@ -114,6 +130,44 @@ function forcedTier(): QualityTier | null {
 
 /** Resolved once per page load — the renderer cannot change these mid-flight. */
 export function quality(): QualitySettings {
-  cached ??= settingsFromHints(detectHints(), forcedTier());
+  let safeMode = false;
+  try {
+    safeMode = sessionStorage.getItem('zooo:webgl-safe') === '1';
+  } catch {
+    /* SSR / storage disabled */
+  }
+  cached ??= settingsFromHints(detectHints(), forcedTier(), safeMode);
   return cached;
+}
+
+/**
+ * Hanging Meshy isles keep millions of triangles. Desktop garden PostFx
+ * (GTAO, bloom, shafts, 1.5× pixels, 2048 soft shadows) cannot fill that.
+ */
+export function lookForHeavyIsland(base: QualitySettings): QualitySettings {
+  return {
+    ...base,
+    // Phones keep their low-tier DPR. Desktop hanging isles drop to 1×.
+    pixelRatio: base.tier === 'low' ? base.pixelRatio : Math.min(base.pixelRatio, 1),
+    antialias: false,
+    gtao: false,
+    bloom: false,
+    shafts: false,
+    shadowMapSize: Math.min(base.shadowMapSize, 1024),
+    softShadows: false,
+  };
+}
+
+/**
+ * Meshy isles are millions of triangles on every shell. Phones always take
+ * the cheap look; hanging desktop isles drop PostFx the same way.
+ */
+export function lookForShell(base: QualitySettings, hanging: boolean): QualitySettings {
+  if (hanging) {
+    // Voxel canopies print a hard umbra with plain PCF. Soften just the
+    // hanging shells; garden phones stay on the cheap map.
+    return { ...lookForHeavyIsland(base), softShadows: true };
+  }
+  if (base.tier === 'low') return lookForHeavyIsland(base);
+  return base;
 }

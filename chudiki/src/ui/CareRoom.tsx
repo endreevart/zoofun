@@ -203,7 +203,7 @@ export function CareRoom({
     : `saturate(${1 + wetness * 0.18}) brightness(${1 + wetness * 0.05})`;
 
   return (
-    <div className="care-room" role="dialog" aria-label="Помыть чудика">
+    <div className="care-room" role="dialog" aria-label="Помыть зуфуньчика">
       <div className="mg-head">
         <button
           className="icon-button"

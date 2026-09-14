@@ -1,7 +1,10 @@
 <template>
   <section class="crm-panel crm-chart-panel crm-animate-in" :style="delayStyle">
     <div class="flex items-center justify-between mb-4 gap-3">
-      <h3 class="text-base font-semibold m-0 text-ink">{{ title }}</h3>
+      <div class="flex items-center gap-2 min-w-0">
+        <h3 class="text-base font-semibold m-0 text-ink">{{ title }}</h3>
+        <CrmHelp v-if="help" :text="help" />
+      </div>
       <span v-if="centerLabel" class="text-xs text-muted font-medium">{{ centerLabel }}</span>
     </div>
     <div class="flex flex-col md:flex-row items-center gap-4">
@@ -23,6 +26,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Chart from 'primevue/chart'
+import CrmHelp from '@/components/crm/CrmHelp.vue'
 import { chartAnimation, chartTooltip, donutColors } from '@/lib/chart-theme'
 
 export interface DonutSlice {
@@ -33,6 +37,7 @@ export interface DonutSlice {
 const props = withDefaults(
   defineProps<{
     title: string
+    help?: string
     slices: DonutSlice[]
     delay?: number
     centerLabel?: string

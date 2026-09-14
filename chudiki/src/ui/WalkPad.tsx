@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { MOBILE_STICK_GAIN, clampStickTravel, stickWalk } from '../game/interaction/walkStick';
 
 type Props = {
   onWalk: (forward: number, right: number) => void;
 };
 
 const HELD = new Set<string>();
-const STICK_DEAD = 8;
 const COMPACT_WALK = '(max-width: 1280px)';
 
 function emit(onWalk: (forward: number, right: number) => void) {
@@ -41,14 +41,16 @@ export function WalkPad({ onWalk }: Props) {
 
 function WalkStick({ onWalk }: Props) {
   const baseRef = useRef<HTMLDivElement | null>(null);
-  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const knobRef = useRef<HTMLDivElement | null>(null);
+  const dragId = useRef<number | null>(null);
+  const onWalkRef = useRef(onWalk);
+  onWalkRef.current = onWalk;
 
-  useEffect(
-    () => () => {
-      onWalk(0, 0);
-    },
-    [onWalk],
-  );
+  const paintKnob = (x: number, y: number) => {
+    const knob = knobRef.current;
+    if (!knob) return;
+    knob.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+  };
 
   const moveTo = (clientX: number, clientY: number) => {
     const base = baseRef.current?.getBoundingClientRect();
@@ -56,20 +58,54 @@ function WalkStick({ onWalk }: Props) {
     const travel = Math.max(18, base.width / 2 - 22);
     const dx = clientX - (base.left + base.width / 2);
     const dy = clientY - (base.top + base.height / 2);
-    const length = Math.hypot(dx, dy);
-    const scale = length > travel ? travel / length : 1;
-    const x = dx * scale;
-    const y = dy * scale;
-    setKnob({ x, y });
-    const right = Math.abs(x) < STICK_DEAD ? 0 : x / travel;
-    const forward = Math.abs(y) < STICK_DEAD ? 0 : -y / travel;
-    onWalk(forward, right);
+    const { x, y } = clampStickTravel(dx, dy, travel);
+    paintKnob(x, y);
+    const walk = stickWalk(x, y, travel, MOBILE_STICK_GAIN);
+    onWalkRef.current(walk.forward, walk.right);
   };
 
   const reset = () => {
-    setKnob({ x: 0, y: 0 });
-    onWalk(0, 0);
+    dragId.current = null;
+    paintKnob(0, 0);
+    onWalkRef.current(0, 0);
   };
+
+  useEffect(() => {
+    const onMove = (event: PointerEvent) => {
+      if (dragId.current !== event.pointerId) return;
+      moveTo(event.clientX, event.clientY);
+    };
+    const onUp = (event: PointerEvent) => {
+      if (dragId.current !== event.pointerId) return;
+      reset();
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      if (dragId.current === null) return;
+      if (event.touches.length > 0) return;
+      reset();
+    };
+    const hide = () => {
+      if (document.visibilityState === 'hidden') reset();
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
+    window.addEventListener('blur', reset);
+    document.addEventListener('visibilitychange', hide);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+      window.removeEventListener('blur', reset);
+      document.removeEventListener('visibilitychange', hide);
+      reset();
+    };
+  }, []);
 
   return (
     <div
@@ -81,23 +117,14 @@ function WalkStick({ onWalk }: Props) {
       aria-valuemax={1}
       aria-valuenow={0}
       onPointerDown={(event) => {
-        event.preventDefault();
-        event.currentTarget.setPointerCapture(event.pointerId);
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        event.stopPropagation();
+        dragId.current = event.pointerId;
         moveTo(event.clientX, event.clientY);
       }}
-      onPointerMove={(event) => {
-        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-        moveTo(event.clientX, event.clientY);
-      }}
-      onPointerUp={reset}
-      onPointerCancel={reset}
     >
       <div className="walk-stick-well" aria-hidden="true" />
-      <div
-        className="walk-stick-knob"
-        aria-hidden="true"
-        style={{ transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }}
-      />
+      <div ref={knobRef} className="walk-stick-knob" aria-hidden="true" />
     </div>
   );
 }
@@ -153,6 +180,26 @@ function PadButton({
   onRelease: (dir: string) => void;
   children: string;
 }) {
+  const held = useRef(false);
+  const onReleaseRef = useRef(onRelease);
+  onReleaseRef.current = onRelease;
+
+  useEffect(() => {
+    const up = () => {
+      if (!held.current) return;
+      held.current = false;
+      onReleaseRef.current(dir);
+    };
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    window.addEventListener('blur', up);
+    return () => {
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      window.removeEventListener('blur', up);
+    };
+  }, [dir]);
+
   return (
     <button
       type="button"
@@ -160,11 +207,9 @@ function PadButton({
       aria-label={label}
       onPointerDown={(event) => {
         event.preventDefault();
-        event.currentTarget.setPointerCapture(event.pointerId);
+        held.current = true;
         onPress(dir);
       }}
-      onPointerUp={() => onRelease(dir)}
-      onPointerCancel={() => onRelease(dir)}
     >
       {children}
     </button>

@@ -245,12 +245,6 @@ body::before {
     @apply flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 md:px-5 lg:px-6 py-2.5 md:py-3 mb-2 md:mb-3 bg-white rounded-3xl shadow-card animate-fade-in;
   }
 
-  @media (min-width: 1280px) {
-    .crm-topbar {
-      flex-wrap: nowrap;
-    }
-  }
-
   .crm-topbar-nav {
     flex: 1 1 0;
     min-width: 0;
@@ -262,7 +256,62 @@ body::before {
   }
 
   .crm-topbar-actions {
-    @apply flex items-center gap-2 ml-auto shrink-0;
+    @apply flex items-center gap-2 shrink-0;
+  }
+
+  .crm-period {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    margin-left: auto;
+  }
+
+  .crm-period-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.25rem;
+    border-radius: 9999px;
+    background: var(--crm-canvas, #f4f1ec);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .crm-period-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .crm-period-custom {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .crm-period-date {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem 0.2rem 0.7rem;
+    border-radius: 9999px;
+    background: var(--crm-canvas, #f4f1ec);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--crm-muted);
+  }
+
+  .crm-period-date input[type="date"] {
+    border: none;
+    background: transparent;
+    font: inherit;
+    font-weight: 600;
+    color: var(--crm-ink, #141414);
+    padding: 0.2rem 0;
+  }
+
+  .crm-period-date input[type="date"]:focus {
+    outline: none;
   }
 
   .crm-content {
@@ -359,7 +408,7 @@ body::before {
   }
 
   .crm-page-title {
-    @apply text-xl md:text-2xl lg:text-3xl font-bold m-0 text-ink tracking-tight;
+    @apply text-xl md:text-2xl lg:text-3xl font-bold m-0 text-ink tracking-tight inline-flex items-center gap-2 flex-wrap;
   }
 
   .crm-page-title-count {
@@ -400,6 +449,10 @@ body::before {
     to {
       left: 140%;
     }
+  }
+
+  .crm-stat.is-clickable {
+    cursor: pointer;
   }
 
   .crm-stat:hover {
@@ -524,6 +577,12 @@ body::before {
       mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
     }
 
+    .crm-period {
+      order: 11;
+      flex: 1 1 100%;
+      margin-left: 0;
+    }
+
     .crm-main {
       padding-left: 0.75rem;
     }
@@ -538,6 +597,12 @@ body::before {
       order: 10;
       flex: 1 1 100%;
       width: 100%;
+    }
+
+    .crm-period {
+      order: 11;
+      flex: 1 1 100%;
+      margin-left: 0;
     }
 
     .crm-sidebar {

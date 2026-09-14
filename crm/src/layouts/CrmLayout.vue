@@ -35,8 +35,8 @@
           </div>
           <span class="font-bold text-lg hidden sm:block">ZOOFUN CRM</span>
         </div>
-        <div class="crm-topbar-nav">
-          <nav v-if="sectionTabs.length" class="crm-nav-pill">
+        <div v-if="sectionTabs.length" class="crm-topbar-nav">
+          <nav class="crm-nav-pill">
             <button
               v-for="tab in sectionTabs"
               :key="tabKey(tab)"
@@ -49,6 +49,7 @@
             </button>
           </nav>
         </div>
+        <PeriodPicker />
         <div class="crm-topbar-actions">
           <Button icon="pi pi-refresh" rounded text severity="secondary" @click="refreshPage" />
           <div class="crm-user-chip">
@@ -72,11 +73,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Button from "primevue/button";
+import PeriodPicker from "@/components/crm/PeriodPicker.vue";
 import { FUNNEL_NAV_TABS } from "@/lib/funnel-nav";
+import { USAGE_NAV_TABS } from "@/lib/usage-nav";
 import { useAuthStore } from "@/stores/auth";
+import { usePeriodStore } from "@/stores/period";
 
 type SectionTab = {
   name: string;
@@ -85,6 +89,7 @@ type SectionTab = {
 };
 
 const auth = useAuthStore();
+const period = usePeriodStore();
 const router = useRouter();
 const route = useRoute();
 const viewKey = ref(0);
@@ -92,15 +97,21 @@ const viewKey = ref(0);
 const primaryNav = [
   { key: "funnels", label: "Воронки", icon: "pi pi-filter", routes: ["funnels", "funnel-detail"] },
   { key: "traffic", label: "Посещаемость", icon: "pi pi-globe", routes: ["traffic"] },
-  { key: "usage", label: "Остров", icon: "pi pi-chart-bar", routes: ["usage"] },
+  { key: "usage", label: "Острова", icon: "pi pi-chart-bar", routes: ["usage", "usage-copies", "usage-buyers", "usage-events"] },
   { key: "parents", label: "Родители", icon: "pi pi-users", routes: ["parents"] },
   { key: "creatures", label: "Звери", icon: "pi pi-star", routes: ["creatures"] },
+  { key: "mail", label: "Письма", icon: "pi pi-envelope", routes: ["mail"] },
+  { key: "packs", label: "Пакеты", icon: "pi pi-box", routes: ["packs"] },
+  { key: "promos", label: "Промокоды", icon: "pi pi-percentage", routes: ["promos"] },
   { key: "payments", label: "Платежи", icon: "pi pi-money-bill", routes: ["payments"] },
 ];
 
 const sectionTabs = computed((): SectionTab[] => {
   if (["funnels", "funnel-detail"].includes(String(route.name))) {
     return FUNNEL_NAV_TABS;
+  }
+  if (["usage", "usage-copies", "usage-buyers", "usage-events"].includes(String(route.name))) {
+    return USAGE_NAV_TABS;
   }
   return [];
 });
@@ -122,6 +133,13 @@ function goTab(tab: SectionTab) {
 function refreshPage() {
   viewKey.value += 1;
 }
+
+watch(
+  () => period.stamp,
+  () => {
+    viewKey.value += 1;
+  },
+);
 
 function onLogout() {
   auth.logout();

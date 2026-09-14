@@ -6,9 +6,10 @@ This document is an engineering baseline, not a substitute for jurisdiction-spec
 
 - Prefer parent accounts and child nicknames; do not require a child's legal name, birth date, school, contacts, precise location, or voice.
 - Do not collect advertising identifiers.
+- At ingest we store a country code (and city if the edge sends one) from `CF-IPCountry` or a local prefix table. The raw visitor IP is hashed and discarded. We do not send IPs to MaxMind or other geo APIs.
 - Do not add third-party behavioral analytics SDKs to the child experience by default.
-- Original drawings are private processing inputs, not social content.
-- Send AI providers only the image or validated generated text required for the current job. Tripo and Meshy receive the stylized drawing still only; never names, voice, location, or other child PII.
+- Original drawings and original pet photos are private processing inputs, not social content.
+- Send AI providers only the image or validated generated text required for the current job. Tripo and Meshy receive the stylized still only; never names, voice, location, or other child PII.
 
 ## Secrets
 
@@ -21,6 +22,8 @@ This document is an engineering baseline, not a substitute for jurisdiction-spec
 ## Authentication and authorization
 
 - Parent authentication protects account, deletion, export, and permissions.
+- The public site signs a parent in with a one-time code from `info@zooo.fun` or Yandex ID. Mail.ru SMTP, Yandex client id, and Yandex secret stay in `.env`. The island never talks to Yandex or SMTP.
+- Login codes are stored as short-lived HMAC hashes. Do not log the code. Password `/register` and `/replace-password` are closed in production.
 - Child actions operate through a limited child profile, not unrestricted parent credentials.
 - Every object lookup is authorized by parent account and child profile ownership.
 - Signed asset URLs are short-lived and scoped to individual objects.
@@ -39,14 +42,14 @@ Paid money always becomes credits. The T-Bank notification may be lost, so `GetS
 - Enforce limits on bytes, pixels, dimensions, and processing time.
 - Strip EXIF and other metadata.
 - Reject archives and active content.
-- Before a credit is reserved, the backend asks OpenRouter to allow or block the upload. Canvas drawings and camera/file photos use the same gate. Child scribbles of animals or simple people pass. Sexual content, pornography, real nudes, and graphic gore are rejected with `422 drawing_not_allowed`. The child UI does not name the reason. A blocked upload does not spend a credit. If the gate is down, the drawing is allowed and the skip is logged.
+- Before a credit is reserved, the backend asks OpenRouter to allow or block the upload. Canvas drawings and camera/file photos use the same gate. Child scribbles of animals or simple people pass. A photograph of a real pet is allowed and labeled `pet` when the animal is clearly the subject (D-025). Sexual content, pornography, real nudes, and graphic gore are rejected with `422 drawing_not_allowed`. The child UI does not name the reason. A blocked upload does not spend a credit. If the gate is down, the drawing path is used and the skip is logged.
 - Store originals separately from public-delivery artifacts.
 - Scan dependencies and containers in CI.
 
 ## Logs and observability
 
 - Log opaque IDs, state transitions, provider timing, retry count, and error category.
-- Do not log uploaded images, generated narration text containing personal input, signed URLs, tokens, or provider request bodies.
+- Do not log uploaded images, generated narration text containing personal input, signed URLs, tokens, login codes, or provider request bodies.
 - Give parent-facing support a job ID that can be investigated without identifying the child.
 
 ## Retention and deletion

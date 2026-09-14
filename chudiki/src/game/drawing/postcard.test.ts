@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { POSTCARD_SIZE, coverBox, opaqueBox, postcardFileName, toyBox } from './postcard.ts';
+import { ALBUM_POSTCARD_SIZE, POSTCARD_SIZE, coverBox, opaqueBox, postcardFileName, toyBox } from './postcard.ts';
 
 // Cover: the backdrop always fills the whole square, centered.
 const wide = coverBox(1080, 1440, 810);
@@ -43,3 +43,6 @@ assert.deepEqual(opaqueBox(new Uint8ClampedArray(4 * 4 * 4), 4, 4), { x: 0, y: 0
 assert.equal(postcardFileName('Зюзя'), 'Зюзя-в-зоопарке.png');
 assert.equal(postcardFileName('  '), 'chudik-в-зоопарке.png');
 assert.equal(postcardFileName('a/b:c'), 'abc-в-зоопарке.png');
+
+assert.equal(ALBUM_POSTCARD_SIZE, 640);
+assert.ok(ALBUM_POSTCARD_SIZE < POSTCARD_SIZE);

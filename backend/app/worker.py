@@ -27,13 +27,19 @@ celery_app.conf.update(
     # (default is a whole hour). Ten minutes caps how long a crashed worker's
     # job can wait; the startup sweep below usually reclaims it much sooner.
     broker_transport_options={"visibility_timeout": 600},
-    # A lost T-Bank notification must not cost a parent their credits, so the
-    # unsettled payments are re-checked against GetState on a schedule.
     beat_schedule={
         "reconcile-pending-payments": {
             "task": "commerce.reconcile_pending",
             "schedule": 180.0,
-        }
+        },
+        "recover-stale-stylize": {
+            "task": "generation.recover_stale_jobs",
+            "schedule": 60.0,
+        },
+        "crm-run-mail-rules": {
+            "task": "crm.run_mail_rules",
+            "schedule": 900.0,
+        },
     },
 )
 
@@ -47,6 +53,19 @@ def reconcile_pending_payments() -> int:
         return asyncio.run(reconcile_pending())
     except Exception:  # noqa: BLE001 — a failed sweep retries on schedule
         logger.exception("payment reconciliation sweep failed")
+        return 0
+
+
+@celery_app.task(name="generation.recover_stale_jobs")
+def recover_stale_stylize_jobs() -> int:
+    """Re-enqueue jobs whose mesh never landed. Runs on a schedule so a live
+    worker does not have to restart for the garden to get the GLB."""
+    from app.generation.jobs import recover_stale_jobs
+
+    try:
+        return recover_stale_jobs()
+    except Exception:  # noqa: BLE001 — the next beat tick tries again
+        logger.exception("stylize recovery sweep failed")
         return 0
 
 
@@ -81,3 +100,26 @@ def _recover_on_start(**_kwargs) -> None:
         return
     if recovered:
         logger.warning("recovered %s stale stylize jobs", recovered)
+
+
+@celery_app.task(name="crm.send_campaign")
+def send_crm_campaign(campaign_id: str) -> None:
+    from app.crm.mail import MailCampaignError, deliver_campaign
+
+    try:
+        deliver_campaign(campaign_id)
+    except MailCampaignError:
+        logger.warning("crm campaign %s skipped", campaign_id)
+    except Exception:  # noqa: BLE001 — next operator send retries
+        logger.exception("crm campaign %s failed", campaign_id)
+
+
+@celery_app.task(name="crm.run_mail_rules")
+def run_mail_rules() -> dict:
+    from app.crm.mail import run_enabled_rules
+
+    try:
+        return run_enabled_rules(force=False)
+    except Exception:  # noqa: BLE001 — the next beat tick tries again
+        logger.exception("crm mail rules failed")
+        return {"ok": False}

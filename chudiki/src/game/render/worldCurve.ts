@@ -131,4 +131,5 @@ export function updateWorldCurve(
     planetCore.scale.setScalar(radius * 1.02 * visible + 0.001);
     planetCore.visible = visible > 0.02;
   }
+  return amount;
 }

@@ -1,7 +1,8 @@
 <template>
   <section class="crm-panel crm-chart-panel crm-animate-in" :style="delayStyle">
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-2 mb-4">
       <h3 class="text-base font-semibold m-0 text-ink">{{ title }}</h3>
+      <CrmHelp v-if="help" :text="help" />
     </div>
     <Chart type="bar" :data="chartData" :options="options" class="h-56 chart-enter" />
   </section>
@@ -10,10 +11,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Chart from 'primevue/chart'
+import CrmHelp from '@/components/crm/CrmHelp.vue'
 import { CRM_CHART_ACCENT, chartAnimation, chartTooltip, chartXLabel } from '@/lib/chart-theme'
 
 const props = defineProps<{
   title: string
+  help?: string
   points: { date: string; count: number }[]
   delay?: number
   horizontal?: boolean

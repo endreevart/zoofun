@@ -12,8 +12,11 @@ import httpx
 
 from app.providers.openrouter import (
     OPENROUTER_CHAT_URL,
+    SOURCE_DRAWING,
+    SOURCE_PET,
     ProviderError,
     _headers,
+    normalize_source_kind,
     outbound_proxy,
     provider_error_from_http,
 )
@@ -26,20 +29,28 @@ BLOCK_REASONS = frozenset({"sexual", "gore"})
 
 MODERATION_PROMPT = (
     "You are a safety gate for a children's zoo app, ages 3 to 8. "
-    "The attached image is either a child's drawing or a photograph of a paper drawing. "
+    "The attached image is a child's drawing, a photograph of a paper drawing, "
+    "or a photograph of a real pet. "
     "Reply with JSON only, no markdown: "
-    '{"allow":true,"reason":"ok"} or {"allow":false,"reason":"sexual"} '
-    'or {"allow":false,"reason":"gore"}. '
+    '{"allow":true,"reason":"ok","source":"drawing"} or '
+    '{"allow":true,"reason":"ok","source":"pet"} or '
+    '{"allow":false,"reason":"sexual"} or {"allow":false,"reason":"gore"}. '
     "ALLOW crayon, marker, or pencil drawings of animals, monsters, simple people, "
-    "scribbles, photos of those drawings, and clay toys. "
+    "scribbles, photos of those drawings, clay toys, and photographs of a real "
+    "domestic animal (dog, cat, hamster, parrot, fish, rabbit, and similar pets). "
     "A child's crude person or animal is allowed even if the body is odd, "
     "a belly button shows, or limbs are wrong. "
+    "source=pet ONLY when this is clearly a camera photo of a real living animal "
+    "that fills a substantial part of the frame. "
+    "A drawing of a dog, a photo of a paper drawing, a toy, or an uncertain image "
+    "must use source=drawing. "
     "BLOCK as sexual: adult sexual content, pornography, genitals as the subject, "
     "sexual acts, or a real photograph of a nude person. "
     "BLOCK as gore: realistic corpses, explicit dismemberment, real graphic violence. "
     "Do not block a kid drawing a dinosaur eating or a cartoon fight. "
     "If it is clearly adult sexual content, block. "
-    "If it looks like a child's messy drawing and you are not sure, allow."
+    "If it looks like a child's messy drawing and you are not sure, allow "
+    "with source=drawing."
 )
 
 
@@ -47,6 +58,7 @@ MODERATION_PROMPT = (
 class ModerationVerdict:
     allow: bool
     reason: str
+    source: str = SOURCE_DRAWING
 
 
 def parse_moderation_response(payload: object) -> ModerationVerdict:
@@ -75,9 +87,12 @@ def parse_moderation_response(payload: object) -> ModerationVerdict:
     allow = body.get("allow")
     reason = body.get("reason")
     if allow is True:
-        return ModerationVerdict(allow=True, reason="ok")
+        source = normalize_source_kind(body.get("source"))
+        if source != SOURCE_PET:
+            source = SOURCE_DRAWING
+        return ModerationVerdict(allow=True, reason="ok", source=source)
     if allow is False and isinstance(reason, str) and reason in BLOCK_REASONS:
-        return ModerationVerdict(allow=False, reason=reason)
+        return ModerationVerdict(allow=False, reason=reason, source=SOURCE_DRAWING)
     raise ProviderError("moderation verdict was not usable")
 
 
@@ -115,7 +130,12 @@ async def moderate_drawing(
             )
             return ModerationVerdict(allow=True, reason="skipped")
         verdict = parse_moderation_response(response.json())
-        logger.info("openrouter moderation ok allow=%s reason=%s", verdict.allow, verdict.reason)
+        logger.info(
+            "openrouter moderation ok allow=%s reason=%s source=%s",
+            verdict.allow,
+            verdict.reason,
+            verdict.source,
+        )
         return verdict
     except ProviderError as exc:
         logger.warning("openrouter moderation failed code=%s", exc.error_code)

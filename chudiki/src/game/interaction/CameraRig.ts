@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { HERO_CAMERA, HERO_FOCUS } from '../world/layout';
+import { isSolidGround } from '../world/islandHeights';
 import { IDLE_AFTER } from './cameraIdle';
+import {
+  adoptUntrackedPointer,
+  isPinch,
+  pointerMayOrbit,
+  touchCenter,
+  touchSpan,
+  touchesOn,
+  zoomFromPinch,
+} from './cameraPinch';
 
 /**
  * Camera controller tuned for small hands: orbit with one finger, pinch to get
@@ -77,6 +87,7 @@ export class CameraRig {
   private lastPinchDistance = 0;
   private lastPanCenter = new THREE.Vector2();
   private dragging = false;
+  private pinching = false;
   private autoSpin = 0;
   private primaryOrbit = true;
   private walkForward = 0;
@@ -105,7 +116,17 @@ export class CameraRig {
     this.element.addEventListener('pointermove', this.onPointerMove);
     this.element.addEventListener('pointerup', this.onPointerUp);
     this.element.addEventListener('pointercancel', this.onPointerUp);
+    this.element.addEventListener('lostpointercapture', this.onPointerUp);
+    this.element.addEventListener('touchstart', this.onTouchStart, { passive: false });
+    this.element.addEventListener('touchmove', this.onTouchMove, { passive: false });
+    this.element.addEventListener('touchend', this.onTouchEnd, { passive: false });
+    this.element.addEventListener('touchcancel', this.onTouchEnd, { passive: false });
     this.element.addEventListener('wheel', this.onWheel, { passive: false });
+    window.addEventListener('touchend', this.onWindowTouches, { passive: true });
+    window.addEventListener('touchcancel', this.onWindowTouches, { passive: true });
+    window.addEventListener('pointerup', this.onWindowPointerUp, { passive: true });
+    window.addEventListener('pointercancel', this.onWindowPointerUp, { passive: true });
+    window.addEventListener('pagehide', this.releaseGesture);
     window.addEventListener('pointerdown', this.wake, { passive: true });
     window.addEventListener('keydown', this.wake, { passive: true });
 
@@ -116,6 +137,16 @@ export class CameraRig {
   get isDragging(): boolean {
     return this.dragging;
   }
+
+  /** Safari can drop pointerup. Empty fingers must never leave orbit stuck. */
+  releaseGesture = () => {
+    this.pointers.clear();
+    this.dragging = false;
+    this.pinching = false;
+    this.lastPinchDistance = 0;
+    this.walkForward = 0;
+    this.walkRight = 0;
+  };
 
   /** Slow drift used on the very first launch, before anyone touches anything. */
   setAutoSpin(speed: number) {
@@ -212,7 +243,20 @@ export class CameraRig {
   }
 
   private onPointerDown = (event: PointerEvent) => {
-    this.element.setPointerCapture?.(event.pointerId);
+    // Capturing a touch on iOS swallows the second finger, so pinch never starts.
+    if (event.pointerType !== 'touch') {
+      try {
+        this.element.setPointerCapture?.(event.pointerId);
+      } catch {
+        /* synthetic or already released */
+      }
+    }
+    // A new primary finger means the last gesture ended. Drop leftover ids so
+    // a swallowed pointerup cannot freeze orbit at "two pointers, one ghost".
+    if (event.isPrimary) {
+      this.pointers.clear();
+      this.pinching = false;
+    }
     this.pointers.set(event.pointerId, new THREE.Vector2(event.clientX, event.clientY));
 
     if (this.pointers.size === 2) {
@@ -222,13 +266,95 @@ export class CameraRig {
     }
   };
 
+  private pinchFingers(touches: TouchList): number {
+    return touchesOn(this.element, touches);
+  }
+
+  private syncPinchFromTouches(touchCount: number) {
+    this.pinching = isPinch(touchCount);
+    if (!this.pinching) this.lastPinchDistance = 0;
+    if (touchCount === 0) {
+      this.pointers.clear();
+      this.dragging = false;
+    }
+  }
+
+  private onWindowTouches = (event: TouchEvent) => {
+    this.syncPinchFromTouches(this.pinchFingers(event.touches));
+  };
+
+  private onWindowPointerUp = (event: PointerEvent) => {
+    if (!this.pointers.has(event.pointerId)) return;
+    this.onPointerUp(event);
+  };
+
+  private onTouchStart = (event: TouchEvent) => {
+    this.syncPinchFromTouches(this.pinchFingers(event.touches));
+    if (!this.pinching) return;
+    event.preventDefault();
+    this.dragging = true;
+    this.wake();
+    this.flight = null;
+    this.lastPinchDistance = touchSpan(event.touches);
+    const center = touchCenter(event.touches);
+    this.lastPanCenter.set(center.x, center.y);
+  };
+
+  private onTouchMove = (event: TouchEvent) => {
+    const fingers = this.pinchFingers(event.touches);
+    if (!isPinch(fingers)) {
+      this.syncPinchFromTouches(fingers);
+      if (fingers === 1 && this.primaryOrbit) event.preventDefault();
+      return;
+    }
+    event.preventDefault();
+    this.pinching = true;
+    this.dragging = true;
+    this.wake();
+    this.flight = null;
+    const span = touchSpan(event.touches);
+    this.desiredDistance = zoomFromPinch(
+      span,
+      this.lastPinchDistance,
+      this.desiredDistance,
+      LIMITS.minDistance,
+      LIMITS.maxDistance,
+    );
+    this.lastPinchDistance = span;
+    const center = touchCenter(event.touches);
+    const shiftX = center.x - this.lastPanCenter.x;
+    const shiftY = center.y - this.lastPanCenter.y;
+    this.lastPanCenter.set(center.x, center.y);
+    if (!this.followTarget) this.panBy(-shiftX, -shiftY);
+  };
+
+  private onTouchEnd = (event: TouchEvent) => {
+    this.syncPinchFromTouches(this.pinchFingers(event.touches));
+  };
+
   private onPointerMove = (event: PointerEvent) => {
     const previous = this.pointers.get(event.pointerId);
-    if (!previous) return;
+    if (!previous) {
+      if (adoptUntrackedPointer(event.pointerType, this.pointers.size)) {
+        this.pointers.set(event.pointerId, new THREE.Vector2(event.clientX, event.clientY));
+      }
+      return;
+    }
 
     const current = new THREE.Vector2(event.clientX, event.clientY);
 
-    if (this.pointers.size === 1 && this.primaryOrbit) {
+    if (this.pinching) {
+      this.pointers.set(event.pointerId, current);
+      return;
+    }
+
+    // Touch: orbit this finger even if a ghost id is still in the map.
+    // Mouse: only orbit when the button is held and this is the single pointer.
+    const canOrbit =
+      this.primaryOrbit &&
+      pointerMayOrbit(event.pointerType, event.buttons) &&
+      (event.pointerType === 'touch' || this.pointers.size === 1);
+    if (canOrbit) {
       const dx = current.x - previous.x;
       const dy = current.y - previous.y;
       if (Math.abs(dx) + Math.abs(dy) > 1.5) {
@@ -246,21 +372,20 @@ export class CameraRig {
 
     this.pointers.set(event.pointerId, current);
 
-    if (this.pointers.size === 2) {
+    if (this.pointers.size === 2 && event.pointerType !== 'touch') {
       this.dragging = true;
       this.wake();
       this.flight = null;
 
       const [a, b] = [...this.pointers.values()];
       const pinch = a.distanceTo(b);
-      if (this.lastPinchDistance > 0) {
-        const ratio = this.lastPinchDistance / pinch;
-        this.desiredDistance = THREE.MathUtils.clamp(
-          this.desiredDistance * ratio,
-          LIMITS.minDistance,
-          LIMITS.maxDistance,
-        );
-      }
+      this.desiredDistance = zoomFromPinch(
+        pinch,
+        this.lastPinchDistance,
+        this.desiredDistance,
+        LIMITS.minDistance,
+        LIMITS.maxDistance,
+      );
       this.lastPinchDistance = pinch;
 
       const center = a.clone().add(b).multiplyScalar(0.5);
@@ -272,6 +397,7 @@ export class CameraRig {
 
   private onPointerUp = (event: PointerEvent) => {
     this.pointers.delete(event.pointerId);
+    if (this.pointers.size < 2) this.pinching = false;
     if (this.pointers.size === 0) {
       this.dragging = false;
       this.lastPinchDistance = 0;
@@ -358,8 +484,12 @@ export class CameraRig {
     this.target.lerp(this.desiredTarget, smoothing);
 
     // Keep the look-at point sitting just above the ground it hovers over.
+    // The ocean-bed fallback is empty air: sitting on it puts the lens inside
+    // a hanging isle and the frame shimmers.
     const groundY = this.groundHeightAt(this.target.x, this.target.z);
-    this.target.y += (groundY + 0.8 - this.target.y) * smoothing;
+    if (isSolidGround(groundY)) {
+      this.target.y += (groundY + 0.8 - this.target.y) * smoothing;
+    }
 
     const horizontal = Math.sin(this.pitch) * this.distance;
     const position = new THREE.Vector3(
@@ -370,7 +500,9 @@ export class CameraRig {
 
     // Never let the camera dip below the terrain it is flying over.
     const minY = this.groundHeightAt(position.x, position.z) + 1.4;
-    position.y = Math.max(position.y, minY);
+    if (isSolidGround(minY - 1.4)) {
+      position.y = Math.max(position.y, minY);
+    }
 
     this.camera.position.copy(position);
     this.camera.lookAt(this.target);
@@ -381,7 +513,17 @@ export class CameraRig {
     this.element.removeEventListener('pointermove', this.onPointerMove);
     this.element.removeEventListener('pointerup', this.onPointerUp);
     this.element.removeEventListener('pointercancel', this.onPointerUp);
+    this.element.removeEventListener('lostpointercapture', this.onPointerUp);
+    this.element.removeEventListener('touchstart', this.onTouchStart);
+    this.element.removeEventListener('touchmove', this.onTouchMove);
+    this.element.removeEventListener('touchend', this.onTouchEnd);
+    this.element.removeEventListener('touchcancel', this.onTouchEnd);
     this.element.removeEventListener('wheel', this.onWheel);
+    window.removeEventListener('touchend', this.onWindowTouches);
+    window.removeEventListener('touchcancel', this.onWindowTouches);
+    window.removeEventListener('pointerup', this.onWindowPointerUp);
+    window.removeEventListener('pointercancel', this.onWindowPointerUp);
+    window.removeEventListener('pagehide', this.releaseGesture);
     window.removeEventListener('pointerdown', this.wake);
     window.removeEventListener('keydown', this.wake);
   }

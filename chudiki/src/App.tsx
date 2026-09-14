@@ -8,13 +8,15 @@ import {
   type ChudikSpec,
 } from './game/creatures/ChudikSpec';
 import { blankEggDrawing, imageToChudik, styledToChudik } from './game/drawing/imageToChudik';
-import { portraitFromImage, portraitUrlOf } from './game/drawing/portrait';
-import { stylizeDrawing, waitForMesh } from './game/drawing/stylizeDrawing';
+import { portraitFromImage, portraitUrlOf, displayStillUrl, rosterPhoto } from './game/drawing/portrait';
+import { stylizeDrawing, waitForMesh, waitForPostcard } from './game/drawing/stylizeDrawing';
 import { eggCanOpen } from './game/creatures/hatch';
 import { paperizeCanvas } from './game/drawing/paperize';
 import { preloadMeshyModel } from './game/creatures/DrawingChudikBuilder';
 import {
   deleteVoiceRecording,
+  loadCreatures,
+  saveCreature,
   saveVoiceRecording,
 } from './game/persistence/zooStore';
 import { DrawPad } from './ui/DrawPad';
@@ -25,95 +27,138 @@ import { FeedFrenzy } from './ui/FeedFrenzy';
 import { CreatureCard } from './ui/CreatureCard';
 import { RosterSheet } from './ui/RosterSheet';
 import { TuningPanel } from './ui/TuningPanel';
-import { LayoutEditor } from './ui/LayoutEditor';
-import { isStudio } from './studioMode';
+import { LayoutEditor, StudioWorldSwitch, pickLayoutFile } from './ui/LayoutEditor';
+import { WorldPicker } from './ui/WorldPicker';
+import { MoveCreaturesSheet } from './ui/MoveCreaturesSheet';
+import { WorldFullPrompt } from './ui/WorldFullPrompt';
+import { WorldDestSheet } from './ui/WorldDestSheet';
+import { DiyHud } from './ui/DiyHud';
+import { SoundSheet } from './ui/SoundSheet';
+import { isAuthoringStudio, isStudio, studioWorldId } from './studioMode';
+import { setAnalyticsWorld, track } from './analytics';
+import {
+  cinemaAfterNativeChange,
+  documentAllowsFullscreen,
+  fullscreenBlockedMessage,
+  leaveNativeFullscreen,
+  nativeFullscreenOn,
+  requestNativeFullscreen,
+  writeCinemaViewport,
+} from './game/interaction/fullscreen';
+import {
+  fetchRemoteDiyLayout,
+  loadDiyLayout,
+  putRemoteDiyLayout,
+  saveDiyLayout,
+} from './game/world/diyLayout';
+import {
+  WORLD_AUTHORED,
+  WORLD_DIY_SKU,
+  countOnWorld,
+  creatureWorldId,
+  gardenTitle,
+  idsThatFit,
+  moveDestinations,
+  worldIsFull,
+  type GardenWorld,
+} from './game/world/gardens';
+import { isConstructionSku, isDiyWorld, isHangingShell, isStudioKind, kindOfWorld, usesChildBuild } from './game/world/kinds';
+import { childCatalogForShell } from './game/world/layoutCatalog';
+import { saveLayout } from './game/world/layoutAuthored';
 import { WalkPad } from './ui/WalkPad';
 import { CareHud } from './ui/CareHud';
 import { HudIcon } from './ui/HudIcon';
+import { FirstDrawPrompt } from './ui/FirstDrawPrompt';
+import { shouldAskAnotherDraw, shouldOfferFirstDraw } from './ui/firstDraw';
+import { ParentGate } from './ui/ParentGate';
 import { PilotChoice } from './ui/PilotChoice';
-import { bootstrapParentSession, PAID_FLASH_KEY, siteHomeUrl } from './parentSession';
+import { parentToken } from './api';
+import { bootstrapParentSession, endParentSession, PAID_FLASH_KEY, sendUnsignedVisitorToAuth } from './parentSession';
 import {
   applyRemaining,
   canStartCreation,
+  CHECKOUT_SKU_KEY,
   readQuota,
   reconcilePayments,
   spendOneCredit,
+  takeOwnedWorldsBefore,
   type Quota,
 } from './game/commerce';
 import { PackSheet } from './ui/PackSheet';
 import { QuotaDock } from './ui/QuotaDock';
 import { isTvReceiver, TvReceiver } from './ui/TvReceiver';
+import { canCarePlay, hasOwnCreature, isParkResidentId } from './game/creatures/residents';
+import type { CueId } from './game/audio/cues';
+import { getIslandAudio } from './game/audio/AudioBus';
+import { claimCueOnce } from './game/audio/mix';
 
 type Screen = 'zoo' | 'draw' | 'roster' | 'preview';
 
-type HatchLook = { id: string; src: string | null; name: string };
+type HatchLook = {
+  id: string;
+  src: string | null;
+  name: string;
+  postcardSrc?: string | null;
+  postcardDone?: boolean;
+};
 
 /** How long to keep asking the bank after the parent returns from checkout. */
 const PAID_CHECK_TRIES = 8;
 const PAID_CHECK_DELAY_MS = 3000;
 
-type FullscreenDocument = Document & {
-  webkitFullscreenElement?: Element | null;
-  webkitExitFullscreen?: () => Promise<void> | void;
-};
-
-type FullscreenNode = HTMLElement & {
-  webkitRequestFullscreen?: () => Promise<void> | void;
-};
-
-function currentFullscreen(): Element | null {
-  const doc = document as FullscreenDocument;
-  return document.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
-}
-
-async function enterFullscreen(node: HTMLElement): Promise<boolean> {
-  const el = node as FullscreenNode;
-  try {
-    if (el.requestFullscreen) {
-      await el.requestFullscreen();
-      return true;
-    }
-    if (el.webkitRequestFullscreen) {
-      await el.webkitRequestFullscreen();
-      return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-}
-
-async function leaveFullscreen(): Promise<void> {
-  const doc = document as FullscreenDocument;
-  try {
-    if (document.fullscreenElement && document.exitFullscreen) {
-      await document.exitFullscreen();
-      return;
-    }
-    if (doc.webkitFullscreenElement && doc.webkitExitFullscreen) {
-      await doc.webkitExitFullscreen();
-    }
-  } catch {
-    /* already left */
-  }
-}
-
 const FAILURE_MESSAGES: Record<string, string> = {
-  empty: 'Тут почти ничего не нарисовано. Нарисуй чудика побольше!',
+  empty: 'Тут почти ничего не нарисовано. Нарисуй зуфуньчика побольше!',
   'too-small': 'Слишком маленький рисунок. Нарисуй на весь лист!',
-  'too-thin': 'Замкни линию, чтобы получилось тело чудика.',
+  'too-thin': 'Замкни линию, чтобы получилось тело зуфуньчика.',
 };
+
+/** Wash/feed still: the child's picture from the API, else a lawn snapshot. */
+function stillForCare(spec: ChudikSpec, game: Game | null): string {
+  return displayStillUrl(portraitUrlOf(spec.drawing)) ?? game?.captureStill(spec.id) ?? '';
+}
+
+function faceOf(spec: ChudikSpec, thumbs: Record<string, string>): string | null {
+  return displayStillUrl(rosterPhoto(spec.drawing, thumbs[spec.id]));
+}
+
+const TRANSFER_PREVIEW_ID = 'preview_move';
+
+function transferPreviewWorlds(): { currentId: string; worlds: GardenWorld[] } | null {
+  try {
+    if (!import.meta.env.DEV || !new URLSearchParams(window.location.search).has('transfer')) return null;
+  } catch {
+    return null;
+  }
+  return {
+    currentId: WORLD_DIY_SKU,
+    worlds: [
+      { id: WORLD_DIY_SKU, title: 'Сад 1', sku: WORLD_DIY_SKU },
+      { id: 'world_diy_garden_preview2', title: 'Сад 2', sku: WORLD_DIY_SKU },
+    ],
+  };
+}
 
 export function App() {
   if (isTvReceiver()) return <TvReceiver />;
+  if (sendUnsignedVisitorToAuth()) return null;
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Game | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [ready, setReady] = useState(false);
-  const [screen, setScreen] = useState<Screen>('zoo');
+  const [screen, setScreen] = useState<Screen>(() => {
+    try {
+      if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('roster')) {
+        return 'roster';
+      }
+    } catch {
+      /* ignore */
+    }
+    return 'zoo';
+  });
   const [specs, setSpecs] = useState<ChudikSpec[]>([]);
+  const [rosterThumbs, setRosterThumbs] = useState<Record<string, string>>({});
   const [recordedIds, setRecordedIds] = useState<Set<string>>(new Set());
   const [cardSpec, setCardSpec] = useState<ChudikSpec | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -125,7 +170,10 @@ export function App() {
   const [driving, setDriving] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [cinema, setCinema] = useState(false);
+  const nativeHeldRef = useRef(false);
   const [quota, setQuota] = useState<Quota | null>(null);
+  const quotaRef = useRef(quota);
+  quotaRef.current = quota;
   const [pendingBirth, setPendingBirth] = useState(false);
   const pendingBirthRef = useRef(false);
   const [hatchLook, setHatchLook] = useState<HatchLook | null>(null);
@@ -134,6 +182,7 @@ export function App() {
   const [careSpec, setCareSpec] = useState<ChudikSpec | null>(null);
   const [frenzySpec, setFrenzySpec] = useState<ChudikSpec | null>(null);
   const [puzzleSpec, setPuzzleSpec] = useState<ChudikSpec | null>(null);
+  const [playStill, setPlayStill] = useState('');
   const [shopOpen, setShopOpen] = useState(() => {
     try {
       return import.meta.env.DEV && new URLSearchParams(window.location.search).has('shop');
@@ -144,9 +193,48 @@ export function App() {
   const previewEggs = import.meta.env.DEV
     ? Number.parseInt(new URLSearchParams(window.location.search).get('eggs') ?? '', 10)
     : Number.NaN;
+  const [forceFirstDraw] = useState(() => {
+    try {
+      return import.meta.env.DEV && new URLSearchParams(window.location.search).has('first');
+    } catch {
+      return false;
+    }
+  });
+  const [anotherDraw, setAnotherDraw] = useState(() => {
+    try {
+      return import.meta.env.DEV && new URLSearchParams(window.location.search).has('again');
+    } catch {
+      return false;
+    }
+  });
+  const [firstDrawDismissed, setFirstDrawDismissed] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [logoutGate, setLogoutGate] = useState(false);
   const [parentEntry] = useState(() => bootstrapParentSession());
   const appRef = useRef<HTMLDivElement | null>(null);
+  const [world, setWorld] = useState<string | null>(() =>
+    isAuthoringStudio() ? studioWorldId() : null,
+  );
+  const [diyBuild, setDiyBuild] = useState(false);
+  const [diyPicking, setDiyPicking] = useState(false);
+  const [soundOpen, setSoundOpen] = useState(false);
+  const [moveDest, setMoveDest] = useState<string | null>(null);
+  const [moveFrom, setMoveFrom] = useState<ChudikSpec[]>([]);
+  const [pickFrom, setPickFrom] = useState<ChudikSpec[] | null>(() => {
+    if (!transferPreviewWorlds()) return null;
+    return [
+      generateSpec({
+        id: TRANSFER_PREVIEW_ID,
+        name: 'Жучок',
+        seed: 7,
+        kindId: 'crawler',
+        origin: 'drawing',
+        worldId: WORLD_DIY_SKU,
+      }),
+    ];
+  });
+  const [fullOpen, setFullOpen] = useState(false);
+  const offerMoveRef = useRef<string | null>(null);
 
   const refreshQuota = useCallback(async () => {
     const token = bootstrapParentSession().token;
@@ -162,14 +250,37 @@ export function App() {
   }, [refreshQuota]);
 
   useEffect(() => {
+    setAnalyticsWorld(world ?? '');
+  }, [world]);
+
+  useEffect(() => {
+    if (shopOpen) track('shop.open');
+  }, [shopOpen]);
+
+  useEffect(() => {
+    if (screen === 'draw') track('draw.open');
+  }, [screen]);
+
+  useEffect(() => {
     if (screen !== 'zoo') setActionsOpen(false);
     if (screen !== 'preview') setPuzzleOpen(false);
   }, [screen]);
 
   useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
+    if (screen !== 'roster' || !ready) return;
+    const game = gameRef.current;
+    if (!game) return;
+    setRosterThumbs((current) => {
+      if (Object.keys(current).length > 0) return current;
+      return game.captureRosterThumbs();
+    });
+  }, [screen, ready, specs.length]);
 
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !world) return;
+
+    let cancelled = false;
     const game = new Game(stage, {
       onRosterChanged: (next) => setSpecs(next),
       onCreatureTapped: (spec) => setOfferSpec(spec),
@@ -181,34 +292,104 @@ export function App() {
     });
     gameRef.current = game;
 
-    void game.start((fraction) => setLoadProgress(fraction)).then(() => {
+    void (async () => {
+      let diyProps = loadDiyLayout(world);
+      if (isDiyWorld(world)) {
+        const remote = await fetchRemoteDiyLayout(world);
+        if (remote) {
+          diyProps = remote;
+          saveDiyLayout(remote, world);
+        }
+      }
+      if (cancelled) {
+        game.dispose();
+        return;
+      }
+      const kind = kindOfWorld(world);
+      const hangingStudio = isAuthoringStudio() && isHangingShell(kind.shell) && !isDiyWorld(world);
+      await game.start({
+        world: isDiyWorld(world) ? 'diy' : 'authored',
+        worldId: world,
+        shell: kind.shell,
+        layoutKind: usesChildBuild(world) || hangingStudio ? 'child' : 'studio',
+        catalog: isDiyWorld(world) ? [...childCatalogForShell(kind.shell)] : undefined,
+        diyProps: isDiyWorld(world) ? diyProps : undefined,
+        onDiyPersist: (props) => {
+          if (isDiyWorld(world)) {
+            saveDiyLayout(props, world);
+            void putRemoteDiyLayout(props, world);
+            return;
+          }
+          if (isHangingShell(kindOfWorld(world).shell)) {
+            saveLayout(props, [], [], kindOfWorld(world).shell);
+          }
+        },
+        onProgress: (fraction) => setLoadProgress(fraction),
+      });
+      if (cancelled) {
+        game.dispose();
+        return;
+      }
       setReady(true);
+      setDiyBuild(false);
+      if (usesChildBuild(world)) game.setDiyBuild(false);
       setRecordedIds(new Set(game.getRecordedIds()));
       for (const pending of game.pendingHatches()) {
         void waitForMesh(pending.jobId)
           .then(async (mesh) => {
             if (!eggCanOpen(mesh.mesh, mesh.modelUrl)) return;
             if (mesh.modelUrl) await preloadMeshyModel(mesh.modelUrl);
+            let painted = pending.drawing;
+            if (mesh.image) {
+              const fromStyle = await styledToChudik(mesh.image);
+              if (fromStyle.ok) painted = fromStyle.drawing;
+              const portraitUrl = portraitFromImage(mesh.image);
+              if (portraitUrl) painted = { ...painted, portraitUrl };
+            }
             const drawing = {
-              ...pending.drawing,
+              ...painted,
               ...(mesh.modelUrl ? { modelUrl: mesh.modelUrl, placeholder: undefined } : {}),
               ...(mesh.postcardUrl ? { postcardUrl: mesh.postcardUrl } : {}),
             };
-            game.prepareHatch(pending.id, { drawing }, { open: true });
+            game.prepareHatch(
+              pending.id,
+              { drawing },
+              { open: eggCanOpen(mesh.mesh, mesh.modelUrl) },
+            );
           })
           .catch(() => {
-            // The job is gone (API restart). Hatch what we have: the painted
-            // extrude. A shut egg forever is worse than a missing mesh.
-            game.prepareHatch(pending.id, { drawing: pending.drawing }, { open: true });
+            // Keep the egg. The next visit polls the same job until the GLB lands.
           });
       }
-    });
+    })();
 
     return () => {
+      cancelled = true;
+      setReady(false);
       game.dispose();
       gameRef.current = null;
     };
-  }, []);
+  }, [world]);
+
+  useEffect(() => {
+    if (!ready || !world) return;
+    const dest = offerMoveRef.current;
+    if (!dest || dest !== world) return;
+    offerMoveRef.current = null;
+    void loadCreatures().then((records) => {
+      const fromAuthored = records
+        .filter(
+          (record) =>
+            !isParkResidentId(record.spec.id) &&
+            creatureWorldId(record.spec.worldId) === WORLD_AUTHORED,
+        )
+        .map((record) => record.spec);
+      if (fromAuthored.length) {
+        setMoveFrom(fromAuthored);
+        setMoveDest(dest);
+      }
+    });
+  }, [ready, world]);
 
   useEffect(() => {
     if (!ready) return;
@@ -217,23 +398,57 @@ export function App() {
   }, [ready]);
 
   useEffect(() => {
-    if (!offerSpec) return;
-    const timer = window.setTimeout(() => setOfferSpec(null), 8000);
+    if (!offerSpec || cardSpec) return;
+    const timer = window.setTimeout(() => setOfferSpec(null), 16000);
     return () => window.clearTimeout(timer);
-  }, [offerSpec]);
+  }, [offerSpec, cardSpec]);
+
+  const speak = useCallback((id: CueId) => {
+    void getIslandAudio().playCue(id);
+  }, []);
 
   const startPilot = useCallback((id: string) => {
     if (!gameRef.current?.controlCreature(id)) return;
+    speak('walk');
     setDriving(true);
     setOfferSpec(null);
     setCardSpec(null);
     setShowHint(false);
-  }, []);
+  }, [speak]);
 
-  const stopPilot = useCallback(() => {
+  const stopPilot = useCallback((opts?: { silent?: boolean }) => {
+    const wasDriving = Boolean(gameRef.current?.isDriving);
     gameRef.current?.releaseControl();
     setDriving(false);
+    if (wasDriving && !opts?.silent) speak('stop');
+  }, [speak]);
+
+  const quietGarden = useCallback((quiet: boolean) => {
+    getIslandAudio().duckGarden(quiet);
   }, []);
+
+  const needsFirstDraw =
+    shouldOfferFirstDraw(world) &&
+    ready &&
+    screen === 'zoo' &&
+    !driving &&
+    !anotherDraw &&
+    !firstDrawDismissed &&
+    (forceFirstDraw || !hasOwnCreature(specs));
+  const showDrawPrompt =
+    Boolean(world) && (needsFirstDraw || anotherDraw) && !driving && !offerSpec;
+
+  const finishHatch = useCallback((id: string) => {
+    hatchLookRef.current = null;
+    setHatchLook(null);
+    setPuzzleOpen(false);
+    setScreen('zoo');
+    gameRef.current?.focusOn(id);
+    if (shouldAskAnotherDraw(quotaRef.current?.remaining)) {
+      speak('shop');
+      setShopOpen(true);
+    }
+  }, [speak]);
 
   useEffect(() => {
     if (!ready || screen !== 'zoo') {
@@ -287,10 +502,70 @@ export function App() {
     gameRef.current?.setWalkPad(forward, right);
   }, []);
 
+  const setDiyBuilding = useCallback((on: boolean) => {
+    setDiyBuild(on);
+    gameRef.current?.setDiyBuild(on);
+    if (on) setOfferSpec(null);
+  }, []);
+
   const flash = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast((current) => (current === message ? null : current)), 3200);
   }, []);
+
+  useEffect(() => {
+    if (world) return;
+    getIslandAudio().setGardenPaused(true);
+  }, [world]);
+
+  useEffect(() => {
+    if (world) return;
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.sound-dock')) return;
+      document.removeEventListener('pointerdown', onPointer, true);
+      if (!claimCueOnce('worlds')) return;
+      speak('worlds');
+    };
+    document.addEventListener('pointerdown', onPointer, { capture: true });
+    return () => document.removeEventListener('pointerdown', onPointer, true);
+  }, [world, speak]);
+
+  useEffect(() => {
+    if (!ready || world !== 'diy') return;
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.sound-dock')) return;
+      document.removeEventListener('pointerdown', onPointer, true);
+      if (!claimCueOnce('welcome_diy')) return;
+      speak('welcome_diy');
+    };
+    document.addEventListener('pointerdown', onPointer, { capture: true });
+    return () => document.removeEventListener('pointerdown', onPointer, true);
+  }, [ready, world, speak]);
+
+  useEffect(() => {
+    if (!needsFirstDraw) return;
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.first-draw-btn, .first-draw-close, .sound-dock')) return;
+      document.removeEventListener('pointerdown', onPointer, true);
+      speak('welcome_garden');
+    };
+    document.addEventListener('pointerdown', onPointer, { capture: true });
+    return () => document.removeEventListener('pointerdown', onPointer, { capture: true });
+  }, [needsFirstDraw, speak]);
+
+  useEffect(() => {
+    if (!anotherDraw || needsFirstDraw) return;
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.first-draw-btn, .first-draw-close, .sound-dock, .pack-shop, .quota-topup')) return;
+      setAnotherDraw(false);
+    };
+    document.addEventListener('pointerdown', onPointer, { capture: true });
+    return () => document.removeEventListener('pointerdown', onPointer, { capture: true });
+  }, [anotherDraw, needsFirstDraw]);
 
   useEffect(() => {
     try {
@@ -315,18 +590,48 @@ export function App() {
     // that are not there yet. Ask, wait, and say what is actually true.
     void (async () => {
       flash('Проверяем оплату…');
+      let sku: string | null = null;
+      try {
+        sku = sessionStorage.getItem(CHECKOUT_SKU_KEY);
+      } catch {
+        sku = null;
+      }
       for (let attempt = 0; attempt < PAID_CHECK_TRIES && !cancelled; attempt++) {
         const settled = await reconcilePayments();
         if (cancelled) return;
         if (settled) {
-          setQuota((current) => applyRemaining(current, settled.remaining));
-          if (settled.credited > 0) {
-            flash(`Оплата прошла. Новые яйца в саду: ${settled.credited}.`);
+          setQuota((current) => {
+            const next = applyRemaining(current, settled.remaining);
+            return next
+              ? { ...next, ownedWorlds: settled.ownedWorlds, worlds: settled.worlds }
+              : next;
+          });
+          if (isConstructionSku(sku)) {
+            const before = takeOwnedWorldsBefore();
+            const added = settled.ownedWorlds.filter((id) => !before.includes(id));
+            const dest = added.at(-1) ?? settled.ownedWorlds.at(-1);
+            if (dest) {
+              flash('Сад открыт — собери его.');
+              offerMoveRef.current = dest;
+              setWorld(dest);
+              try {
+                sessionStorage.removeItem(CHECKOUT_SKU_KEY);
+              } catch {
+                /* ignore */
+              }
+              forget();
+              return;
+            }
+            if (settled.pending === 0) {
+              flash('Платёж ещё проверяется. Остров откроется сам.');
+              forget();
+              return;
+            }
+          } else if (settled.credited > 0) {
+            flash(`Оплата прошла. Новых зуфунят в саду: ${settled.credited}.`);
             forget();
             return;
-          }
-          if (settled.pending === 0) {
-            // Nothing left to wait for: the notification already landed.
+          } else if (settled.pending === 0) {
             flash('Оплата прошла. Кредиты на аккаунте.');
             forget();
             return;
@@ -336,7 +641,11 @@ export function App() {
       }
       if (cancelled) return;
       await refreshQuota();
-      flash('Платёж ещё проверяется. Яйца появятся сами — загляни через минуту.');
+      flash(
+        sku && isConstructionSku(sku)
+          ? 'Платёж ещё проверяется. Остров откроется сам — загляни через минуту.'
+          : 'Платёж ещё проверяется. Зуфунята появятся сами — загляни через минуту.',
+      );
       forget();
     })();
 
@@ -346,18 +655,34 @@ export function App() {
   }, [flash, refreshQuota]);
 
   const toggleFullscreen = useCallback(() => {
-    if (currentFullscreen()) {
+    if (cinema) {
       setCinema(false);
-      void leaveFullscreen();
+      nativeHeldRef.current = false;
+      void leaveNativeFullscreen();
       return;
     }
-    setCinema(true);
+    if (!documentAllowsFullscreen(document)) {
+      flash(fullscreenBlockedMessage(navigator.userAgent, false));
+      return;
+    }
     const root = appRef.current ?? document.documentElement;
-    void enterFullscreen(root);
-  }, []);
+    void requestNativeFullscreen(root).then((ok) => {
+      if (!ok) flash(fullscreenBlockedMessage(navigator.userAgent, true));
+    });
+  }, [cinema, flash]);
 
   useEffect(() => {
-    const sync = () => setCinema(Boolean(currentFullscreen()));
+    const sync = () => {
+      setCinema((prev) => {
+        const next = cinemaAfterNativeChange(
+          nativeFullscreenOn(),
+          nativeHeldRef.current,
+          prev,
+        );
+        nativeHeldRef.current = next.hadNative;
+        return next.cinema;
+      });
+    };
     document.addEventListener('fullscreenchange', sync);
     document.addEventListener('webkitfullscreenchange', sync);
     return () => {
@@ -366,10 +691,28 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const apply = () => writeCinemaViewport(root, cinema);
+    apply();
+    if (!cinema) return;
+    window.scrollTo(0, 0);
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', apply);
+    vv?.addEventListener('scroll', apply);
+    window.addEventListener('orientationchange', apply);
+    return () => {
+      vv?.removeEventListener('resize', apply);
+      vv?.removeEventListener('scroll', apply);
+      window.removeEventListener('orientationchange', apply);
+      writeCinemaViewport(root, false);
+    };
+  }, [cinema]);
+
   const canCreate = useCallback(() => {
     const signedIn = Boolean(bootstrapParentSession().token);
-    if (!signedIn && !import.meta.env.DEV) {
-      flash('Зайди с сайта — тогда чудик появится в объёме.');
+    if (!signedIn) {
+      flash('Зайди с сайта — тогда зуфуньчик появится в объёме.');
       return false;
     }
     const locked = pendingBirthRef.current || pendingBirth;
@@ -379,13 +722,25 @@ export function App() {
         return false;
       }
       if (quota && quota.remaining <= 0) {
+        speak('empty_quota');
         setShopOpen(true);
         return false;
       }
       return false;
     }
+    if (
+      worldIsFull(
+        countOnWorld(
+          specs.map((spec) => ({ spec })),
+          world ?? WORLD_AUTHORED,
+        ),
+      )
+    ) {
+      setFullOpen(true);
+      return false;
+    }
     return true;
-  }, [flash, pendingBirth, quota]);
+  }, [flash, pendingBirth, quota, speak, specs, world]);
   const processArtwork = useCallback(
     async (raw: HTMLCanvasElement | HTMLImageElement) => {
       const source = raw instanceof HTMLCanvasElement ? paperizeCanvas(raw) : raw;
@@ -401,6 +756,7 @@ export function App() {
         origin: 'drawing',
         hatching: true,
         drawing: blankEggDrawing(),
+        worldId: world ?? WORLD_AUTHORED,
       });
 
       setBusy(null);
@@ -417,6 +773,10 @@ export function App() {
         showLook(null);
         setScreen('zoo');
         game.focusOn(spec.id);
+        if (shouldAskAnotherDraw(quotaRef.current?.remaining)) {
+          speak('shop');
+          setShopOpen(true);
+        }
       };
 
       showLook({ id: spec.id, src: null, name: spec.name });
@@ -428,6 +788,7 @@ export function App() {
         if (!local.ok) {
           showLook(null);
           setScreen('draw');
+          speak('error');
           flash(FAILURE_MESSAGES[local.reason] ?? 'Не получилось разобрать рисунок.');
           return;
         }
@@ -436,15 +797,17 @@ export function App() {
         const ready = async (
           styled: Extract<Awaited<ReturnType<typeof stylizeDrawing>>, { ok: true }>,
         ) => {
+          const keptPostcard = painted.postcardUrl;
           const fromStyle = await styledToChudik(styled.image);
           if (fromStyle.ok) painted = fromStyle.drawing;
           const portraitUrl = portraitFromImage(styled.image);
+          const postcardUrl = styled.postcardUrl || keptPostcard;
           if (styled.modelUrl) {
             await preloadMeshyModel(styled.modelUrl);
             painted = { ...painted, modelUrl: styled.modelUrl };
           }
           if (portraitUrl) painted = { ...painted, portraitUrl };
-          if (styled.postcardUrl) painted = { ...painted, postcardUrl: styled.postcardUrl };
+          if (postcardUrl) painted = { ...painted, postcardUrl };
           const name = styled.name || spec.name;
           const kindId = styled.kindId || spec.kindId;
           game.prepareHatch(
@@ -471,6 +834,22 @@ export function App() {
               id: spec.id,
               src: paintedStill.image.src,
               name: paintedStill.name || spec.name,
+              postcardSrc: paintedStill.postcardUrl ?? null,
+              postcardDone: Boolean(paintedStill.postcardUrl),
+            });
+            void waitForPostcard(paintedStill.jobId).then((postcardSrc) => {
+              if (postcardSrc) {
+                painted = { ...painted, postcardUrl: postcardSrc };
+                game.attachPostcard(spec.id, postcardSrc);
+              }
+              if (!watchingThis()) return;
+              const current = hatchLookRef.current;
+              if (!current) return;
+              showLook({
+                ...current,
+                postcardSrc: postcardSrc ?? current.postcardSrc,
+                postcardDone: true,
+              });
             });
           },
         });
@@ -480,10 +859,16 @@ export function App() {
             setQuota((current) => applyRemaining(current, left));
           }
           await ready(styled);
-          if (styled.mesh === 'pending') {
+          if (!styled.modelUrl) {
             void waitForMesh(styled.jobId)
               .then(async (mesh) => {
-                if (!eggCanOpen(mesh.mesh, mesh.modelUrl)) return;
+                if (mesh.postcardUrl && watchingThis()) {
+                  const current = hatchLookRef.current;
+                  if (current) {
+                    showLook({ ...current, postcardSrc: mesh.postcardUrl, postcardDone: true });
+                  }
+                }
+                if (!mesh.modelUrl) return;
                 await ready({
                   ...styled,
                   modelUrl: mesh.modelUrl,
@@ -491,27 +876,26 @@ export function App() {
                   postcardUrl: mesh.postcardUrl ?? styled.postcardUrl,
                 });
               })
-              .catch(async () => {
-                // Polling died; open the egg with the painted extrude.
-                await ready({ ...styled, mesh: 'failed' });
+              .catch(() => {
+                // Stay an egg; pendingHatches will poll again after a reload.
               });
           }
           if (!watchingThis()) {
             flash(
               styled.modelUrl
                 ? 'Почти! Постучи — или подожди чуть-чуть.'
-                : styled.mesh === 'failed'
-                  ? 'Картинка готова, объём не вышел. Постучи.'
-                  : 'Картинка готова. Объём долепится в саду.',
+                : 'Картинка готова. Объём долепится в саду.',
             );
           }
         } else if (styled.reason === 'not_allowed') {
           showLook(null);
           setScreen('draw');
+          speak('error');
           flash('Такой рисунок нельзя. Нарисуй зверушку.');
         } else if (styled.reason === 'no_credits') {
           showLook(null);
           setScreen('zoo');
+          speak('empty_quota');
           setShopOpen(true);
           flash('Нужен пакет — бесплатный зверь уже создан.');
         } else if (accepted && styled.reason === 'timeout') {
@@ -521,6 +905,7 @@ export function App() {
           await game.removeCreature(spec.id);
           showLook(null);
           setScreen('draw');
+          speak('error');
           flash('Не получилось. Попытка вернулась.');
         } else if (!bootstrapParentSession().token && import.meta.env.DEV) {
           await game.addCreature(spec);
@@ -531,14 +916,15 @@ export function App() {
         } else if (!bootstrapParentSession().token || styled.reason === 'not_signed_in') {
           showLook(null);
           setScreen('zoo');
-          flash('Зайди с сайта — тогда чудик появится в объёме.');
+          flash('Зайди с сайта — тогда зуфуньчик появится в объёме.');
         } else if (styled.reason === 'unavailable') {
           showLook(null);
           setScreen('draw');
-          flash('Сейчас нельзя создать чудика. Попробуй позже.');
+          flash('Сейчас нельзя создать зуфуньчика. Попробуй позже.');
         } else {
           showLook(null);
           setScreen('draw');
+          speak('error');
           flash('Не получилось обработать рисунок.');
         }
       } catch (error) {
@@ -547,6 +933,7 @@ export function App() {
           await game.removeCreature(spec.id);
         }
         showLook(null);
+        speak('error');
         flash('Что-то пошло не так с рисунком.');
         setScreen('zoo');
       } finally {
@@ -556,7 +943,7 @@ export function App() {
         void refreshQuota();
       }
     },
-    [canCreate, flash, refreshQuota],
+    [canCreate, flash, refreshQuota, speak, world],
   );
 
   const handlePhoto = useCallback(
@@ -571,12 +958,13 @@ export function App() {
         });
         await processArtwork(image);
       } catch {
+        speak('error');
         flash('Не удалось открыть фото.');
       } finally {
         URL.revokeObjectURL(url);
       }
     },
-    [flash, processArtwork],
+    [flash, processArtwork, speak],
   );
 
   const saveRecording = useCallback(
@@ -618,49 +1006,187 @@ export function App() {
     [flash],
   );
 
+  const transferCreatures = useCallback(
+    async (ids: string[], dest: string) => {
+      const records = await loadCreatures();
+      const here = creatureWorldId(world);
+      const home = creatureWorldId(dest);
+      const fitting = idsThatFit(ids, records, home);
+      if (fitting.length === 0) {
+        flash('Там тоже полно. Купи ещё сад.');
+        return;
+      }
+      const game = gameRef.current;
+      for (const record of records) {
+        if (!fitting.includes(record.spec.id)) continue;
+        const next = { ...record.spec, worldId: home };
+        if (here === home) {
+          await game?.receiveMoved(next);
+          continue;
+        }
+        await saveCreature({ ...record, spec: next });
+        if (creatureWorldId(record.spec.worldId) === here) {
+          game?.unloadCreature(record.spec.id);
+        }
+      }
+      setMoveDest(null);
+      setMoveFrom([]);
+      setPickFrom(null);
+      flash(fitting.length === ids.length ? 'Зуфунята переехали.' : 'Часть переехала — там мало места.');
+    },
+    [flash, world],
+  );
+
+  const moveCreatures = useCallback(
+    async (ids: string[]) => {
+      if (!moveDest) return;
+      await transferCreatures(ids, moveDest);
+    },
+    [moveDest, transferCreatures],
+  );
+
+  const openMoveFromHere = useCallback(
+    (dest: string) => {
+      void loadCreatures().then((records) => {
+        const fromHere = records
+          .filter(
+            (record) =>
+              !isParkResidentId(record.spec.id) &&
+              creatureWorldId(record.spec.worldId) === creatureWorldId(world),
+          )
+          .map((record) => record.spec);
+        if (!fromHere.length) {
+          flash('Здесь некого переносить.');
+          return;
+        }
+        setMoveFrom(fromHere);
+        setMoveDest(dest);
+      });
+    },
+    [flash, world],
+  );
+
+  const overlayOpen =
+    shopOpen ||
+    logoutGate ||
+    needsFirstDraw ||
+    anotherDraw ||
+    Boolean(offerSpec) ||
+    driving ||
+    Boolean(cardSpec) ||
+    Boolean(careSpec) ||
+    Boolean(frenzySpec) ||
+    Boolean(puzzleSpec) ||
+    actionsOpen ||
+    diyPicking ||
+    Boolean(moveDest) ||
+    Boolean(pickFrom) ||
+    fullOpen ||
+    Boolean(busy);
+
+  const showSiteNav = Boolean(world) && ready && screen === 'zoo' && !overlayOpen;
+
   return (
-    <div className="app" ref={appRef}>
+    <div className={cinema ? 'app is-cinema' : 'app'} ref={appRef}>
       <div className="stage" ref={stageRef} />
-      {parentEntry.fromSite && screen !== 'draw' && screen !== 'preview' ? (
-        <a className="site-back" href={siteHomeUrl()}>
-          На сайт
-        </a>
+      {showSiteNav ? (
+        <div className="site-nav">
+          <button className="site-back" type="button" onClick={() => {
+            speak('worlds_back');
+            setWorld(null);
+          }}>
+            В миры
+          </button>
+          {parentEntry.token ? (
+            <button className="site-back" type="button" onClick={() => setLogoutGate(true)}>
+              Выйти
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {logoutGate ? (
+        <ParentGate
+          question="Выйти из зоопарка? Потом снова войдёт взрослый."
+          onCancel={() => setLogoutGate(false)}
+          onPass={() => {
+            setLogoutGate(false);
+            void endParentSession();
+          }}
+        />
+      ) : null}
+
+      {!world ? (
+        <WorldPicker
+          worlds={quota?.worlds ?? []}
+          onOpen={(id) => setWorld(id)}
+          onError={flash}
+        />
       ) : null}
 
       {screen === 'zoo' && ready && (
         <>
-          {showHint && !driving && specs.length > 0 && (
-            <div className="hint">Тапни чудика — он тебе ответит 👆</div>
-          )}
-          {specs.length === 0 && !driving && (
-            <div className="hint">Нарисуй чудика — он поселится в саду 🎨</div>
+          {showHint && !driving && !needsFirstDraw && !anotherDraw && hasOwnCreature(specs) && (
+            <div className="hint">Тапни зуфуньчика — он тебе ответит 👆</div>
           )}
 
-          <WalkPad onWalk={walkPad} />
+          {showDrawPrompt ? (
+            <FirstDrawPrompt
+              again={anotherDraw && !needsFirstDraw}
+              onDraw={() => {
+                if (!canCreate()) return;
+                speak('draw');
+                setAnotherDraw(false);
+                setScreen('draw');
+              }}
+              onPhoto={() => {
+                if (!canCreate()) return;
+                speak('photo');
+                setAnotherDraw(false);
+                fileInputRef.current?.click();
+              }}
+              onClose={() => {
+                setAnotherDraw(false);
+                setFirstDrawDismissed(true);
+              }}
+            />
+          ) : null}
 
-          {offerSpec && !driving && (
+          {offerSpec || cardSpec || pickFrom ? null : <WalkPad onWalk={walkPad} />}
+
+          {offerSpec && !driving && !cardSpec && (
             <PilotChoice
               spec={offerSpec}
+              pic={faceOf(offerSpec, rosterThumbs)}
               onPilot={() => startPilot(offerSpec.id)}
+              onSettings={() => setCardSpec(offerSpec)}
               onWash={
-                portraitUrlOf(offerSpec.drawing)
+                canCarePlay(offerSpec)
                   ? () => {
+                      speak('wash');
+                      setPlayStill(stillForCare(offerSpec, gameRef.current));
                       setCareSpec(offerSpec);
                       setOfferSpec(null);
                     }
                   : null
               }
               onFeedGame={
-                portraitUrlOf(offerSpec.drawing)
+                canCarePlay(offerSpec)
                   ? () => {
+                      speak('feed');
+                      setPlayStill(stillForCare(offerSpec, gameRef.current));
                       setFrenzySpec(offerSpec);
                       setOfferSpec(null);
                     }
                   : null
               }
               onPuzzle={
-                portraitUrlOf(offerSpec.drawing)
+                canCarePlay(offerSpec)
                   ? () => {
+                      const src = stillForCare(offerSpec, gameRef.current);
+                      if (!src) return;
+                      speak('puzzle');
+                      setPlayStill(src);
                       setPuzzleSpec(offerSpec);
                       setOfferSpec(null);
                     }
@@ -671,19 +1197,48 @@ export function App() {
           )}
 
           {driving && (
-            <button className="pilot-stop" type="button" onClick={stopPilot}>
+            <button className="pilot-stop" type="button" onClick={() => stopPilot()}>
               <span className="icon">✋</span>
               <span>Отпустить</span>
             </button>
           )}
 
-          {quota ? (
-            <QuotaDock remaining={quota.remaining} onTopUp={() => setShopOpen(true)} />
-          ) : Number.isFinite(previewEggs) ? (
-            <QuotaDock remaining={previewEggs} onTopUp={() => setShopOpen(true)} />
+          {world &&
+          (usesChildBuild(world) ||
+            (isAuthoringStudio() && isHangingShell(kindOfWorld(world).shell) && !isDiyWorld(world))) &&
+          gameRef.current ? (
+            <DiyHud
+              game={gameRef.current}
+              building={diyBuild}
+              onSetBuild={setDiyBuilding}
+              onPicking={setDiyPicking}
+              onSpeak={speak}
+              onSave={async () => {
+                const gardenId = world;
+                const game = gameRef.current;
+                if (!game || !gardenId) return false;
+                try {
+                  const props = game.saveDiyGarden();
+                  if (isDiyWorld(gardenId)) {
+                    saveDiyLayout(props, gardenId);
+                    void putRemoteDiyLayout(props, gardenId).then((remote) => {
+                      if (parentToken() && !remote) {
+                        flash('Сад записался тут. На сайт не ушёл — зайди с сайта.');
+                      }
+                    });
+                  } else if (isHangingShell(kindOfWorld(gardenId).shell)) {
+                    saveLayout(props, [], [], kindOfWorld(gardenId).shell);
+                  }
+                  return true;
+                } catch {
+                  return false;
+                }
+              }}
+            />
           ) : null}
 
-          <div className={`toolbar-dock${actionsOpen ? ' is-open' : ''}`}>
+          {offerSpec || cardSpec || pickFrom ? null : (
+            <div className={`toolbar-dock${actionsOpen ? ' is-open' : ''}`}>
             <button
               className="toolbar-scrim"
               type="button"
@@ -695,7 +1250,8 @@ export function App() {
                 className="big-button ghost"
                 onClick={() => {
                   setActionsOpen(false);
-                  stopPilot();
+                  stopPilot({ silent: true });
+                  speak('zoo');
                   gameRef.current?.showWholeZoo();
                 }}
               >
@@ -707,11 +1263,13 @@ export function App() {
                 className="big-button ghost"
                 onClick={() => {
                   setActionsOpen(false);
+                  speak('roster');
+                  setRosterThumbs(gameRef.current?.captureRosterThumbs() ?? {});
                   setScreen('roster');
                 }}
               >
                 <HudIcon name="roster" />
-                <span>Мои чудики</span>
+                <span>Мои Зуфики</span>
               </button>
 
               <button
@@ -719,6 +1277,7 @@ export function App() {
                 onClick={() => {
                   setActionsOpen(false);
                   if (!canCreate()) return;
+                  speak('draw');
                   setScreen('draw');
                 }}
               >
@@ -731,6 +1290,7 @@ export function App() {
                 onClick={() => {
                   setActionsOpen(false);
                   if (!canCreate()) return;
+                  speak('photo');
                   fileInputRef.current?.click();
                 }}
               >
@@ -743,24 +1303,26 @@ export function App() {
                 feeding={feeding}
                 onFeed={() => {
                   setActionsOpen(false);
-                  stopPilot();
+                  stopPilot({ silent: true });
+                  speak('feed');
                   const ok = gameRef.current?.feedZoo();
                   if (ok === false) {
-                    flash(
-                      specs.length === 0
-                        ? 'Сначала нарисуй чудика — он придёт кушать.'
-                        : 'Поставьте корзинку в парке — туда придут кушать.',
-                    );
+                    flash('Сначала нарисуй зуфуньчика — он придёт кушать.');
                   }
                 }}
               />
             </div>
             <button
-              className="toolbar-fab"
+              className={`toolbar-fab${!actionsOpen ? ' is-waiting' : ''}`}
               type="button"
               aria-label={actionsOpen ? 'Закрыть' : 'Действия'}
               aria-expanded={actionsOpen}
-              onClick={() => setActionsOpen((open) => !open)}
+              onClick={() => {
+                setActionsOpen((open) => {
+                  if (!open) speak('menu');
+                  return !open;
+                });
+              }}
             >
               {actionsOpen ? (
                 <span className="icon">✕</span>
@@ -768,7 +1330,9 @@ export function App() {
                 <HudIcon name="draw" />
               )}
             </button>
-          </div>
+            </div>
+          )}
+
         </>
       )}
 
@@ -787,24 +1351,22 @@ export function App() {
             onBack={() => setPuzzleOpen(false)}
             onForward={() => {
               const id = hatchLook.id;
-              hatchLookRef.current = null;
-              setHatchLook(null);
-              setPuzzleOpen(false);
-              setScreen('zoo');
-              gameRef.current?.focusOn(id);
+              finishHatch(id);
             }}
           />
         ) : (
           <HatchPreview
             src={hatchLook.src}
+            postcardSrc={hatchLook.postcardSrc}
+            postcardDone={hatchLook.postcardDone}
             name={hatchLook.name}
-            onPuzzle={hatchLook.src ? () => setPuzzleOpen(true) : undefined}
+            onPuzzle={hatchLook.src ? () => {
+              speak('puzzle');
+              setPuzzleOpen(true);
+            } : undefined}
             onForward={() => {
               const id = hatchLook.id;
-              hatchLookRef.current = null;
-              setHatchLook(null);
-              setScreen('zoo');
-              gameRef.current?.focusOn(id);
+              finishHatch(id);
             }}
           />
         )
@@ -813,13 +1375,15 @@ export function App() {
       {careSpec ? (
         <CareRoom
           spec={careSpec}
-          src={portraitUrlOf(careSpec.drawing) ?? ''}
+          src={playStill || displayStillUrl(portraitUrlOf(careSpec.drawing)) || ''}
           onFeed={() => {
             setFrenzySpec(careSpec);
             setCareSpec(null);
           }}
           onClose={(washed) => {
+            if (washed) track('creature.wash', { id: careSpec.id });
             setCareSpec(null);
+            setPlayStill('');
             if (washed) gameRef.current?.celebrate(careSpec.id);
           }}
         />
@@ -828,21 +1392,27 @@ export function App() {
       {frenzySpec ? (
         <FeedFrenzy
           spec={frenzySpec}
-          src={portraitUrlOf(frenzySpec.drawing) ?? ''}
+          src={playStill || displayStillUrl(portraitUrlOf(frenzySpec.drawing)) || ''}
           onClose={(fed) => {
+            if (fed) track('creature.feed', { id: frenzySpec.id });
             setFrenzySpec(null);
+            setPlayStill('');
             if (fed) gameRef.current?.celebrate(frenzySpec.id);
           }}
         />
       ) : null}
 
-      {puzzleSpec && portraitUrlOf(puzzleSpec.drawing) ? (
+      {puzzleSpec && (playStill || portraitUrlOf(puzzleSpec.drawing)) ? (
         <HatchPuzzle
-          src={portraitUrlOf(puzzleSpec.drawing)!}
+          src={playStill || displayStillUrl(portraitUrlOf(puzzleSpec.drawing)) || ''}
           name={puzzleSpec.name}
-          onBack={() => setPuzzleSpec(null)}
+          onBack={() => {
+            setPuzzleSpec(null);
+            setPlayStill('');
+          }}
           onForward={() => {
             setPuzzleSpec(null);
+            setPlayStill('');
             gameRef.current?.celebrate(puzzleSpec.id);
           }}
         />
@@ -851,7 +1421,7 @@ export function App() {
       {screen === 'roster' && (
         <RosterSheet
           specs={specs}
-          recordedIds={recordedIds}
+          thumbs={rosterThumbs}
           onClose={() => setScreen('zoo')}
           onSelect={(spec) => {
             setScreen('zoo');
@@ -872,6 +1442,7 @@ export function App() {
       {cardSpec && (
         <CreatureCard
           spec={cardSpec}
+          pic={faceOf(cardSpec, rosterThumbs)}
           hasRecording={recordedIds.has(cardSpec.id)}
           onClose={() => setCardSpec(null)}
           onPlayVoice={() => gameRef.current?.poke(cardSpec.id)}
@@ -880,11 +1451,66 @@ export function App() {
             gameRef.current?.focusOn(cardSpec.id);
           }}
           onPilot={() => startPilot(cardSpec.id)}
+          onSpeak={speak}
           onSaveRecording={(recording) => void saveRecording(cardSpec, recording)}
           onClearRecording={() => void clearRecording(cardSpec)}
           onDelete={() => void removeCreature(cardSpec)}
+          onMove={
+            moveDestinations(world, quota?.worlds ?? []).length > 0
+              ? () => {
+                  setPickFrom([cardSpec]);
+                  setCardSpec(null);
+                }
+              : undefined
+          }
+          onGardenQuiet={quietGarden}
         />
       )}
+
+      {moveDest && moveFrom.length > 0 ? (
+        <MoveCreaturesSheet
+          destTitle={gardenTitle(moveDest, quota?.worlds ?? [])}
+          specs={moveFrom}
+          onLater={() => {
+            setMoveDest(null);
+            setMoveFrom([]);
+          }}
+          onMove={(ids) => void moveCreatures(ids)}
+        />
+      ) : null}
+
+      {pickFrom && pickFrom.length > 0 ? (
+        <WorldDestSheet
+          spec={pickFrom[0]}
+          pic={faceOf(pickFrom[0], rosterThumbs)}
+          currentId={transferPreviewWorlds()?.currentId ?? world ?? WORLD_AUTHORED}
+          worlds={transferPreviewWorlds()?.worlds ?? quota?.worlds ?? []}
+          onCancel={() => setPickFrom(null)}
+          onMove={(dest) => {
+            const specs = pickFrom;
+            setPickFrom(null);
+            if (!specs || specs[0]?.id === TRANSFER_PREVIEW_ID) return;
+            void transferCreatures(
+              specs.map((spec) => spec.id),
+              dest,
+            );
+          }}
+        />
+      ) : null}
+
+      {fullOpen ? (
+        <WorldFullPrompt
+          destinations={moveDestinations(world, quota?.worlds ?? [])}
+          onBuy={() => {
+            setFullOpen(false);
+            setWorld(null);
+          }}
+          onPickDest={(dest) => {
+            setFullOpen(false);
+            openMoveFromHere(dest);
+          }}
+        />
+      ) : null}
 
       {busy && (
         <div className="busy">
@@ -893,10 +1519,9 @@ export function App() {
         </div>
       )}
 
-      {!ready && (
-        <div className="busy">
+      {world && !ready && (
+        <div className="busy busy-compact">
           <div className="spinner" />
-          <span>Открываем зоопарк...</span>
           <span className="load-bar" aria-hidden="true">
             <span className="food-bar-fill" style={{ width: `${Math.round(loadProgress * 100)}%` }} />
           </span>
@@ -905,21 +1530,73 @@ export function App() {
 
       {toast ? <div className="toast" role="status">{toast}</div> : null}
 
-      <div className="admin-dock">
-        {screen === 'zoo' && ready && (
-          <button
-            className={`tv-share${cinema ? ' is-live' : ''}`}
-            type="button"
-            title={cinema ? 'Выйти из полного экрана' : 'Открыть зоопарк на весь экран'}
-            aria-label={cinema ? 'Выйти из полного экрана' : 'Открыть зоопарк на весь экран'}
-            onClick={toggleFullscreen}
-          >
-            ⛶
-          </button>
-        )}
-        {isStudio() && ready && gameRef.current && <LayoutEditor game={gameRef.current} />}
-        {isStudio() && ready && <TuningPanel />}
+      {world ? (
+      <div className="hud-chrome">
+        {quota && screen === 'zoo' && ready ? (
+          <QuotaDock remaining={quota.remaining} onTopUp={() => {
+            speak('shop');
+            setShopOpen(true);
+          }} />
+        ) : screen === 'zoo' && ready && Number.isFinite(previewEggs) ? (
+          <QuotaDock remaining={previewEggs} onTopUp={() => {
+            speak('shop');
+            setShopOpen(true);
+          }} />
+        ) : null}
+        {screen === 'zoo' ? (
+        <div className="admin-dock">
+          <div className="sound-dock">
+            <button
+              className={`tv-share${soundOpen ? ' is-live' : ''}`}
+              type="button"
+              title="Звук"
+              aria-label="Звук"
+              aria-pressed={soundOpen}
+              onClick={() => {
+                setSoundOpen((open) => !open);
+                void getIslandAudio().unlock();
+              }}
+            >
+              🔊
+            </button>
+            {soundOpen ? <SoundSheet onClose={() => setSoundOpen(false)} /> : null}
+          </div>
+          {screen === 'zoo' && ready && (
+            <button
+              className={`tv-share${cinema ? ' is-live' : ''}`}
+              type="button"
+              title={cinema ? 'Выйти из полного экрана' : 'Открыть зоопарк на весь экран'}
+              aria-label={cinema ? 'Выйти из полного экрана' : 'Открыть зоопарк на весь экран'}
+              onClick={toggleFullscreen}
+            >
+              ⛶
+            </button>
+          )}
+          {isStudio() && world && !usesChildBuild(world) && ready && gameRef.current && (
+            <LayoutEditor game={gameRef.current} />
+          )}
+          {isAuthoringStudio() && world && isStudioKind(kindOfWorld(world)) && ready && gameRef.current && (
+            <div className="layout-launch">
+              <StudioWorldSwitch
+                shell={kindOfWorld(world).shell}
+                onDownload={() => gameRef.current?.layoutStudio.save()}
+                onOpen={() => {
+                  const game = gameRef.current;
+                  if (!game) return;
+                  pickLayoutFile(async (doc) => {
+                    if (!doc.props) return;
+                    await game.library.ensureAll(doc.props.map((prop) => prop.model));
+                    game.layoutStudio.importDocument(doc);
+                  });
+                }}
+              />
+            </div>
+          )}
+          {isStudio() && world && !isDiyWorld(world) && ready && <TuningPanel />}
+        </div>
+        ) : null}
       </div>
+      ) : null}
 
       <input
         ref={fileInputRef}

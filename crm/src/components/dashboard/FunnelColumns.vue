@@ -9,7 +9,10 @@
           </div>
           <article class="funnel-column" :class="{ 'is-empty': step.count === 0 }">
             <header class="funnel-column-header">
-              <span class="funnel-column-num">{{ index + 1 }}</span>
+              <div class="funnel-column-num-row">
+                <span class="funnel-column-num">{{ index + 1 }}</span>
+                <CrmHelp :text="funnelStepHelp(funnelKey, step.key)" />
+              </div>
               <h4 class="funnel-column-title">{{ step.label }}</h4>
               <div class="funnel-column-stats">
                 <span class="funnel-column-count">{{ step.count.toLocaleString("ru-RU") }}</span>
@@ -22,7 +25,7 @@
                 <span class="funnel-sample-info">
                   <span class="funnel-sample-name">{{ sample.title }}</span>
                   <span v-if="sample.subtitle" class="funnel-sample-meta">{{ sample.subtitle }}</span>
-                  <span v-if="sample.at" class="funnel-sample-date">{{ formatDay(sample.at) }}</span>
+                  <span v-if="sample.at" class="funnel-sample-date">{{ formatWhen(sample.at) }}</span>
                 </span>
               </div>
               <div v-if="!step.samples?.length" class="funnel-empty-card">Пока никого</div>
@@ -36,19 +39,20 @@
 </template>
 
 <script setup lang="ts">
+import CrmHelp from "@/components/crm/CrmHelp.vue";
+import { funnelStepHelp } from "@/lib/funnel-help";
 import type { FunnelStep } from "@/lib/api";
+import { formatWhen } from "@/lib/when";
 
-defineProps<{ steps: FunnelStep[] }>();
+withDefaults(
+  defineProps<{ steps: FunnelStep[]; funnelKey?: string }>(),
+  { funnelKey: "" },
+);
 
 function initials(value: string) {
   const src = value.trim();
   if (!src) return "?";
   return src.slice(0, 2).toUpperCase();
-}
-
-function formatDay(ts: number) {
-  if (!ts) return "";
-  return new Date(ts * 1000).toLocaleDateString("ru-RU");
 }
 
 function remaining(step: FunnelStep) {
@@ -125,6 +129,13 @@ function remaining(step: FunnelStep) {
   padding: 1rem 1rem 0.75rem;
 }
 
+.funnel-column-num-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
 .funnel-column-num {
   display: inline-flex;
   align-items: center;
@@ -136,7 +147,6 @@ function remaining(step: FunnelStep) {
   color: var(--crm-accent);
   font-size: 0.6875rem;
   font-weight: 700;
-  margin-bottom: 0.5rem;
 }
 
 .funnel-column-title {

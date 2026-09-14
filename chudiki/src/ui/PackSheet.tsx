@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { fetchPacks, formatRub, startCheckout, type Pack } from '../game/commerce';
-import { siteHomeUrl } from '../parentSession';
+import { fetchPacks, formatRub, quotePack, startCheckout, type Pack, type Quote } from '../game/commerce';
+import { track } from '../analytics';
+import { siteAuthUrl } from '../parentSession';
 import { CreditEggs } from './CreditEggs';
+import {
+  packShopLead,
+  packShopTitle,
+  packShopView,
+  packsForShop,
+  packTileBadge,
+  packTileLabel,
+} from './packShop';
 import { ParentGate } from './ParentGate';
+import { PromoField } from './PromoField';
 
 type PackSheetProps = {
   remaining: number;
@@ -11,7 +21,8 @@ type PackSheetProps = {
 };
 
 const CATALOG_PREVIEW: Pack[] = [
-  { id: 'pack_5', animals: 5, price_rub: 1990, featured: false, buyable: true },
+  { id: 'pack_1', animals: 1, price_rub: 99, featured: false, buyable: true },
+  { id: 'pack_5', animals: 5, price_rub: 399, featured: false, buyable: true },
   { id: 'pack_10', animals: 10, price_rub: 3490, featured: true, buyable: true },
   { id: 'pack_15', animals: 15, price_rub: 4690, featured: false, buyable: true },
   { id: 'pack_20', animals: 20, price_rub: 5790, featured: false, buyable: true },
@@ -21,13 +32,20 @@ const FAIL_TEXT = {
   not_signed_in: 'Сначала зайди с сайта — оплату делает взрослый.',
   unavailable: 'Оплата сейчас не открывается. Попробуй чуть позже.',
   failed: 'Банк не ответил. Попробуй ещё раз.',
+  owned: 'Этот остров уже открыт.',
+  promo: 'Промокод не подошёл.',
 } as const;
 
 export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
   const [packs, setPacks] = useState<Pack[]>(CATALOG_PREVIEW);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, setPending] = useState<Pack | null>(null);
-  // A second tap on the confirm button must not open a second order.
+  const [adult, setAdult] = useState(false);
+  const [promo, setPromo] = useState('');
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const [promoError, setPromoError] = useState('');
+  const [expanded, setExpanded] = useState(remaining > 0);
   const paying = useRef(false);
 
   useEffect(() => {
@@ -36,25 +54,69 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
     });
   }, []);
 
+  useEffect(() => {
+    track('shop.view', { remaining, firstFriend: remaining <= 0 });
+  }, [remaining]);
+
+  const view = packShopView(packs, remaining);
+  const shown = packsForShop(packs, remaining, expanded);
+  const showMore = remaining <= 0 && view.more.length > 0 && !expanded;
+
+  const closePay = () => {
+    if (paying.current) return;
+    setPending(null);
+    setAdult(false);
+    setPromoError('');
+  };
+
+  const applyPromo = async (packId?: string) => {
+    const code = promo.trim();
+    setPromoError('');
+    if (!code) {
+      setQuote(null);
+      setQuotes({});
+      return;
+    }
+    const ids = packId ? [packId] : packs.filter((item) => item.buyable).map((item) => item.id);
+    const next: Record<string, Quote> = {};
+    let anyOk = false;
+    let anyFail = false;
+    for (const id of ids) {
+      const result = await quotePack(id, code);
+      if ('ok' in result) {
+        anyFail = true;
+        continue;
+      }
+      anyOk = true;
+      next[id] = result;
+    }
+    setQuotes(next);
+    const picked = packId ? next[packId] : pending ? next[pending.id] : null;
+    setQuote(picked ?? null);
+    if (!anyOk && anyFail) setPromoError(FAIL_TEXT.promo);
+  };
+
   const pay = async (pack: Pack) => {
     if (paying.current) return;
     paying.current = true;
     setBusy(pack.id);
-    const result = await startCheckout(pack.id);
+    const result = await startCheckout(pack.id, quote?.promo_code || promo.trim() || undefined);
     if (result.ok) {
       window.location.href = result.url;
       return;
     }
     paying.current = false;
     setBusy(null);
-    setPending(null);
+    closePay();
     if (result.reason === 'not_signed_in') {
       onError(FAIL_TEXT.not_signed_in);
-      window.location.href = `${siteHomeUrl().replace(/\/$/, '')}/auth`;
+      window.location.href = siteAuthUrl();
       return;
     }
     onError(FAIL_TEXT[result.reason]);
   };
+
+  const price = pending ? (quote?.amount_rub ?? quotes[pending.id]?.amount_rub ?? pending.price_rub) : 0;
 
   return (
     <div className="pack-shop" role="dialog" aria-labelledby="pack-shop-title">
@@ -66,59 +128,98 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
           </button>
           <div className="pack-shop-titles">
             <h2 id="pack-shop-title" className="pack-shop-title">
-              Пополнить сад
+              {packShopTitle(remaining)}
             </h2>
-            <p className="pack-shop-remain">
-              <CreditEggs count={remaining} />
-              <span>
-                {remaining > 0 ? `Ещё ${remaining}` : 'Свободных нет'}
-              </span>
-            </p>
+            {remaining > 0 ? (
+              <p className="pack-shop-remain">
+                <CreditEggs count={remaining} />
+                <span>Ещё {remaining}</span>
+              </p>
+            ) : null}
           </div>
         </header>
-        <p className="pack-shop-lead">
-          {remaining > 0
-            ? 'Пакет добавляет новые яйца. Удаление слот не возвращает.'
-            : 'Бесплатный зверь уже создан. Пакет открывает новые яйца.'}
-        </p>
-        <div className="pack-tiles">
-          {packs.map((pack) => (
-            <button
-              key={pack.id}
-              className={`pack-tile${pack.featured ? ' is-featured' : ''}`}
-              type="button"
-              disabled={!pack.buyable || busy === pack.id}
-              onClick={() => setPending(pack)}
-            >
-              {pack.featured ? <span className="pack-tile-badge">часто берут</span> : null}
-              <CreditEggs count={pack.animals} emptyMark={false} />
-              <strong className="pack-tile-count">{pack.animals} зверей</strong>
-              <span className="pack-tile-price">
-                {pack.price_rub > 0 ? (
-                  <>
-                    {formatRub(pack.price_rub)}
-                    {(pack.list_price_rub ?? 0) > pack.price_rub ? (
-                      <s>{formatRub(pack.list_price_rub ?? 0)}</s>
-                    ) : null}
-                  </>
-                ) : (
-                  'скоро'
-                )}
-              </span>
-            </button>
-          ))}
+        <p className="pack-shop-lead">{packShopLead(remaining)}</p>
+        <PromoField value={promo} error={promoError} onChange={setPromo} onApply={() => void applyPromo()} />
+        <div className={`pack-tiles${shown.length === 1 ? ' is-starter' : ''}`}>
+          {shown.map((pack) => {
+            const badge = packTileBadge(pack, remaining);
+            const quoted = quotes[pack.id];
+            const now = quoted?.amount_rub ?? pack.price_rub;
+            const was = quoted?.discount_rub ? pack.price_rub : (pack.list_price_rub ?? 0);
+            return (
+              <button
+                key={pack.id}
+                className={`pack-tile${badge ? ' is-featured' : ''}`}
+                type="button"
+                disabled={!pack.buyable || busy === pack.id}
+                onClick={() => {
+                  setAdult(false);
+                  setPending(pack);
+                  setQuote(quotes[pack.id] ?? null);
+                  setPromoError('');
+                }}
+              >
+                {badge ? <span className="pack-tile-badge">{badge}</span> : null}
+                <CreditEggs count={pack.animals} emptyMark={false} showCount={false} />
+                <strong className="pack-tile-count">{packTileLabel(pack, remaining)}</strong>
+                <span className="pack-tile-price">
+                  {pack.price_rub > 0 ? (
+                    <>
+                      {formatRub(now)}
+                      {was > now ? <s>{formatRub(was)}</s> : null}
+                    </>
+                  ) : (
+                    'скоро'
+                  )}
+                </span>
+              </button>
+            );
+          })}
         </div>
+        {showMore ? (
+          <button className="pack-more" type="button" onClick={() => setExpanded(true)}>
+            Посмотреть все пакеты
+          </button>
+        ) : null}
       </div>
-      {pending ? (
+      {pending && !adult ? (
         <ParentGate
-          question="Оплату делает взрослый. После неё яйца появятся в саду."
-          onCancel={() => {
-            if (!busy) setPending(null);
-          }}
-          onPass={() => {
-            void pay(pending);
-          }}
+          question="Оплату делает взрослый. После неё в саду появится новый зуфик."
+          onCancel={closePay}
+          onPass={() => setAdult(true)}
         />
+      ) : null}
+      {pending && adult ? (
+        <div className="modal-backdrop" onClick={closePay}>
+          <div className="card gate" onClick={(event) => event.stopPropagation()}>
+            <h2>{packTileLabel(pending, remaining)}</h2>
+            <p className="pack-confirm-price">
+              {formatRub(price)}
+              {(quote?.discount_rub || quotes[pending.id]?.discount_rub) ? (
+                <s>{formatRub(pending.price_rub)}</s>
+              ) : null}
+            </p>
+            <PromoField
+              value={promo}
+              error={promoError}
+              onChange={setPromo}
+              onApply={() => void applyPromo(pending.id)}
+            />
+            <div style={{ marginTop: 18, display: 'flex', gap: 8 }}>
+              <button className="icon-button wide" type="button" onClick={closePay}>
+                Отмена
+              </button>
+              <button
+                className="big-button primary"
+                type="button"
+                disabled={busy === pending.id}
+                onClick={() => void pay(pending)}
+              >
+                Оплатить
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

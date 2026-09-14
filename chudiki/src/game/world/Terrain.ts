@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { Noise2D } from '../core/noise';
 import type { IdyllicLibrary } from '../assets/IdyllicLibrary';
 import { createToyMaterial } from '../core/geometry';
+import { buildMeshBounds } from '../render/bvhRaycast';
+import { createFlatShadowCatcher, createShadowCatcher } from './islandShadowCatcher';
+import { lawnHeightWindow, peakHeight } from './islandHeights';
 import {
   BURROW,
   CREEK_POINTS,
@@ -47,8 +50,13 @@ export class Terrain {
   private cliff: THREE.Mesh;
   private noise: Noise2D;
   private sculpted = false;
-  private islandSurface: IslandSurface | null = null;
+  private tightIsland = false;
   private islandMeshes: THREE.Mesh[] = [];
+  private islandSurface: IslandSurface | null = null;
+  private shadowCatcher: THREE.Mesh | null = null;
+  private heightRay = new THREE.Raycaster();
+  private heightOrigin = new THREE.Vector3();
+  private heightDir = new THREE.Vector3(0, -1, 0);
 
   constructor(seed: number, grassMap?: THREE.Texture | null, grassNormal?: THREE.Texture | null) {
     this.noise = new Noise2D(seed);
@@ -111,11 +119,17 @@ export class Terrain {
    * cliff stay in memory for height queries but are hidden so they do not
    * fight the sculpted mesh.
    */
-  adoptFloatingIsland(library: IdyllicLibrary): boolean {
-    if (!library.has('floating-island')) return false;
-    const model = library.get('floating-island');
+  adoptFloatingIsland(
+    library: IdyllicLibrary,
+    name = 'floating-island',
+    lawnCatcher = false,
+  ): boolean {
+    if (!library.has(name)) return false;
+    const model = library.get(name);
     const width = Math.max(model.size.x, model.size.z);
-    const scale = (ISLAND.radius * 2.04) / width;
+    const tight = name === 'whimsy-isle' || name === 'floating-grassland';
+    const span = tight ? ISLAND.radius * 1.72 : ISLAND.radius * 2.04;
+    const scale = span / width;
     const top = 0.04;
     const y = top - model.size.y * scale;
     const placed: THREE.Mesh[] = [];
@@ -124,24 +138,56 @@ export class Terrain {
       const material = (primitive.material as THREE.MeshStandardMaterial).clone();
       material.side = THREE.FrontSide;
       material.shadowSide = THREE.FrontSide;
+      // Baked Meshy glow flattens the lawn; map shadows need a dark side.
+      material.emissiveIntensity = 0;
       const mesh = new THREE.Mesh(primitive.geometry, material);
       mesh.position.set(ISLAND.centerX, y, ISLAND.centerZ);
       mesh.scale.setScalar(scale);
-      // Receive tree and creature shadows, but never cast: a 80 m grassy
-      // platform shadowing itself produces acne — the dark shards on the lawn.
+      // Never cast: a grassy platform shadowing itself produces acne.
       mesh.castShadow = false;
       mesh.receiveShadow = true;
-      mesh.name = 'floating-island';
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      mesh.name = name;
+      if (tight) buildMeshBounds(mesh);
       this.group.add(mesh);
       placed.push(mesh);
     }
 
     this.sculpted = true;
+    this.tightIsland = tight;
     this.islandMeshes = placed;
     this.mesh.visible = false;
     this.cliff.visible = false;
+    this.cliff.castShadow = false;
     this.bakeIslandSurface(placed);
+    if (lawnCatcher) this.attachShadowCatcher();
     return true;
+  }
+
+  private attachShadowCatcher() {
+    if (this.shadowCatcher) {
+      this.shadowCatcher.removeFromParent();
+      this.shadowCatcher.geometry.dispose();
+      (this.shadowCatcher.material as THREE.Material).dispose();
+      this.shadowCatcher = null;
+    }
+    const draped = this.islandSurface ? createShadowCatcher(this.islandSurface, 0.04) : null;
+    const catcher =
+      draped ??
+      createFlatShadowCatcher(
+        ISLAND.centerX,
+        (this.sampleIslandSurface(ISLAND.centerX, ISLAND.centerZ) ?? 0.04) + 0.04,
+        ISLAND.centerZ,
+        ISLAND.radius * 0.72,
+      );
+    this.shadowCatcher = catcher;
+    this.group.add(catcher);
+  }
+
+  /** True on the sculpted lawn we can see, not the hidden circular disc. */
+  hasWalkSurface(x: number, z: number): boolean {
+    return this.sampleIslandSurface(x, z) !== null;
   }
 
   /** True once the Meshy platform replaced the procedural lawn. */
@@ -155,6 +201,7 @@ export class Terrain {
     if (sampled !== null) return sampled;
 
     if (this.sculpted) {
+      if (this.tightIsland) return ISLAND.bed;
       const r = Math.hypot(x - ISLAND.centerX, z - ISLAND.centerZ);
       return r >= islandEdgeRadius(x, z) ? ISLAND.bed : 0.04;
     }
@@ -203,7 +250,7 @@ export class Terrain {
     const heights = new Float32Array(cols * rows).fill(Number.NaN);
     const world = new THREE.Vector3();
     const normal = new THREE.Vector3();
-    const minGrassY = ISLAND.oceanY + 0.4;
+    const upY: number[] = [];
 
     for (const mesh of meshes) {
       mesh.updateMatrixWorld(true);
@@ -211,7 +258,26 @@ export class Terrain {
       const normals = mesh.geometry.getAttribute('normal');
       for (let i = 0; i < position.count; i++) {
         world.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
-        if (world.y < minGrassY) continue;
+        if (world.y < ISLAND.bed + 0.5) continue;
+        if (normals) {
+          normal.fromBufferAttribute(normals, i).transformDirection(mesh.matrixWorld);
+          if (normal.y < 0.2) continue;
+        }
+        upY.push(world.y);
+      }
+    }
+
+    const peak = peakHeight(upY);
+    const band = lawnHeightWindow(peak ?? ISLAND.oceanY + 0.4);
+    const minGrassY = this.tightIsland ? band.min : ISLAND.oceanY + 0.4;
+    const maxGrassY = this.tightIsland ? band.max : Number.POSITIVE_INFINITY;
+
+    for (const mesh of meshes) {
+      const position = mesh.geometry.getAttribute('position');
+      const normals = mesh.geometry.getAttribute('normal');
+      for (let i = 0; i < position.count; i++) {
+        world.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+        if (world.y < minGrassY || world.y > maxGrassY) continue;
         if (normals) {
           normal.fromBufferAttribute(normals, i).transformDirection(mesh.matrixWorld);
           if (normal.y < 0.2) continue;
@@ -283,20 +349,62 @@ export class Terrain {
     const top = this.mixHeight(h00, h10, tx);
     const bottom = this.mixHeight(h01, h11, tx);
     const mixed = this.mixHeight(top, bottom, tz);
-    if (mixed === null || mixed < ISLAND.oceanY + 0.3) return null;
+    if (mixed === null) return null;
+    // Garden lawn sits above the ocean. A hanging voxel plate can sit lower
+    // once the AABB roof is a tree or a rim cube, not the grass.
+    if (!this.tightIsland && mixed < ISLAND.oceanY + 0.3) return null;
     return mixed - 0.02;
   }
 
   /** Where a click hits the visible island grass. */
   pickSurface(raycaster: THREE.Raycaster): THREE.Vector3 | null {
     if (this.islandMeshes.length === 0) return null;
+    const previous = raycaster.firstHitOnly;
+    raycaster.firstHitOnly = true;
+    const sides = this.islandMeshes.map((mesh) => {
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      const side = material.side;
+      material.side = THREE.DoubleSide;
+      return side;
+    });
     const hits = raycaster.intersectObjects(this.islandMeshes, false);
-    for (const hit of hits) {
-      if (hit.normal && hit.normal.y < 0.12) continue;
-      if (hit.point.y < ISLAND.oceanY + 0.3) continue;
-      return hit.point.clone();
-    }
-    return null;
+    this.islandMeshes.forEach((mesh, index) => {
+      (mesh.material as THREE.MeshStandardMaterial).side = sides[index];
+    });
+    raycaster.firstHitOnly = previous;
+    const hit = hits[0];
+    return hit ? hit.point.clone() : null;
+  }
+
+  /**
+   * Top of the sculpted lawn under a stamp. The baked walk grid sits a little
+   * low so feet do not hover; using it for trees pushes them into the grass.
+   */
+  stampHeight(x: number, z: number): number {
+    const hit = this.raycastTop(x, z);
+    if (hit !== null) return hit;
+    return this.heightAt(x, z);
+  }
+
+  private raycastTop(x: number, z: number): number | null {
+    if (this.islandMeshes.length === 0) return null;
+    this.heightOrigin.set(x, 80, z);
+    this.heightRay.set(this.heightOrigin, this.heightDir);
+    this.heightRay.near = 0;
+    this.heightRay.far = 120;
+    this.heightRay.firstHitOnly = true;
+    const sides = this.islandMeshes.map((mesh) => {
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      const side = material.side;
+      material.side = THREE.DoubleSide;
+      return side;
+    });
+    const hits = this.heightRay.intersectObjects(this.islandMeshes, false);
+    this.islandMeshes.forEach((mesh, index) => {
+      (mesh.material as THREE.MeshStandardMaterial).side = sides[index];
+    });
+    const hit = hits[0];
+    return hit ? hit.point.y : null;
   }
 
   private surfaceHeight(surface: IslandSurface, col: number, row: number): number | null {

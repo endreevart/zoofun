@@ -13,7 +13,7 @@ import {
 export function TuningPanel() {
   const [values, setValues] = useState<TuningValues>(tuning.get());
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'all' | 'clouds' | false>(false);
 
   useEffect(() => tuning.subscribe(setValues), []);
 
@@ -25,15 +25,14 @@ export function TuningPanel() {
     );
   }
 
-  const copy = async () => {
-    const snippet = tuning.snippet();
+  const copy = async (kind: 'all' | 'clouds') => {
+    const snippet = kind === 'clouds' ? tuning.cloudSnippet() : tuning.snippet();
     try {
       await navigator.clipboard.writeText(snippet);
     } catch {
-      // Clipboard needs a secure context; the console is a reliable fallback.
       console.info(snippet);
     }
-    setCopied(true);
+    setCopied(kind);
     window.setTimeout(() => setCopied(false), 1800);
   };
 
@@ -42,7 +41,10 @@ export function TuningPanel() {
       <header>
         <strong>Картинка</strong>
         <div className="tuning-actions">
-          <button onClick={() => void copy()}>{copied ? 'Скопировано' : 'Скопировать'}</button>
+          <button onClick={() => void copy('clouds')}>
+            {copied === 'clouds' ? 'Облака скопированы' : 'Скопировать облака'}
+          </button>
+          <button onClick={() => void copy('all')}>{copied === 'all' ? 'Скопировано' : 'Скопировать'}</button>
           <button onClick={() => tuning.reset()}>Сброс</button>
           <button onClick={() => setOpen(false)}>✕</button>
         </div>

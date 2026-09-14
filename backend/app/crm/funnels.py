@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.persistence.db import session
 from app.persistence.models import (
@@ -15,8 +16,11 @@ from app.persistence.models import (
     ParentRow,
     PaymentRow,
 )
+from app.worlds import pack_label
 
-from .queries import period_start
+from .window import TimeWindow, as_window, in_window
+
+PACK_PAYMENT = PaymentRow.pack_id.like("pack_%")
 
 SAMPLE_LIMIT = 100
 _sample_window = {"limit": SAMPLE_LIMIT, "offset": 0}
@@ -25,7 +29,7 @@ FUNNELS = [
     {
         "key": "site",
         "label": "Сайт → зоопарк",
-        "description": "Визит → вход → аккаунт → остров",
+        "description": "Визит → вход (уникальные сессии /auth) → аккаунт → остров (сессии island, не Метрика)",
         "entity": "session",
         "group": "acquisition",
         "group_label": "Привлечение",
@@ -41,7 +45,7 @@ FUNNELS = [
     {
         "key": "product",
         "label": "Продуктовая",
-        "description": "Регистрация → первый зверь → оплата → возврат",
+        "description": "Регистрация → остров → первый зверь → оплата",
         "entity": "parent",
         "group": "activation",
         "group_label": "Активация",
@@ -57,7 +61,7 @@ FUNNELS = [
     {
         "key": "island",
         "label": "Остров",
-        "description": "Зашёл → посмотрел → нарисовал → поухаживал",
+        "description": "Зашёл → открыл мир или зверя → нарисовал → поухаживал",
         "entity": "session",
         "group": "activation",
         "group_label": "Активация",
@@ -96,6 +100,16 @@ def catalog() -> dict:
 
 def _window() -> tuple[int, int]:
     return int(_sample_window["limit"]), int(_sample_window["offset"])
+
+
+@contextmanager
+def _without_samples():
+    previous = _sample_window["limit"]
+    _sample_window["limit"] = 0
+    try:
+        yield
+    finally:
+        _sample_window["limit"] = previous
 
 
 def _sample(*, id: str, title: str, subtitle: str = "", at: float = 0, kind: str = "parent") -> dict:
@@ -140,21 +154,82 @@ def _detail(key: str, steps: list[dict], inverted: bool = False) -> dict:
     }
 
 
+def _page_path_col():
+    return func.coalesce(
+        func.nullif(AnalyticsEventRow.path, ""),
+        AnalyticsEventRow.payload["path"].as_string(),
+        "",
+    )
+
+
+def _path_match(path_col, prefixes: tuple[str, ...]):
+    parts = []
+    for prefix in prefixes:
+        if prefix == "/":
+            parts.append(or_(path_col == "", path_col == "/"))
+            continue
+        parts.append(
+            or_(
+                path_col == prefix,
+                path_col.like(f"{prefix}/%"),
+                path_col.like(f"{prefix}?%"),
+            )
+        )
+    return or_(*parts)
+
+
+def _page_view_session_count(db, window: TimeWindow, prefixes: tuple[str, ...]) -> int:
+    return db.scalar(
+        select(func.count(func.distinct(AnalyticsEventRow.session_id))).where(
+            AnalyticsEventRow.event == "page.view",
+            in_window(AnalyticsEventRow.created_at, window),
+            _path_match(_page_path_col(), prefixes),
+        )
+    ) or 0
+
+
+def _page_view_count(db, window: TimeWindow, prefixes: tuple[str, ...]) -> int:
+    return db.scalar(
+        select(func.count()).select_from(AnalyticsEventRow).where(
+            AnalyticsEventRow.event == "page.view",
+            in_window(AnalyticsEventRow.created_at, window),
+            _path_match(_page_path_col(), prefixes),
+        )
+    ) or 0
+
+
+def _page_view_samples(db, window: TimeWindow, prefixes: tuple[str, ...]) -> list[dict]:
+    limit, offset = _window()
+    if limit <= 0:
+        return []
+    path_col = _page_path_col()
+    rows = db.scalars(
+        select(AnalyticsEventRow)
+        .where(
+            AnalyticsEventRow.event == "page.view",
+            in_window(AnalyticsEventRow.created_at, window),
+            _path_match(path_col, prefixes),
+        )
+        .order_by(AnalyticsEventRow.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    return [
+        _sample(
+            id=row.session_id,
+            title=_path_of(row.payload) or "страница",
+            subtitle="просмотр",
+            at=row.created_at,
+            kind="session",
+        )
+        for row in rows
+    ]
+
+
 def _path_of(payload: object) -> str:
     if not isinstance(payload, dict):
         return ""
     return str(payload.get("path") or "")
-
-
-def _path_matches(path: str, prefixes: tuple[str, ...]) -> bool:
-    for prefix in prefixes:
-        if prefix == "/":
-            if path in {"", "/"}:
-                return True
-            continue
-        if path == prefix or path.startswith(f"{prefix}/") or path.startswith(f"{prefix}?"):
-            return True
-    return False
 
 
 def _parent_samples(db, where, order) -> list[dict]:
@@ -182,7 +257,7 @@ def _payment_samples(db, where) -> list[dict]:
         _sample(
             id=payment.id,
             title=email,
-            subtitle=f"{payment.amount_rub} ₽ · {payment.animals} зверей",
+            subtitle=f"{payment.amount_rub} ₽ · {pack_label(payment.pack_id, payment.animals)}",
             at=payment.created_at,
             kind="payment",
         )
@@ -215,26 +290,26 @@ def _session_samples(db, where) -> list[dict]:
     return samples
 
 
-def _event_session_count(db, start: float, names: tuple[str, ...], source: str = "island") -> int:
+def _event_session_count(db, window: TimeWindow, names: tuple[str, ...], source: str = "island") -> int:
     return db.scalar(
         select(func.count(func.distinct(AnalyticsEventRow.session_id)))
         .join(AnalyticsSessionRow, AnalyticsSessionRow.id == AnalyticsEventRow.session_id)
         .where(
             AnalyticsEventRow.event.in_(names),
-            AnalyticsEventRow.created_at >= start,
+            in_window(AnalyticsEventRow.created_at, window),
             AnalyticsSessionRow.source == source,
         )
     ) or 0
 
 
-def _event_session_samples(db, start: float, names: tuple[str, ...], source: str = "island") -> list[dict]:
+def _event_session_samples(db, window: TimeWindow, names: tuple[str, ...], source: str = "island") -> list[dict]:
     rows = db.execute(
         select(AnalyticsEventRow, ParentRow.email)
         .outerjoin(ParentRow, ParentRow.id == AnalyticsEventRow.parent_id)
         .join(AnalyticsSessionRow, AnalyticsSessionRow.id == AnalyticsEventRow.session_id)
         .where(
             AnalyticsEventRow.event.in_(names),
-            AnalyticsEventRow.created_at >= start,
+            in_window(AnalyticsEventRow.created_at, window),
             AnalyticsSessionRow.source == source,
         )
         .order_by(AnalyticsEventRow.created_at.desc())
@@ -253,34 +328,36 @@ def _event_session_samples(db, start: float, names: tuple[str, ...], source: str
     ]
 
 
-def product(period: int = 0) -> dict:
-    start = period_start(period)
+def product(period: int | TimeWindow = 0) -> dict:
+    window = as_window(period, 0)
     with session() as db:
         registered = db.scalar(
-            select(func.count()).select_from(ParentRow).where(ParentRow.created_at >= start)
+            select(func.count()).select_from(ParentRow).where(in_window(ParentRow.created_at, window))
+        ) or 0
+        island_parents = db.scalar(
+            select(func.count(func.distinct(AnalyticsSessionRow.parent_id))).where(
+                AnalyticsSessionRow.parent_id.is_not(None),
+                AnalyticsSessionRow.source == "island",
+                in_window(AnalyticsSessionRow.started_at, window),
+            )
         ) or 0
         first_creature = db.scalar(
             select(func.count(func.distinct(ChildRow.parent_id)))
             .select_from(CreatureRow)
             .join(ChildRow, ChildRow.id == CreatureRow.child_id)
-            .where(CreatureRow.created_at >= start)
+            .where(in_window(CreatureRow.created_at, window))
         ) or 0
         checkout = db.scalar(
             select(func.count(func.distinct(PaymentRow.parent_id))).where(
-                PaymentRow.created_at >= start
+                PACK_PAYMENT,
+                in_window(PaymentRow.created_at, window),
             )
         ) or 0
         paid = db.scalar(
             select(func.count(func.distinct(PaymentRow.parent_id))).where(
+                PACK_PAYMENT,
                 PaymentRow.status == "confirmed",
-                PaymentRow.created_at >= start,
-            )
-        ) or 0
-        returned = db.scalar(
-            select(func.count(func.distinct(AnalyticsSessionRow.parent_id))).where(
-                AnalyticsSessionRow.parent_id.is_not(None),
-                AnalyticsSessionRow.source == "island",
-                AnalyticsSessionRow.started_at >= start,
+                in_window(PaymentRow.created_at, window),
             )
         ) or 0
         limit, offset = _window()
@@ -288,7 +365,7 @@ def product(period: int = 0) -> dict:
             select(ParentRow, CreatureRow.created_at, CreatureRow.name)
             .join(ChildRow, ChildRow.parent_id == ParentRow.id)
             .join(CreatureRow, CreatureRow.child_id == ChildRow.id)
-            .where(CreatureRow.created_at >= start)
+            .where(in_window(CreatureRow.created_at, window))
             .order_by(CreatureRow.created_at.desc())
             .limit(max(limit + offset, 0) * 4 or 0)
         ).all()
@@ -313,84 +390,63 @@ def product(period: int = 0) -> dict:
                 "Зарегистрировался",
                 registered,
                 None,
-                _parent_samples(db, ParentRow.created_at >= start, ParentRow.created_at.desc()),
-            ),
-            _step("first_creature", "Создал первого зверя", first_creature, registered, creature_samples),
-            _step(
-                "checkout",
-                "Открыл оплату",
-                checkout,
-                first_creature,
-                _payment_samples(db, PaymentRow.created_at >= start),
+                _parent_samples(db, in_window(ParentRow.created_at, window), ParentRow.created_at.desc()),
             ),
             _step(
-                "paid",
-                "Оплатил пакет",
-                paid,
-                checkout,
-                _payment_samples(
-                    db,
-                    (PaymentRow.status == "confirmed") & (PaymentRow.created_at >= start),
-                ),
-            ),
-            _step(
-                "returned",
-                "Вернулся в зоопарк",
-                returned,
-                paid,
+                "island",
+                "Открыл остров",
+                island_parents,
+                registered,
                 _session_samples(
                     db,
                     (AnalyticsSessionRow.source == "island")
                     & AnalyticsSessionRow.parent_id.is_not(None)
-                    & (AnalyticsSessionRow.started_at >= start),
+                    & (in_window(AnalyticsSessionRow.started_at, window)),
+                ),
+            ),
+            _step("first_creature", "Создал первого зверя", first_creature, island_parents, creature_samples),
+            _step(
+                "checkout",
+                "Открыл оплату пакета",
+                checkout,
+                first_creature,
+                _payment_samples(db, PACK_PAYMENT & in_window(PaymentRow.created_at, window)),
+            ),
+            _step(
+                "paid",
+                "Купил пакет зверей",
+                paid,
+                checkout,
+                _payment_samples(
+                    db,
+                    PACK_PAYMENT
+                    & (PaymentRow.status == "confirmed")
+                    & (in_window(PaymentRow.created_at, window)),
                 ),
             ),
         ]
     return _detail("product", steps)
 
 
-def site(period: int = 30) -> dict:
-    start = period_start(period)
+def site(period: int | TimeWindow = 30) -> dict:
+    window = as_window(period, 30)
     with session() as db:
         visits = db.scalar(
             select(func.count()).select_from(AnalyticsSessionRow).where(
                 AnalyticsSessionRow.source == "site",
-                AnalyticsSessionRow.started_at >= start,
+                in_window(AnalyticsSessionRow.started_at, window),
             )
         ) or 0
-        views = db.execute(
-            select(AnalyticsEventRow).where(
-                AnalyticsEventRow.event == "page.view",
-                AnalyticsEventRow.created_at >= start,
-            )
-        ).scalars().all()
-        auth_views = [row for row in views if _path_matches(_path_of(row.payload), ("/auth",))]
-        play_views = [row for row in views if _path_matches(_path_of(row.payload), ("/play", "/island"))]
+        auth_sessions = _page_view_session_count(db, window, ("/auth",))
         registered = db.scalar(
-            select(func.count()).select_from(ParentRow).where(ParentRow.created_at >= start)
+            select(func.count()).select_from(ParentRow).where(in_window(ParentRow.created_at, window))
         ) or 0
         island = db.scalar(
             select(func.count()).select_from(AnalyticsSessionRow).where(
                 AnalyticsSessionRow.source == "island",
-                AnalyticsSessionRow.started_at >= start,
+                in_window(AnalyticsSessionRow.started_at, window),
             )
         ) or 0
-
-        def view_samples(rows: list[AnalyticsEventRow]) -> list[dict]:
-            limit, offset = _window()
-            items = []
-            for row in rows[offset : offset + limit]:
-                items.append(
-                    _sample(
-                        id=row.session_id,
-                        title=_path_of(row.payload) or "страница",
-                        subtitle="просмотр",
-                        at=row.created_at,
-                        kind="session",
-                    )
-                )
-            return items
-
         steps = [
             _step(
                 "visit",
@@ -400,69 +456,65 @@ def site(period: int = 30) -> dict:
                 _session_samples(
                     db,
                     (AnalyticsSessionRow.source == "site")
-                    & (AnalyticsSessionRow.started_at >= start),
+                    & (in_window(AnalyticsSessionRow.started_at, window)),
                 ),
             ),
-            _step("auth", "Открыл вход", len(auth_views), visits, view_samples(auth_views)),
+            _step(
+                "auth",
+                "Открыл вход",
+                auth_sessions,
+                visits,
+                _page_view_samples(db, window, ("/auth",)),
+            ),
             _step(
                 "registered",
                 "Создал аккаунт",
                 registered,
-                len(auth_views),
-                _parent_samples(db, ParentRow.created_at >= start, ParentRow.created_at.desc()),
+                auth_sessions,
+                _parent_samples(db, in_window(ParentRow.created_at, window), ParentRow.created_at.desc()),
             ),
-            _step("play", "Открыл игру", len(play_views), registered, view_samples(play_views)),
             _step(
-                "island",
-                "Сессия острова",
+                "play",
+                "Открыл остров",
                 island,
-                len(play_views) or registered,
+                registered,
                 _session_samples(
                     db,
                     (AnalyticsSessionRow.source == "island")
-                    & (AnalyticsSessionRow.started_at >= start),
+                    & (in_window(AnalyticsSessionRow.started_at, window)),
                 ),
             ),
         ]
     return _detail("site", steps)
 
 
-def pricing(period: int = 30) -> dict:
-    start = period_start(period)
+def pricing(period: int | TimeWindow = 30) -> dict:
+    window = as_window(period, 30)
     with session() as db:
-        views = db.execute(
-            select(AnalyticsEventRow).where(
-                AnalyticsEventRow.event == "page.view",
-                AnalyticsEventRow.created_at >= start,
-            )
-        ).scalars().all()
-        pricing_views = [row for row in views if _path_matches(_path_of(row.payload), ("/pricing",))]
+        pricing_views = _page_view_count(db, window, ("/pricing",))
         created = db.scalar(
-            select(func.count()).select_from(PaymentRow).where(PaymentRow.created_at >= start)
+            select(func.count()).select_from(PaymentRow).where(in_window(PaymentRow.created_at, window))
         ) or 0
         confirmed = db.scalar(
             select(func.count()).select_from(PaymentRow).where(
                 PaymentRow.status == "confirmed",
-                PaymentRow.created_at >= start,
+                in_window(PaymentRow.created_at, window),
             )
         ) or 0
-        pricing_samples = [
-            _sample(
-                id=row.session_id,
-                title=_path_of(row.payload) or "/pricing",
-                at=row.created_at,
-                kind="session",
-            )
-            for row in pricing_views[:SAMPLE_LIMIT]
-        ]
         steps = [
-            _step("saw_pricing", "Открыл витрину", len(pricing_views), None, pricing_samples),
+            _step(
+                "saw_pricing",
+                "Открыл витрину",
+                pricing_views,
+                None,
+                _page_view_samples(db, window, ("/pricing",)),
+            ),
             _step(
                 "started_pay",
                 "Начал оплату",
                 created,
-                len(pricing_views),
-                _payment_samples(db, PaymentRow.created_at >= start),
+                pricing_views,
+                _payment_samples(db, in_window(PaymentRow.created_at, window)),
             ),
             _step(
                 "paid",
@@ -471,40 +523,42 @@ def pricing(period: int = 30) -> dict:
                 created,
                 _payment_samples(
                     db,
-                    (PaymentRow.status == "confirmed") & (PaymentRow.created_at >= start),
+                    (PaymentRow.status == "confirmed") & (in_window(PaymentRow.created_at, window)),
                 ),
             ),
         ]
     return _detail("pricing", steps)
 
 
-def freemium(period: int = 30) -> dict:
-    start = period_start(period)
+def freemium(period: int | TimeWindow = 30) -> dict:
+    window = as_window(period, 30)
     with session() as db:
         registered = db.scalar(
-            select(func.count()).select_from(ParentRow).where(ParentRow.created_at >= start)
+            select(func.count()).select_from(ParentRow).where(in_window(ParentRow.created_at, window))
         ) or 0
         free_creature = db.scalar(
             select(func.count()).select_from(ParentRow).where(
                 ParentRow.generation_used >= 1,
-                ParentRow.created_at >= start,
+                in_window(ParentRow.created_at, window),
             )
         ) or 0
         checkout = db.scalar(
             select(func.count(func.distinct(PaymentRow.parent_id))).where(
-                PaymentRow.created_at >= start
+                PACK_PAYMENT,
+                in_window(PaymentRow.created_at, window),
             )
         ) or 0
         paid = db.scalar(
             select(func.count(func.distinct(PaymentRow.parent_id))).where(
+                PACK_PAYMENT,
                 PaymentRow.status == "confirmed",
-                PaymentRow.created_at >= start,
+                in_window(PaymentRow.created_at, window),
             )
         ) or 0
         paid_creature = db.scalar(
             select(func.count()).select_from(ParentRow).where(
                 ParentRow.generation_used >= 2,
-                ParentRow.created_at >= start,
+                in_window(ParentRow.created_at, window),
             )
         ) or 0
         steps = [
@@ -513,7 +567,7 @@ def freemium(period: int = 30) -> dict:
                 "Зарегистрировался",
                 registered,
                 None,
-                _parent_samples(db, ParentRow.created_at >= start, ParentRow.created_at.desc()),
+                _parent_samples(db, in_window(ParentRow.created_at, window), ParentRow.created_at.desc()),
             ),
             _step(
                 "free_creature",
@@ -522,25 +576,27 @@ def freemium(period: int = 30) -> dict:
                 registered,
                 _parent_samples(
                     db,
-                    (ParentRow.generation_used >= 1) & (ParentRow.created_at >= start),
+                    (ParentRow.generation_used >= 1) & (in_window(ParentRow.created_at, window)),
                     ParentRow.created_at.desc(),
                 ),
             ),
             _step(
                 "checkout",
-                "Дошёл до оплаты",
+                "Дошёл до оплаты пакета",
                 checkout,
                 free_creature,
-                _payment_samples(db, PaymentRow.created_at >= start),
+                _payment_samples(db, PACK_PAYMENT & in_window(PaymentRow.created_at, window)),
             ),
             _step(
                 "paid",
-                "Купил пакет",
+                "Купил пакет зверей",
                 paid,
                 checkout,
                 _payment_samples(
                     db,
-                    (PaymentRow.status == "confirmed") & (PaymentRow.created_at >= start),
+                    PACK_PAYMENT
+                    & (PaymentRow.status == "confirmed")
+                    & (in_window(PaymentRow.created_at, window)),
                 ),
             ),
             _step(
@@ -550,7 +606,7 @@ def freemium(period: int = 30) -> dict:
                 paid,
                 _parent_samples(
                     db,
-                    (ParentRow.generation_used >= 2) & (ParentRow.created_at >= start),
+                    (ParentRow.generation_used >= 2) & (in_window(ParentRow.created_at, window)),
                     ParentRow.created_at.desc(),
                 ),
             ),
@@ -558,18 +614,20 @@ def freemium(period: int = 30) -> dict:
     return _detail("freemium", steps)
 
 
-def island(period: int = 30) -> dict:
-    start = period_start(period)
+def island(period: int | TimeWindow = 30) -> dict:
+    window = as_window(period, 30)
     with session() as db:
         sessions = db.scalar(
             select(func.count()).select_from(AnalyticsSessionRow).where(
                 AnalyticsSessionRow.source == "island",
-                AnalyticsSessionRow.started_at >= start,
+                in_window(AnalyticsSessionRow.started_at, window),
             )
         ) or 0
-        viewed = _event_session_count(db, start, ("creature.view",))
-        created = _event_session_count(db, start, ("creature.add",))
-        cared = _event_session_count(db, start, ("creature.feed", "creature.walk"))
+        engaged = _event_session_count(db, window, ("creature.view", "creature.add", "world.open"))
+        created = _event_session_count(db, window, ("creature.add",))
+        cared = _event_session_count(
+            db, window, ("creature.feed", "creature.walk", "creature.wash")
+        )
         steps = [
             _step(
                 "session",
@@ -579,50 +637,52 @@ def island(period: int = 30) -> dict:
                 _session_samples(
                     db,
                     (AnalyticsSessionRow.source == "island")
-                    & (AnalyticsSessionRow.started_at >= start),
+                    & (in_window(AnalyticsSessionRow.started_at, window)),
                 ),
             ),
             _step(
-                "viewed",
-                "Посмотрел зверя",
-                viewed,
+                "engaged",
+                "Открыл мир или зверя",
+                engaged,
                 sessions,
-                _event_session_samples(db, start, ("creature.view",)),
+                _event_session_samples(db, window, ("creature.view", "creature.add", "world.open")),
             ),
             _step(
                 "created",
                 "Нарисовал зверя",
                 created,
-                viewed,
-                _event_session_samples(db, start, ("creature.add",)),
+                engaged,
+                _event_session_samples(db, window, ("creature.add",)),
             ),
             _step(
                 "cared",
-                "Покормил или погулял",
+                "Покормил, помыл или погулял",
                 cared,
                 created,
-                _event_session_samples(db, start, ("creature.feed", "creature.walk")),
+                _event_session_samples(
+                    db, window, ("creature.feed", "creature.walk", "creature.wash")
+                ),
             ),
         ]
     return _detail("island", steps)
 
 
-def commerce(period: int = 30) -> dict:
-    start = period_start(period)
+def commerce(period: int | TimeWindow = 30) -> dict:
+    window = as_window(period, 30)
     with session() as db:
         created = db.scalar(
-            select(func.count()).select_from(PaymentRow).where(PaymentRow.created_at >= start)
+            select(func.count()).select_from(PaymentRow).where(in_window(PaymentRow.created_at, window))
         ) or 0
         pending = db.scalar(
             select(func.count()).select_from(PaymentRow).where(
                 PaymentRow.status.in_(("pending", "confirmed")),
-                PaymentRow.created_at >= start,
+                in_window(PaymentRow.created_at, window),
             )
         ) or 0
         confirmed = db.scalar(
             select(func.count()).select_from(PaymentRow).where(
                 PaymentRow.status == "confirmed",
-                PaymentRow.created_at >= start,
+                in_window(PaymentRow.created_at, window),
             )
         ) or 0
         steps = [
@@ -631,7 +691,7 @@ def commerce(period: int = 30) -> dict:
                 "Создал платёж",
                 created,
                 None,
-                _payment_samples(db, PaymentRow.created_at >= start),
+                _payment_samples(db, in_window(PaymentRow.created_at, window)),
             ),
             _step(
                 "pending",
@@ -641,7 +701,7 @@ def commerce(period: int = 30) -> dict:
                 _payment_samples(
                     db,
                     PaymentRow.status.in_(("pending", "confirmed"))
-                    & (PaymentRow.created_at >= start),
+                    & (in_window(PaymentRow.created_at, window)),
                 ),
             ),
             _step(
@@ -651,67 +711,75 @@ def commerce(period: int = 30) -> dict:
                 pending,
                 _payment_samples(
                     db,
-                    (PaymentRow.status == "confirmed") & (PaymentRow.created_at >= start),
+                    (PaymentRow.status == "confirmed") & (in_window(PaymentRow.created_at, window)),
                 ),
             ),
         ]
     return _detail("commerce", steps)
 
 
-def repeat(period: int = 30) -> dict:
-    start = period_start(period)
+def repeat(period: int | TimeWindow = 30) -> dict:
+    window = as_window(period, 30)
     with session() as db:
         first_paid = db.scalar(
             select(func.count(func.distinct(PaymentRow.parent_id))).where(
+                PACK_PAYMENT,
                 PaymentRow.status == "confirmed",
-                PaymentRow.created_at >= start,
+                in_window(PaymentRow.created_at, window),
             )
         ) or 0
         second_try = db.execute(
             select(PaymentRow.parent_id)
-            .where(PaymentRow.created_at >= start)
+            .where(PACK_PAYMENT, in_window(PaymentRow.created_at, window))
             .group_by(PaymentRow.parent_id)
             .having(func.count() >= 2)
         ).all()
         second_paid = db.execute(
             select(PaymentRow.parent_id)
-            .where(PaymentRow.status == "confirmed", PaymentRow.created_at >= start)
+            .where(
+                PACK_PAYMENT,
+                PaymentRow.status == "confirmed",
+                in_window(PaymentRow.created_at, window),
+            )
             .group_by(PaymentRow.parent_id)
             .having(func.count() >= 2)
         ).all()
         second_ids = [row[0] for row in second_try]
         paid_ids = [row[0] for row in second_paid]
+        sample_limit, _offset = _window()
         second_parents = []
-        if second_ids:
+        if second_ids and sample_limit:
             second_parents = db.scalars(
-                select(ParentRow).where(ParentRow.id.in_(second_ids)).limit(SAMPLE_LIMIT)
+                select(ParentRow).where(ParentRow.id.in_(second_ids)).limit(sample_limit)
             ).all()
         paid_parents = []
-        if paid_ids:
+        if paid_ids and sample_limit:
             paid_parents = db.scalars(
-                select(ParentRow).where(ParentRow.id.in_(paid_ids)).limit(SAMPLE_LIMIT)
+                select(ParentRow).where(ParentRow.id.in_(paid_ids)).limit(sample_limit)
             ).all()
         steps = [
             _step(
                 "first_paid",
-                "Купил первый пакет",
+                "Купил первый пакет зверей",
                 first_paid,
                 None,
                 _payment_samples(
                     db,
-                    (PaymentRow.status == "confirmed") & (PaymentRow.created_at >= start),
+                    PACK_PAYMENT
+                    & (PaymentRow.status == "confirmed")
+                    & (in_window(PaymentRow.created_at, window)),
                 ),
             ),
             _step(
                 "second_try",
-                "Начал вторую оплату",
+                "Начал вторую оплату пакета",
                 len(second_try),
                 first_paid,
                 [_sample(id=row.id, title=row.email, at=row.created_at) for row in second_parents],
             ),
             _step(
                 "second_paid",
-                "Купил второй пакет",
+                "Купил второй пакет зверей",
                 len(second_paid),
                 len(second_try),
                 [_sample(id=row.id, title=row.email, at=row.created_at) for row in paid_parents],
@@ -768,7 +836,7 @@ def death() -> dict:
     return _detail("death", steps, inverted=True)
 
 
-def build(key: str, period: int = 30) -> dict:
+def build(key: str, period: int | TimeWindow = 30) -> dict:
     builders = {
         "product": product,
         "site": site,
@@ -788,8 +856,9 @@ def build(key: str, period: int = 30) -> dict:
     return builders[key](period)
 
 
-def summary(period: int = 30) -> dict:
-    details = [build(item["key"], period) for item in FUNNELS]
+def summary(period: int | TimeWindow = 30) -> dict:
+    with _without_samples():
+        details = [build(item["key"], period) for item in FUNNELS]
     by_key = {item["key"]: item for item in details}
     healthy = attention = critical = 0
     for item in details:

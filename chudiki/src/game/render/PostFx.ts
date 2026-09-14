@@ -5,6 +5,7 @@ import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { tuning, type TuningValues } from './tuning';
 import { SunShaftsPass } from './SunShafts';
 import { applyStylizedTuning } from './stylized';
@@ -83,7 +84,7 @@ const GradingShader = {
 export type PostFxQuality = 'high' | 'low';
 
 /** Dev-only A/B switch: ?msaa=0 turns target multisampling off. */
-function msaaSamples(): number {
+function msaaSamples(settings: QualitySettings): number {
   try {
     if (import.meta.env?.DEV) {
       const value = new URLSearchParams(window.location.search).get('msaa');
@@ -92,7 +93,7 @@ function msaaSamples(): number {
   } catch {
     /* SSR/tests */
   }
-  return 4;
+  return settings.composerSamples;
 }
 
 export class PostFx {
@@ -100,8 +101,11 @@ export class PostFx {
   private gtao?: GTAOPass;
   private bloom?: UnrealBloomPass;
   private shafts?: SunShaftsPass;
+  private fxaa?: ShaderPass;
   private grading: ShaderPass;
   private unsubscribe: () => void = () => {};
+  private pixelRatio: number;
+  private disposed = false;
 
   constructor(
     private renderer: THREE.WebGLRenderer,
@@ -112,19 +116,22 @@ export class PostFx {
     const size = renderer.getSize(new THREE.Vector2());
 
     // The composer draws into an offscreen target, so the canvas's own MSAA
-    // never applies — the phone garden shipped with staircase edges. 4x MSAA
-    // on the target is resolved by the GPU (near-free on tile GPUs). Only the
-    // light tier gets it: the GTAO/bloom stack of the high tier corrupts the
-    // frame when its source target is multisampled, and that tier already
-    // smooths edges with its own post passes.
+    // never applies. The low tier avoids HDR/MSAA target memory; edge smoothing
+    // happens in one FXAA pass below. This does not assume a particular cause
+    // for device-specific missing textures or black materials.
     const pixelRatio = renderer.getPixelRatio();
+    this.pixelRatio = pixelRatio;
     const target = new THREE.WebGLRenderTarget(size.x * pixelRatio, size.y * pixelRatio, {
-      type: THREE.HalfFloatType,
-      samples: settings.tier === 'low' ? msaaSamples() : 0,
+      type: settings.composerHalfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType,
+      samples: msaaSamples(settings),
     });
     target.texture.name = 'EffectComposer.rt1';
 
     this.composer = new EffectComposer(renderer, target);
+    // r169 takes a custom target's physical width as its logical width. Reset
+    // that bookkeeping before adding passes so DPR is not applied twice to
+    // their initial allocations on retina displays.
+    this.composer.setSize(size.x, size.y);
     this.composer.addPass(new RenderPass(scene, camera));
 
     if (settings.gtao) {
@@ -162,6 +169,13 @@ export class PostFx {
     this.composer.addPass(this.grading);
 
     this.composer.addPass(new OutputPass());
+    if (settings.tier === 'low') {
+      // FXAA's edge thresholds expect display-referred sRGB, after OutputPass
+      // (the order used by Three r169's official FXAA example).
+      this.fxaa = new ShaderPass(FXAAShader);
+      this.composer.addPass(this.fxaa);
+    }
+    this.setSize(size.x, size.y);
     this.apply(tuning.get());
     this.unsubscribe = tuning.subscribe((values) => this.apply(values));
   }
@@ -213,10 +227,23 @@ export class PostFx {
   }
 
   setSize(width: number, height: number) {
+    const pixelRatio = this.renderer.getPixelRatio();
+    if (pixelRatio !== this.pixelRatio) {
+      this.pixelRatio = pixelRatio;
+      this.composer.setPixelRatio(pixelRatio);
+    }
     this.composer.setSize(width, height);
     this.gtao?.setSize(Math.ceil(width / 2), Math.ceil(height / 2));
     this.bloom?.setSize(width, height);
     this.shafts?.setSize(width, height);
+    if (this.fxaa) {
+      // Use physical target pixels, not CSS dimensions. This also follows DPR
+      // changes made by the runtime when adapting to sustained frame cost.
+      (this.fxaa.uniforms.resolution.value as THREE.Vector2).set(
+        1 / Math.max(1, Math.floor(this.composer.readBuffer.width)),
+        1 / Math.max(1, Math.floor(this.composer.readBuffer.height)),
+      );
+    }
   }
 
   render(delta: number) {
@@ -224,8 +251,18 @@ export class PostFx {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
     this.unsubscribe();
+    // EffectComposer.dispose only owns the two ping-pong targets + copy pass.
+    // Every pass added above retains its own materials and (for AO/bloom)
+    // render targets until explicitly disposed.
+    for (const pass of this.composer.passes) pass.dispose();
+    // These materials are omitted by the pinned Three r169 pass disposers.
+    this.gtao?.gtaoMaterial.dispose();
+    this.gtao?.blendMaterial.dispose();
+    this.bloom?.materialHighPassFilter.dispose();
+    this.composer.passes.length = 0;
     this.composer.dispose();
-    void this.renderer;
   }
 }

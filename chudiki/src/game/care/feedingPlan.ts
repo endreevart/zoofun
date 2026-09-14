@@ -20,6 +20,15 @@ export type FeederSpot = {
   rotationY: number;
 };
 
+/** DIY starts empty of baskets; still gather somewhere so feed is not a dead button. */
+export function feedSpots(
+  placed: readonly FeederSpot[],
+  meadow: { x: number; z: number },
+): FeederSpot[] {
+  if (placed.length > 0) return [...placed];
+  return [{ id: 'meadow', x: meadow.x, z: meadow.z, rotationY: 0 }];
+}
+
 export type CreaturePose = {
   id: string;
   x: number;

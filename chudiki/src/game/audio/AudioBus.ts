@@ -1,10 +1,20 @@
 import { assetUrl } from '../../assetUrl';
+import { UI_CUES, type CueId } from './cues';
+import { gardenElementVolume, nextDuckCount } from './gardenDuck';
+import { clampMix, DEFAULT_MUSIC, DEFAULT_VOICE, readMix, type IslandMix } from './mix';
 import type { VoiceParams } from './voice';
 import { voiceDuration } from './voice';
 
 const GARDEN_MUSIC = assetUrl('audio/garden.mp3');
-/** Quiet bed under voices — children hold tablets close. */
-const GARDEN_VOLUME = 0.11;
+const CUE_PEAK = 0.78;
+
+let shared: AudioBus | null = null;
+
+/** One bus for the picker and every garden, so cues work before Game exists. */
+export function getIslandAudio(): AudioBus {
+  if (!shared) shared = new AudioBus();
+  return shared;
+}
 
 /**
  * One shared WebAudio graph. Synthesises creature voices, plays back recorded
@@ -16,6 +26,27 @@ export class AudioBus {
   private decoded = new Map<string, AudioBuffer>();
   private garden: HTMLAudioElement | null = null;
   private gardenWanted = false;
+  private gardenDuck = 0;
+  private cueDuck = false;
+  private cueSource: AudioBufferSourceNode | null = null;
+  private music = DEFAULT_MUSIC;
+  private voice = DEFAULT_VOICE;
+
+  constructor() {
+    const mix = readMix();
+    this.music = mix.music;
+    this.voice = mix.voice;
+  }
+
+  getMix(): IslandMix {
+    return { music: this.music, voice: this.voice };
+  }
+
+  setMix(mix: Partial<IslandMix>) {
+    if (mix.music !== undefined) this.music = clampMix(mix.music, this.music);
+    if (mix.voice !== undefined) this.voice = clampMix(mix.voice, this.voice);
+    this.applyGardenDuck();
+  }
 
   /** Browsers only allow audio after a gesture, so this is called on first tap. */
   async unlock(): Promise<void> {
@@ -56,9 +87,11 @@ export class AudioBus {
     const ctx = this.ensureContext();
     if (ctx.state === 'suspended') void ctx.resume();
 
+    if (this.voice <= 0) return voiceDuration(voice);
+
     const start = ctx.currentTime + 0.02;
     const out = ctx.createGain();
-    out.gain.value = options.gain ?? 1;
+    out.gain.value = (options.gain ?? 1) * this.voice;
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -164,6 +197,7 @@ export class AudioBus {
     bytes: ArrayBuffer,
     options: { pan?: number; gain?: number } = {},
   ): Promise<number> {
+    if (this.voice <= 0) return 0;
     const ctx = this.ensureContext();
     if (ctx.state === 'suspended') await ctx.resume();
 
@@ -177,7 +211,7 @@ export class AudioBus {
     source.buffer = buffer;
 
     const gain = ctx.createGain();
-    gain.gain.value = options.gain ?? 1;
+    gain.gain.value = (options.gain ?? 1) * this.voice;
     const panner = ctx.createStereoPanner();
     panner.pan.value = Math.max(-1, Math.min(1, options.pan ?? 0));
 
@@ -210,17 +244,51 @@ export class AudioBus {
       this.garden?.pause();
       return;
     }
+    if (this.gardenDuck > 0) return;
     if (this.gardenWanted) this.startGarden();
+  }
+
+  /**
+   * Mute and pause the garden bed (microphone capture on iPhone otherwise
+   * restarts the track at full volume). Nested: each true needs a false.
+   */
+  duckGarden(on: boolean) {
+    this.gardenDuck = nextDuckCount(this.gardenDuck, on);
+    this.applyGardenDuck();
+  }
+
+  private applyGardenDuck() {
+    const el = this.garden;
+    if (!el) return;
+    const ducked = this.gardenDuck > 0;
+    el.muted = ducked;
+    el.volume = gardenElementVolume(this.gardenDuck, this.music, this.cueDuck);
+    if (ducked) {
+      el.pause();
+      return;
+    }
+    if (this.gardenWanted && document.visibilityState !== 'hidden') {
+      const play = el.play();
+      if (play) void play.catch(() => {});
+    }
   }
 
   dispose() {
     this.gardenWanted = false;
+    this.gardenDuck = 0;
+    this.cueDuck = false;
     if (this.garden) {
       this.garden.pause();
       this.garden.removeAttribute('src');
       this.garden.load();
       this.garden = null;
     }
+    try {
+      this.cueSource?.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.cueSource = null;
     void this.context?.close();
     this.context = null;
     this.master = null;
@@ -228,20 +296,83 @@ export class AudioBus {
   }
 
   private startGarden() {
-    if (!this.gardenWanted || document.visibilityState === 'hidden') return;
+    if (!this.gardenWanted || this.gardenDuck > 0 || document.visibilityState === 'hidden') {
+      return;
+    }
     if (!this.garden) {
       const el = new Audio(GARDEN_MUSIC);
       el.loop = true;
       el.preload = 'auto';
-      el.volume = GARDEN_VOLUME;
+      el.volume = gardenElementVolume(0, this.music, this.cueDuck);
+      el.addEventListener('play', () => {
+        const ducked = this.gardenDuck > 0;
+        el.muted = ducked;
+        el.volume = gardenElementVolume(this.gardenDuck, this.music, this.cueDuck);
+        if (ducked) el.pause();
+      });
       this.garden = el;
     }
+    this.garden.muted = this.gardenDuck > 0;
+    this.garden.volume = gardenElementVolume(this.gardenDuck, this.music, this.cueDuck);
     const play = this.garden.play();
     if (play) void play.catch(() => {});
   }
 
+  /**
+   * Pre-recorded narrator clip from `/audio/cues`. Missing files stay silent.
+   * Returns false so the caller can fall back to a synth tap.
+   */
+  async playCue(id: CueId): Promise<boolean> {
+    const spec = UI_CUES[id];
+    if (!spec) return false;
+    if (this.voice <= 0) return false;
+    const ctx = this.ensureContext();
+    if (ctx.state === 'suspended') await ctx.resume();
+    if (!this.master) return false;
+
+    const cacheKey = `cue:${id}`;
+    try {
+      let buffer = this.decoded.get(cacheKey);
+      if (!buffer) {
+        const response = await fetch(assetUrl(`audio/cues/${spec.file}`));
+        if (!response.ok) return false;
+        buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+        this.decoded.set(cacheKey, buffer);
+      }
+
+      const previous = this.cueSource;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      const gain = ctx.createGain();
+      gain.gain.value = CUE_PEAK * this.voice;
+      source.connect(gain);
+      gain.connect(this.master);
+      source.onended = () => {
+        if (this.cueSource !== source) return;
+        this.cueSource = null;
+        this.cueDuck = false;
+        this.applyGardenDuck();
+      };
+      this.cueSource = source;
+      this.cueDuck = true;
+      this.applyGardenDuck();
+      try {
+        previous?.stop();
+      } catch {
+        /* already stopped */
+      }
+      source.start();
+      return true;
+    } catch {
+      this.cueDuck = false;
+      this.applyGardenDuck();
+      return false;
+    }
+  }
+
   /** Short UI confirmations, deliberately different from creature voices. */
   playUiSound(kind: 'tap' | 'confirm' | 'appear' | 'error') {
+    if (this.voice <= 0) return;
     const ctx = this.ensureContext();
     if (ctx.state === 'suspended') void ctx.resume();
 
@@ -260,7 +391,7 @@ export class AudioBus {
       osc.frequency.value = freq;
       const at = now + i * 0.09;
       gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.exponentialRampToValueAtTime(0.24, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.24 * this.voice, at + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
       osc.connect(gain);
       gain.connect(this.master!);

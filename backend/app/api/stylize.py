@@ -72,21 +72,21 @@ def _remaining(parent_id: str | None) -> int | None:
     return parent.remaining if parent else None
 
 
-def _to_out(job) -> JobOut:
-    has_image = bool(job.image_base64) and job.status != "failed"
+def _to_out(job, *, reveal_still: bool = True) -> JobOut:
+    has_image = bool(job.image_base64) and job.status != "failed" and reveal_still
     return JobOut(
         job_id=job.id,
         status=job.status,
         error=job.error,
         image_png_base64=job.image_base64 if has_image else None,
         media_type=job.media_type if has_image else None,
-        name=job.name,
+        name=job.name if reveal_still else None,
         kind_id=job.kind_id,
         model_url=job.model_url if job.model_url else None,
         mesh_status=job.mesh_status,
         postcard_url=job.postcard_url if job.postcard_url else None,
         postcard_status=job.postcard_status,
-        remaining=_remaining(job.parent_id),
+        remaining=_remaining(job.parent_id) if reveal_still else None,
     )
 
 
@@ -143,6 +143,7 @@ async def start_stylize(
             job_id=idempotency_key,
             parent_id=parent_id,
             reserved=reserved,
+            source_kind=verdict.source,
         )
     except ValueError as exc:
         if reserved and parent_id:
@@ -156,11 +157,17 @@ async def start_stylize(
 
 
 @router.get("/stylize/{job_id}", response_model=JobOut)
-async def read_stylize(job_id: str) -> JobOut:
+async def read_stylize(
+    job_id: str,
+    pair: Annotated[tuple[ParentAccount, ChildProfile] | None, Depends(optional_session)],
+) -> JobOut:
     job = await get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job_not_found")
-    return _to_out(job)
+    reveal = True
+    if get_settings().environment != "development" and job.parent_id:
+        reveal = pair is not None and pair[0].id == job.parent_id
+    return _to_out(job, reveal_still=reveal)
 
 
 @router.get("/stylize/{job_id}/model.glb")

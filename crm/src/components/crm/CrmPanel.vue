@@ -1,8 +1,11 @@
 <template>
   <section class="crm-panel crm-animate-in" :class="[className, { 'is-flat': flat }]" :style="delayStyle">
-    <header v-if="title || subtitle || $slots.header" class="crm-panel__header">
+    <header v-if="title || subtitle || help || $slots.header" class="crm-panel__header">
       <div class="crm-panel__titles">
-        <h3 v-if="title" class="crm-panel__title">{{ title }}</h3>
+        <div v-if="title || help" class="crm-panel__title-row">
+          <h3 v-if="title" class="crm-panel__title">{{ title }}</h3>
+          <CrmHelp v-if="help" :text="help" />
+        </div>
         <p v-if="subtitle" class="crm-panel__subtitle">{{ subtitle }}</p>
       </div>
       <div v-if="$slots.header" class="crm-panel__header-actions">
@@ -14,19 +17,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed } from "vue";
+import CrmHelp from "@/components/crm/CrmHelp.vue";
 
 const props = defineProps<{
-  className?: string
-  flat?: boolean
-  delay?: number
-  title?: string
-  subtitle?: string
-}>()
+  className?: string;
+  flat?: boolean;
+  delay?: number;
+  title?: string;
+  subtitle?: string;
+  help?: string;
+}>();
 
 const delayStyle = computed(() =>
   props.delay != null ? { animationDelay: `${props.delay}ms` } : undefined,
-)
+);
 </script>
 
 <style scoped>
@@ -41,6 +46,12 @@ const delayStyle = computed(() =>
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
+}
+.crm-panel__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .crm-panel__title {
   margin: 0;

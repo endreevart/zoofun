@@ -11,6 +11,21 @@
  */
 
 export type TuningValues = {
+  // --- meadow sky (studio-only look; garden ignores these)
+  cloudScale: number;
+  cloudBlur: number;
+  cloudSoftness: number;
+  cloudOpacity: number;
+  cloudCoverage: number;
+  cloudSquash: number;
+  cloudWhite: number;
+  skyHorizonR: number;
+  skyHorizonG: number;
+  skyHorizonB: number;
+  skyZenithR: number;
+  skyZenithG: number;
+  skyZenithB: number;
+
   // --- key light
   sunIntensity: number;
   /** Compass angle of the sun, degrees. 0 is behind the scene, 90 is camera-right. */
@@ -71,7 +86,37 @@ export type TuningValues = {
   creatureScale: number;
 };
 
+export const CLOUD_KEYS = [
+  'cloudScale',
+  'cloudBlur',
+  'cloudSoftness',
+  'cloudOpacity',
+  'cloudCoverage',
+  'cloudSquash',
+  'cloudWhite',
+  'skyHorizonR',
+  'skyHorizonG',
+  'skyHorizonB',
+  'skyZenithR',
+  'skyZenithG',
+  'skyZenithB',
+] as const satisfies readonly (keyof TuningValues)[];
+
 export const TUNING_DEFAULTS: TuningValues = {
+  cloudScale: 3.4,
+  cloudBlur: 0.056,
+  cloudSoftness: 0.66,
+  cloudOpacity: 0.76,
+  cloudCoverage: 0.38,
+  cloudSquash: 1.42,
+  cloudWhite: 3,
+  skyHorizonR: 0.34,
+  skyHorizonG: 1.48,
+  skyHorizonB: 2.72,
+  skyZenithR: 0.1,
+  skyZenithG: 0.98,
+  skyZenithB: 2.85,
+
   sunIntensity: 4.9,
   sunAzimuth: 10,
   sunElevation: 37,
@@ -106,7 +151,7 @@ export const TUNING_DEFAULTS: TuningValues = {
   warmBlue: 1.025,
   vignette: 0.22,
 
-  creatureScale: 0.42,
+  creatureScale: 0.7,
 };
 
 export type TuningControl = {
@@ -123,6 +168,29 @@ export type TuningGroup = {
 };
 
 export const TUNING_GROUPS: TuningGroup[] = [
+  {
+    title: 'Облака',
+    controls: [
+      { key: 'cloudScale', label: 'Размер (меньше = крупнее)', min: 1.2, max: 6, step: 0.05 },
+      { key: 'cloudBlur', label: 'Размытие', min: 0, max: 0.12, step: 0.002 },
+      { key: 'cloudSoftness', label: 'Мягкость края', min: 0, max: 1, step: 0.01 },
+      { key: 'cloudOpacity', label: 'Плотность', min: 0, max: 1, step: 0.01 },
+      { key: 'cloudCoverage', label: 'Покрытие неба', min: 0, max: 1, step: 0.01 },
+      { key: 'cloudSquash', label: 'Сплюснутость', min: 1, max: 2.2, step: 0.02 },
+      { key: 'cloudWhite', label: 'Яркость облаков', min: 0.4, max: 3, step: 0.02 },
+    ],
+  },
+  {
+    title: 'Небо',
+    controls: [
+      { key: 'skyHorizonR', label: 'Горизонт R', min: 0, max: 3.2, step: 0.02 },
+      { key: 'skyHorizonG', label: 'Горизонт G', min: 0, max: 3.2, step: 0.02 },
+      { key: 'skyHorizonB', label: 'Горизонт B', min: 0, max: 3.5, step: 0.02 },
+      { key: 'skyZenithR', label: 'Зенит R', min: 0, max: 3.2, step: 0.02 },
+      { key: 'skyZenithG', label: 'Зенит G', min: 0, max: 3.2, step: 0.02 },
+      { key: 'skyZenithB', label: 'Зенит B', min: 0, max: 3.5, step: 0.02 },
+    ],
+  },
   {
     title: 'Солнце',
     controls: [
@@ -170,7 +238,7 @@ export const TUNING_GROUPS: TuningGroup[] = [
   },
   {
     title: 'Мир',
-    controls: [{ key: 'creatureScale', label: 'Размер чудиков', min: 0.15, max: 1.2, step: 0.01 }],
+    controls: [{ key: 'creatureScale', label: 'Размер зуфунят', min: 0.15, max: 1.2, step: 0.01 }],
   },
   {
     title: 'Цветокоррекция',
@@ -188,7 +256,7 @@ export const TUNING_GROUPS: TuningGroup[] = [
 
 // Bumped when the parameter set changes, so a browser holding the previous
 // session's values does not shadow newly frozen defaults.
-const STORAGE_KEY = 'chudiki.tuning.v5';
+const STORAGE_KEY = 'chudiki.tuning.v7';
 
 export class Tuning {
   private values: TuningValues = { ...TUNING_DEFAULTS };
@@ -218,6 +286,15 @@ export class Tuning {
   subscribe(listener: (values: TuningValues) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Cloud + meadow-sky knobs only, for pasting back into chat. */
+  cloudSnippet(): string {
+    const lines = CLOUD_KEYS.map((key) => {
+      const value = this.values[key];
+      return `  ${key}: ${Number(value.toFixed(3))},`;
+    });
+    return `{\n${lines.join('\n')}\n}`;
   }
 
   /** The current values as a code block, ready to paste over TUNING_DEFAULTS. */

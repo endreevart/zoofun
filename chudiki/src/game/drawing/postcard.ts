@@ -69,8 +69,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/** Album tiles use a smaller meadow so 20 photos do not hitch the iPad. */
+export const ALBUM_POSTCARD_SIZE = 640;
+
 /** Compose the postcard; falls back to the raw still if anything fails. */
-export async function composePostcard(src: string): Promise<string> {
+export async function composePostcard(src: string, size = POSTCARD_SIZE): Promise<string> {
   try {
     // Imported lazily so the pure layout math stays runnable in node tests.
     const { cutoutPortrait } = await import('./cutout');
@@ -81,12 +84,12 @@ export async function composePostcard(src: string): Promise<string> {
       cutoutPortrait(src).then(loadImage),
     ]);
     const canvas = document.createElement('canvas');
-    canvas.width = POSTCARD_SIZE;
-    canvas.height = POSTCARD_SIZE;
+    canvas.width = size;
+    canvas.height = size;
     const context = canvas.getContext('2d');
     if (!context) return src;
 
-    const bg = coverBox(POSTCARD_SIZE, backdrop.naturalWidth, backdrop.naturalHeight);
+    const bg = coverBox(size, backdrop.naturalWidth, backdrop.naturalHeight);
     context.drawImage(backdrop, bg.x, bg.y, bg.w, bg.h);
 
     // Trim the transparent margins so the feet sit exactly on the shadow.
@@ -99,7 +102,7 @@ export async function composePostcard(src: string): Promise<string> {
     const pixels = scratchCtx.getImageData(0, 0, scratch.width, scratch.height);
     const trim = opaqueBox(pixels.data, scratch.width, scratch.height);
 
-    const box = toyBox(POSTCARD_SIZE, trim.w, trim.h);
+    const box = toyBox(size, trim.w, trim.h);
 
     // A soft grounding shadow so the toy stands on the meadow, not floats.
     context.save();

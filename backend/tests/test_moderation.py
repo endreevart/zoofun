@@ -27,6 +27,8 @@ def test_moderation_prompt_keeps_child_drawings() -> None:
     assert "sexual" in text
     assert "pornography" in text
     assert "gore" in text
+    assert "source" in text
+    assert "domestic animal" in text
     assert {"sexual", "gore"} == BLOCK_REASONS
 
 
@@ -36,6 +38,27 @@ def test_parse_moderation_allows() -> None:
     )
     assert verdict.allow is True
     assert verdict.reason == "ok"
+    assert verdict.source == "drawing"
+
+
+def test_parse_moderation_pet_source() -> None:
+    verdict = parse_moderation_response(
+        {"choices": [{"message": {"content": '{"allow":true,"reason":"ok","source":"pet"}'}}]}
+    )
+    assert verdict.allow is True
+    assert verdict.source == "pet"
+
+
+def test_parse_moderation_unknown_source_is_drawing() -> None:
+    verdict = parse_moderation_response(
+        {
+            "choices": [
+                {"message": {"content": '{"allow":true,"reason":"ok","source":"other"}'}}
+            ]
+        }
+    )
+    assert verdict.allow is True
+    assert verdict.source == "drawing"
 
 
 def test_parse_moderation_blocks_sexual() -> None:

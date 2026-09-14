@@ -131,6 +131,15 @@ function remainingFromJob(job: JobResponse): number | undefined {
   return typeof job.remaining === 'number' ? job.remaining : undefined;
 }
 
+/** Garden postcard is a second OpenRouter still, not a client composite. */
+export function postcardUrlFromJob(job: {
+  postcard_status?: string | null;
+  postcard_url?: string | null;
+}): string | undefined {
+  if (job.postcard_status !== 'ready' || !job.postcard_url) return undefined;
+  return resolveModelUrl(job.postcard_url);
+}
+
 function resultFromJob(job: JobResponse, image: HTMLImageElement): Extract<StylizeResult, { ok: true }> {
   const modelUrl = job.model_url ? resolveModelUrl(job.model_url) : undefined;
   return {
@@ -138,30 +147,77 @@ function resultFromJob(job: JobResponse, image: HTMLImageElement): Extract<Styli
     jobId: job.job_id,
     image,
     modelUrl,
-    postcardUrl: job.postcard_url ? resolveModelUrl(job.postcard_url) : undefined,
+    postcardUrl: postcardUrlFromJob(job),
     mesh: meshFromJob(job),
     remaining: remainingFromJob(job),
     ...profileFromJob(job),
   };
 }
 
-/** Keep asking until Meshy finishes. The still can already be in the garden. */
+/** Keep asking until the GLB is stored. Queues and retries must not open a standee. */
 export async function waitForMesh(
   jobId: string,
-  timeoutMs = 240_000,
-): Promise<{ modelUrl?: string; mesh: MeshStatus; postcardUrl?: string }> {
-  const deadline = performance.now() + timeoutMs;
-  let job = await readJobRetry(jobId);
-  while (meshFromJob(job) === 'pending' && performance.now() < deadline) {
-    await new Promise((resolve) => window.setTimeout(resolve, POLL_MS));
-    job = await readJobRetry(jobId);
+): Promise<{
+  modelUrl?: string;
+  mesh: MeshStatus;
+  postcardUrl?: string;
+  image?: HTMLImageElement;
+  name?: string;
+  kindId?: string;
+}> {
+  let delay = POLL_MS;
+  for (;;) {
+    let job: JobResponse;
+    try {
+      job = await readJobRetry(jobId);
+    } catch {
+      await new Promise((resolve) => window.setTimeout(resolve, delay));
+      delay = Math.min(delay * 1.2, 8000);
+      continue;
+    }
+    if (job.model_url || job.mesh_status === 'skipped') {
+      let image: HTMLImageElement | undefined;
+      if (job.image_png_base64) {
+        const media = job.media_type && job.media_type.startsWith('image/') ? job.media_type : 'image/png';
+        image = await loadImage(`data:${media};base64,${job.image_png_base64}`);
+      }
+      const profile = profileFromJob(job);
+      return {
+        mesh: meshFromJob(job),
+        modelUrl: job.model_url ? resolveModelUrl(job.model_url) : undefined,
+        postcardUrl: postcardUrlFromJob(job),
+        image,
+        ...profile,
+      };
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.15, 8000);
   }
-  return {
-    mesh: meshFromJob(job),
-    modelUrl: job.model_url ? resolveModelUrl(job.model_url) : undefined,
-    // The garden postcard is painted while the mesh cooks; it is ready by now.
-    postcardUrl: job.postcard_url ? resolveModelUrl(job.postcard_url) : undefined,
-  };
+}
+
+const POSTCARD_WAIT_MS = 180_000;
+
+/** The garden still is a second paint; the hatch must not wait on it. */
+export async function waitForPostcard(jobId: string): Promise<string | undefined> {
+  let delay = POLL_MS;
+  const deadline = performance.now() + POSTCARD_WAIT_MS;
+  for (;;) {
+    let job: JobResponse;
+    try {
+      job = await readJobRetry(jobId);
+    } catch {
+      if (performance.now() > deadline) return undefined;
+      await new Promise((resolve) => window.setTimeout(resolve, delay));
+      delay = Math.min(delay * 1.2, 8000);
+      continue;
+    }
+    const ready = postcardUrlFromJob(job);
+    if (ready) return ready;
+    if (job.postcard_status === 'failed') return undefined;
+    if (performance.now() > deadline) return undefined;
+    await new Promise((resolve) => window.setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.15, 6000);
+  }
 }
 
 /**

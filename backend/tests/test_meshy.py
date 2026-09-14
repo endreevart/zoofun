@@ -165,7 +165,7 @@ async def test_stylize_stays_ready_when_meshy_fails(
     assert ready is not None
     assert ready.status == "ready"
     assert ready.model_url is None
-    assert ready.mesh_status == "failed"
+    assert ready.mesh_status == "pending"
     assert ready.image_base64 is not None
 
 
@@ -194,7 +194,7 @@ async def test_stylize_meshy_spare_does_not_retry_t2(
     ready = await jobs.get_job(job.id)
     assert ready is not None
     assert ready.status == "ready"
-    assert ready.mesh_status == "failed"
+    assert ready.mesh_status == "pending"
     assert seen == [None]
 
 

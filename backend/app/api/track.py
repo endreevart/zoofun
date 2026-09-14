@@ -32,6 +32,9 @@ class TrackBatch(BaseModel):
     source: str = Field("unknown", max_length=16)
     device: DeviceInfo = DeviceInfo()
     events: list[EventItem] = Field(default_factory=list, max_length=200)
+    utm_source: str = Field("", max_length=80)
+    utm_campaign: str = Field("", max_length=120)
+    utm_content: str = Field("", max_length=120)
 
 
 @router.post("/t")
@@ -46,6 +49,13 @@ async def track(body: TrackBatch, request: Request):
     ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
     if not ip:
         ip = request.client.host if request.client else ""
+    country = (
+        request.headers.get("cf-ipcountry")
+        or request.headers.get("cloudfront-viewer-country")
+        or request.headers.get("x-country-code")
+        or ""
+    )
+    city = request.headers.get("cf-ipcity") or ""
 
     ingest_batch(
         sid=body.sid,
@@ -56,5 +66,10 @@ async def track(body: TrackBatch, request: Request):
         child_id=child_id,
         ip=ip,
         user_agent=request.headers.get("user-agent", ""),
+        country_header=country,
+        city_header=city,
+        utm_source=body.utm_source,
+        utm_campaign=body.utm_campaign,
+        utm_content=body.utm_content,
     )
     return {"ok": True}

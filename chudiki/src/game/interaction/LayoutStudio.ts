@@ -1,14 +1,20 @@
 import * as THREE from 'three';
 import type { CameraRig } from './CameraRig';
+import { skipPlaceFinger } from './cameraPinch';
+import { holdDragOffset } from './diyMove';
 import type { World } from '../world/World';
 import {
   catalogModels,
+  childCatalogModels,
   defaultStamp,
   downloadLayout,
   ensureGardenGate,
+  GRASS_MODELS,
+  DIY_PROP_CAP,
   saveLayout,
   type AuthoredPath,
   type AuthoredProp,
+  type AuthoredSpawn,
   type LayoutDocument,
 } from '../world/layoutAuthored';
 import {
@@ -18,21 +24,38 @@ import {
   nearestPathId,
   shouldCommitStroke,
 } from '../world/layoutPaths';
+import {
+  clampSpawnRadius,
+  DEFAULT_SPAWN_RADIUS,
+  nearestSpawnId,
+} from '../world/layoutSpawns';
 
-export type LayoutTool = 'place' | 'select' | 'path';
+export type LayoutTool = 'place' | 'select' | 'path' | 'spawn';
 
 export type LayoutState = {
   enabled: boolean;
   tool: LayoutTool;
   catalog: string[];
   activeModel: string;
+  /** Child DIY: the toy in hand. Null means look around, do not stamp. */
+  holdingModel: string | null;
   selectedId: string | null;
   selectedPathId: string | null;
+  selectedSpawnId: string | null;
   pathWidth: number;
+  spawnRadius: number;
   count: number;
   pathCount: number;
+  spawnCount: number;
   dirty: boolean;
+  cap: number;
+  moveArmed: boolean;
 };
+
+export type LayoutKind = 'studio' | 'child';
+
+/** Finger moved farther than this: orbit the map, do not stamp. */
+const CHILD_TAP_SLOP = 24;
 
 /**
  * Adult layout editor: stamp, drag, rotate and scale the zoo's props, then
@@ -47,14 +70,27 @@ export class LayoutStudio {
   private enabled = false;
   private tool: LayoutTool = 'place';
   private activeModel = 'sunlit-canopy';
+  private holdingModel: string | null = null;
   private selectedId: string | null = null;
   private selectedPathId: string | null = null;
+  private selectedSpawnId: string | null = null;
+  private moveArmed = false;
+  private moveHold: {
+    origin: { x: number; z: number } | null;
+    startX: number;
+    startZ: number;
+  } | null = null;
   private pathWidth = DEFAULT_PATH_WIDTH;
+  private spawnRadius = DEFAULT_SPAWN_RADIUS;
   private dirty = false;
   private dragging = false;
+  private draggingSpawn = false;
   private drawing = false;
   private stroke: [number, number][] = [];
   private pendingPathPick: string | null = null;
+  private kind: LayoutKind = 'studio';
+  private propCap = Number.POSITIVE_INFINITY;
+  private onPersist: ((props: AuthoredProp[]) => void) | null = null;
 
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
@@ -65,20 +101,31 @@ export class LayoutStudio {
   private listeners = new Set<() => void>();
   private nextId = 1;
   private nextPathId = 1;
+  private nextSpawnId = 1;
   private rememberTimer = 0;
+  private pendingPlace: { startX: number; startY: number; x: number; z: number } | null =
+    null;
+  private touchCount = 0;
+  private capturedId: number | null = null;
 
   constructor(options: {
     world: World;
     camera: THREE.PerspectiveCamera;
     canvas: HTMLElement;
     rig: CameraRig;
+    kind?: LayoutKind;
+    onPersist?: (props: AuthoredProp[]) => void;
+    propCap?: number;
   }) {
     this.world = options.world;
     this.camera = options.camera;
     this.canvas = options.canvas;
     this.rig = options.rig;
+    this.kind = options.kind ?? 'studio';
+    this.onPersist = options.onPersist ?? null;
+    this.propCap = options.propCap ?? (this.kind === 'child' ? DIY_PROP_CAP : Number.POSITIVE_INFINITY);
 
-    const catalog = catalogModels(this.world.library);
+    const catalog = this.catalogNames();
     if (catalog.length) this.activeModel = catalog[0];
 
     this.marker = new THREE.Mesh(
@@ -113,6 +160,10 @@ export class LayoutStudio {
       const n = Number(path.id.replace(/\D/g, '').slice(0, 6));
       if (n >= this.nextPathId) this.nextPathId = n + 1;
     }
+    for (const zone of this.world.spawnZones) {
+      const n = Number(zone.id.replace(/\D/g, '').slice(0, 6));
+      if (n >= this.nextSpawnId) this.nextSpawnId = n + 1;
+    }
 
     window.addEventListener('pagehide', this.flushRemember);
   }
@@ -124,18 +175,30 @@ export class LayoutStudio {
     };
   }
 
+  private catalogNames(): string[] {
+    return this.kind === 'child'
+      ? childCatalogModels(this.world.library, this.world.shell)
+      : catalogModels(this.world.library, this.world.shell);
+  }
+
   getState(): LayoutState {
     return {
       enabled: this.enabled,
       tool: this.tool,
-      catalog: catalogModels(this.world.library),
+      catalog: this.catalogNames(),
       activeModel: this.activeModel,
+      holdingModel: this.kind === 'child' ? this.holdingModel : this.activeModel,
       selectedId: this.selectedId,
       selectedPathId: this.selectedPathId,
+      selectedSpawnId: this.selectedSpawnId,
       pathWidth: this.pathWidth,
+      spawnRadius: this.spawnRadius,
       count: this.world.authoredProps.length,
       pathCount: this.world.paintedPaths.length,
+      spawnCount: this.world.spawnZones.length,
       dirty: this.dirty,
+      cap: Number.isFinite(this.propCap) ? this.propCap : 0,
+      moveArmed: this.moveArmed,
     };
   }
 
@@ -147,16 +210,31 @@ export class LayoutStudio {
     return this.world.paintedPaths.find((path) => path.id === this.selectedPathId) ?? null;
   }
 
+  selectedSpawn(): AuthoredSpawn | null {
+    return this.world.spawnZones.find((zone) => zone.id === this.selectedSpawnId) ?? null;
+  }
+
   setEnabled(on: boolean) {
     this.enabled = on;
-    this.rig.setPrimaryOrbit(!on);
+    this.rig.setPrimaryOrbit(this.kind === 'child' ? true : !on);
     this.marker.visible = on && !!this.selectedId;
     this.brush.visible = false;
+    this.pendingPlace = null;
+    if (this.kind === 'child' && !on) {
+      this.holdingModel = null;
+      this.moveArmed = false;
+      this.moveHold = null;
+    }
+    // Egg zones are an authoring aid; a child should never see the rings.
+    this.world.spawnLayer.setVisible(on && this.kind === 'studio');
     if (on) {
       this.canvas.addEventListener('pointerdown', this.onPointerDown);
       this.canvas.addEventListener('pointermove', this.onHover);
       this.canvas.addEventListener('pointerup', this.onPointerUp);
       this.canvas.addEventListener('pointercancel', this.onPointerUp);
+      window.addEventListener('touchstart', this.onTouchStart, { capture: true, passive: true });
+      window.addEventListener('touchend', this.onTouchEnd, { capture: true, passive: true });
+      window.addEventListener('touchcancel', this.onTouchEnd, { capture: true, passive: true });
       window.addEventListener('keydown', this.onKey);
       window.addEventListener('keyup', this.onKeyUp);
     } else {
@@ -164,6 +242,13 @@ export class LayoutStudio {
       this.canvas.removeEventListener('pointermove', this.onHover);
       this.canvas.removeEventListener('pointerup', this.onPointerUp);
       this.canvas.removeEventListener('pointercancel', this.onPointerUp);
+      if (this.hoverRaf) window.cancelAnimationFrame(this.hoverRaf);
+      this.hoverRaf = 0;
+      this.hoverEvent = null;
+      window.removeEventListener('touchstart', this.onTouchStart, true);
+      window.removeEventListener('touchend', this.onTouchEnd, true);
+      window.removeEventListener('touchcancel', this.onTouchEnd, true);
+      this.releaseCapture();
       window.removeEventListener('keydown', this.onKey);
       window.removeEventListener('keyup', this.onKeyUp);
       this.rig.setPrimaryOrbit(true);
@@ -175,6 +260,7 @@ export class LayoutStudio {
   }
 
   setTool(tool: LayoutTool) {
+    if (this.kind === 'child' && (tool === 'path' || tool === 'spawn')) return;
     this.tool = tool;
     if (tool !== 'path') {
       this.cancelStroke();
@@ -184,6 +270,16 @@ export class LayoutStudio {
       this.selectedId = null;
       this.syncMarker();
       this.canvas.style.cursor = 'crosshair';
+    }
+    if (tool === 'spawn') {
+      this.selectedId = null;
+      this.selectedPathId = null;
+      this.world.pathLayer.setSelected(null);
+      this.syncMarker();
+      this.canvas.style.cursor = 'crosshair';
+    } else {
+      this.selectedSpawnId = null;
+      this.world.spawnLayer.setSelected(null);
     }
     this.emit();
   }
@@ -199,10 +295,85 @@ export class LayoutStudio {
     this.emit();
   }
 
-  setActiveModel(model: string) {
-    this.activeModel = model;
-    this.tool = 'place';
+  setSpawnRadius(radius: number) {
+    this.spawnRadius = clampSpawnRadius(radius);
+    const selected = this.selectedSpawn();
+    if (selected) {
+      this.world.patchAuthoredSpawn(selected.id, { radius: this.spawnRadius });
+      this.world.spawnLayer.setSelected(selected.id);
+      this.markDirty();
+    }
     this.emit();
+  }
+
+  setActiveModel(model: string) {
+    if (this.kind === 'child' && GRASS_MODELS.has(model)) return;
+    if (this.kind === 'child') {
+      this.holdingModel = this.holdingModel === model ? null : model;
+      if (this.holdingModel) this.activeModel = this.holdingModel;
+      this.selectedId = null;
+      this.moveArmed = false;
+      this.pendingPlace = null;
+      this.syncMarker();
+      if (!this.holdingModel) this.brush.visible = false;
+      this.emit();
+      return;
+    }
+    this.activeModel = model;
+    this.setTool('place');
+  }
+
+  /** Hold the move button, then drag: the toy follows the finger. */
+  beginMoveHold() {
+    if (this.kind !== 'child' || !this.selectedId) return;
+    const selected = this.selected();
+    if (!selected) return;
+    this.moveArmed = true;
+    this.dragging = true;
+    this.holdingModel = null;
+    this.brush.visible = false;
+    this.rig.setPrimaryOrbit(false);
+    this.moveHold = { origin: null, startX: selected.x, startZ: selected.z };
+    this.emit();
+  }
+
+  dragMoveHold(clientX: number, clientY: number) {
+    if (!this.moveHold || !this.selectedId) return;
+    const point = this.groundPoint(clientX, clientY);
+    if (!point) return;
+    if (!this.moveHold.origin) {
+      this.moveHold.origin = { x: point.x, z: point.z };
+      return;
+    }
+    const next = holdDragOffset(
+      this.moveHold.origin,
+      { x: this.moveHold.startX, z: this.moveHold.startZ },
+      { x: point.x, z: point.z },
+    );
+    this.moveSelected(next.x, next.z);
+  }
+
+  endMoveHold() {
+    if (!this.moveHold && !this.moveArmed) return;
+    this.moveHold = null;
+    this.dragging = false;
+    this.moveArmed = false;
+    if (this.kind === 'child' && this.enabled) this.rig.setPrimaryOrbit(true);
+    this.emit();
+  }
+
+  selectedScreen(): { x: number; y: number } | null {
+    const selected = this.selected();
+    if (!selected || !this.enabled) return null;
+    const y =
+      this.stampWorldY(selected) + Math.max(0.5, selected.height * 0.55);
+    const point = new THREE.Vector3(selected.x, y, selected.z).project(this.camera);
+    if (point.z > 1) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: (point.x * 0.5 + 0.5) * rect.width + rect.left,
+      y: (-point.y * 0.5 + 0.5) * rect.height + rect.top,
+    };
   }
 
   rotateSelected(delta: number) {
@@ -212,6 +383,11 @@ export class LayoutStudio {
   }
 
   scaleSelected(factor: number) {
+    const zone = this.selectedSpawn();
+    if (zone) {
+      this.setSpawnRadius(zone.radius * factor);
+      return;
+    }
     const path = this.selectedPath();
     if (path) {
       this.setPathWidth(path.width * factor);
@@ -228,24 +404,40 @@ export class LayoutStudio {
 
   save() {
     this.flushRemember();
-    downloadLayout(this.world.authoredProps, this.world.paintedPaths);
+    downloadLayout(this.world.authoredProps, this.world.paintedPaths, this.world.spawnZones, this.world.shell);
     this.dirty = false;
     this.emit();
   }
 
+  /** Write the current garden now (local cache / account), without downloading JSON. */
+  flushPersist(): AuthoredProp[] {
+    this.flushRemember();
+    this.emit();
+    return this.world.authoredProps;
+  }
+
   remember() {
-    saveLayout(this.world.authoredProps, this.world.paintedPaths);
+    if (this.kind === 'child') {
+      this.onPersist?.(this.world.authoredProps);
+      this.dirty = false;
+      this.emit();
+      return;
+    }
+    saveLayout(this.world.authoredProps, this.world.paintedPaths, this.world.spawnZones, this.world.shell);
     this.dirty = false;
     this.emit();
   }
 
   importDocument(doc: LayoutDocument) {
     if (!doc.props) return;
-    this.world.applyAuthored(ensureGardenGate(doc.props));
-    this.world.applyAuthoredPaths(doc.paths);
-    this.selectedId = null;
-    this.selectedPathId = null;
-    this.world.pathLayer.setSelected(null);
+    const gated =
+      this.kind === 'child' || this.world.shell !== 'garden' ? doc.props : ensureGardenGate(doc.props);
+    this.world.applyAuthored(gated);
+    if (this.kind === 'studio') {
+      this.world.applyAuthoredPaths(doc.paths);
+      this.world.applyAuthoredSpawns(doc.spawns);
+    }
+    this.clearSelection();
     this.remember();
   }
 
@@ -257,10 +449,20 @@ export class LayoutStudio {
         points: path.points.map((point) => [point[0], point[1]] as [number, number]),
       })),
     );
+    this.world.applyAuthoredSpawns(this.world.frozenSpawns.map((zone) => ({ ...zone })));
+    this.clearSelection();
+    this.remember();
+  }
+
+  private clearSelection() {
     this.selectedId = null;
     this.selectedPathId = null;
+    this.selectedSpawnId = null;
+    this.moveArmed = false;
+    this.moveHold = null;
     this.world.pathLayer.setSelected(null);
-    this.remember();
+    this.world.spawnLayer.setSelected(null);
+    this.syncMarker();
   }
 
   dispose() {
@@ -284,7 +486,12 @@ export class LayoutStudio {
   private flushRemember = () => {
     window.clearTimeout(this.rememberTimer);
     this.rememberTimer = 0;
-    saveLayout(this.world.authoredProps, this.world.paintedPaths);
+    if (this.kind === 'child') {
+      this.onPersist?.(this.world.authoredProps);
+      this.dirty = false;
+      return;
+    }
+    saveLayout(this.world.authoredProps, this.world.paintedPaths, this.world.spawnZones, this.world.shell);
     this.dirty = false;
   };
 
@@ -293,6 +500,42 @@ export class LayoutStudio {
   }
 
   private orbitHold = false;
+  private hoverRaf = 0;
+  private hoverEvent: PointerEvent | null = null;
+
+  private capturePointer(pointerId: number) {
+    this.capturedId = pointerId;
+    try {
+      this.canvas.setPointerCapture(pointerId);
+    } catch {
+      this.capturedId = null;
+    }
+  }
+
+  private releaseCapture() {
+    if (this.capturedId == null) return;
+    try {
+      this.canvas.releasePointerCapture(this.capturedId);
+    } catch {
+      /* never captured, or already released */
+    }
+    this.capturedId = null;
+  }
+
+  private onTouchStart = (event: TouchEvent) => {
+    this.touchCount = event.touches.length;
+    if (event.touches.length < 2) return;
+    this.pendingPlace = null;
+    this.releaseCapture();
+    this.stopDrag();
+  };
+
+  private onTouchEnd = (event: TouchEvent) => {
+    this.touchCount = event.touches.length;
+    if (event.touches.length > 0) return;
+    this.releaseCapture();
+    this.stopDrag();
+  };
 
   private onKeyUp = (event: KeyboardEvent) => {
     if (!this.enabled) return;
@@ -304,7 +547,7 @@ export class LayoutStudio {
 
   private onPointerDown = (event: PointerEvent) => {
     if (!this.enabled || event.button !== 0 || this.orbitHold) return;
-    if (event.pointerType === 'touch' && event.isPrimary === false) return;
+    if (skipPlaceFinger(event.pointerType, event.isPrimary, this.touchCount)) return;
 
     const point = this.groundPoint(event.clientX, event.clientY);
     if (!point) return;
@@ -318,15 +561,33 @@ export class LayoutStudio {
       return;
     }
 
+    if (this.tool === 'spawn') {
+      // Only zones answer here, so a tap next to a bush marks a spot for an
+      // egg instead of grabbing the bush.
+      const hit = nearestSpawnId(this.world.spawnZones, point.x, point.z);
+      if (hit) this.selectSpawn(hit);
+      else this.stampSpawn(point.x, point.z);
+      this.draggingSpawn = true;
+      this.capturePointer(event.pointerId);
+      this.emit();
+      return;
+    }
+
+    if (this.kind === 'child') {
+      this.onChildPointerDown(event, point);
+      return;
+    }
+
     const picked = this.pickProp(event.clientX, event.clientY);
     if (picked) {
+      this.pendingPlace = null;
       this.selectedPathId = null;
       this.world.pathLayer.setSelected(null);
       this.selectedId = picked;
       this.dragging = true;
       this.tool = 'select';
       this.syncMarker();
-      this.canvas.setPointerCapture(event.pointerId);
+      this.capturePointer(event.pointerId);
       this.emit();
       return;
     }
@@ -343,7 +604,7 @@ export class LayoutStudio {
     }
 
     if (this.tool === 'place') {
-      this.stamp(point.x, point.z);
+      this.stamp(point.x, point.z, point.y);
       return;
     }
 
@@ -354,8 +615,79 @@ export class LayoutStudio {
     this.emit();
   };
 
+  private onChildPointerDown(event: PointerEvent, point: THREE.Vector3) {
+    this.pendingPlace = null;
+    this.selectedPathId = null;
+    this.world.pathLayer.setSelected(null);
+
+    if (this.moveArmed && this.selectedId) {
+      const other = this.pickProp(event.clientX, event.clientY);
+      if (other && other !== this.selectedId) {
+        this.selectChildProp(other);
+        return;
+      }
+      this.dragging = true;
+      this.tool = 'select';
+      this.rig.setPrimaryOrbit(false);
+      this.moveSelected(point.x, point.z, point.y);
+      this.capturePointer(event.pointerId);
+      this.emit();
+      return;
+    }
+
+    if (!this.holdingModel) {
+      const picked = this.pickProp(event.clientX, event.clientY);
+      if (picked) {
+        this.selectChildProp(picked);
+        return;
+      }
+      this.clearSelection();
+      this.emit();
+      return;
+    }
+
+    this.pendingPlace = {
+      startX: event.clientX,
+      startY: event.clientY,
+      x: point.x,
+      z: point.z,
+    };
+    this.showDropGhost(point);
+  }
+
+  private selectChildProp(id: string) {
+    this.holdingModel = null;
+    this.brush.visible = false;
+    this.selectedId = id;
+    this.moveArmed = false;
+    this.dragging = false;
+    this.tool = 'select';
+    this.syncMarker();
+    this.emit();
+  }
+
   private onHover = (event: PointerEvent) => {
     if (!this.enabled || this.orbitHold) return;
+    const needsGround =
+      this.drawing ||
+      this.draggingSpawn ||
+      this.dragging ||
+      Boolean(this.pendingPlace) ||
+      Boolean(this.moveHold) ||
+      (this.kind === 'child' && Boolean(this.holdingModel)) ||
+      (this.kind !== 'child' && this.tool === 'path');
+    if (!needsGround) return;
+    this.hoverEvent = event;
+    if (this.hoverRaf) return;
+    this.hoverRaf = window.requestAnimationFrame(() => {
+      this.hoverRaf = 0;
+      const next = this.hoverEvent;
+      this.hoverEvent = null;
+      if (next) this.applyHover(next);
+    });
+  };
+
+  private applyHover(event: PointerEvent) {
     const point = this.groundPoint(event.clientX, event.clientY);
     if (!point) return;
 
@@ -366,27 +698,62 @@ export class LayoutStudio {
       return;
     }
 
+    if (this.draggingSpawn && this.selectedSpawnId) {
+      this.world.patchAuthoredSpawn(this.selectedSpawnId, { x: point.x, z: point.z });
+      this.world.spawnLayer.setSelected(this.selectedSpawnId);
+      this.markDirty();
+      return;
+    }
+
     if (this.dragging && this.selectedId) {
-      this.moveSelected(point.x, point.z);
+      this.moveSelected(point.x, point.z, point.y);
+      return;
+    }
+
+    if (this.pendingPlace) {
+      const dx = event.clientX - this.pendingPlace.startX;
+      const dy = event.clientY - this.pendingPlace.startY;
+      if (dx * dx + dy * dy > CHILD_TAP_SLOP * CHILD_TAP_SLOP) {
+        this.pendingPlace = null;
+      }
+    }
+
+    if (this.kind === 'child') {
+      if (this.holdingModel && !this.dragging) this.showDropGhost(point);
+      else if (!this.dragging) this.brush.visible = false;
       return;
     }
 
     if (this.tool === 'path') this.showBrush(point);
-  };
+  }
 
   private onPointerUp = (event: PointerEvent) => {
-    try {
-      this.canvas.releasePointerCapture(event.pointerId);
-    } catch {
-      // Capture was never taken, or already released.
-    }
+    const place = this.pendingPlace;
+    const wasDragging = this.dragging;
+    this.pendingPlace = null;
+    this.releaseCapture();
     if (this.drawing) this.finishStroke();
     this.stopDrag();
+    if (
+      this.kind === 'child' &&
+      this.holdingModel &&
+      place &&
+      !wasDragging
+    ) {
+      const dx = event.clientX - place.startX;
+      const dy = event.clientY - place.startY;
+      if (dx * dx + dy * dy <= CHILD_TAP_SLOP * CHILD_TAP_SLOP) {
+        const point = this.groundPoint(event.clientX, event.clientY);
+        this.stamp(point?.x ?? place.x, point?.z ?? place.z, point?.y);
+      }
+    }
     this.emit();
   };
 
   private stopDrag() {
     this.dragging = false;
+    this.draggingSpawn = false;
+    if (this.kind === 'child' && this.enabled) this.rig.setPrimaryOrbit(!this.moveArmed);
   }
 
   private startStroke(x: number, z: number, pointerId: number) {
@@ -397,7 +764,7 @@ export class LayoutStudio {
     this.drawing = true;
     this.stroke = [[x, z]];
     this.world.pathLayer.setPreview(this.stroke, this.pathWidth);
-    this.canvas.setPointerCapture(pointerId);
+    this.capturePointer(pointerId);
     this.emit();
   }
 
@@ -438,6 +805,25 @@ export class LayoutStudio {
     if (path) this.pathWidth = path.width;
   }
 
+  private selectSpawn(id: string) {
+    this.selectedSpawnId = id;
+    this.world.spawnLayer.setSelected(id);
+    const zone = this.selectedSpawn();
+    if (zone) this.spawnRadius = zone.radius;
+  }
+
+  private stampSpawn(x: number, z: number) {
+    const zone: AuthoredSpawn = {
+      id: `spawn-${this.nextSpawnId++}`,
+      x,
+      z,
+      radius: this.spawnRadius,
+    };
+    this.world.applyAuthoredSpawns([...this.world.spawnZones, zone]);
+    this.selectSpawn(zone.id);
+    this.markDirty();
+  }
+
   private showBrush(point: THREE.Vector3) {
     this.brush.visible = this.enabled && this.tool === 'path';
     if (!this.brush.visible) return;
@@ -471,6 +857,13 @@ export class LayoutStudio {
       return;
     }
 
+    const zone = this.selectedSpawn();
+    if (zone) {
+      if (event.key === '-' || event.key === '_') this.setSpawnRadius(zone.radius * 0.9);
+      else if (event.key === '=' || event.key === '+') this.setSpawnRadius(zone.radius * 1.1);
+      return;
+    }
+
     const path = this.selectedPath();
     if (path) {
       if (event.key === '-' || event.key === '_') this.setPathWidth(path.width * 0.9);
@@ -491,15 +884,23 @@ export class LayoutStudio {
     }
   };
 
-  private stamp(x: number, z: number) {
-    const extras = defaultStamp(this.activeModel);
+  private stamp(x: number, z: number, y?: number) {
+    const model = this.kind === 'child' ? this.holdingModel : this.activeModel;
+    if (!model) return;
+    if (this.kind === 'child') {
+      if (GRASS_MODELS.has(model)) return;
+      if (this.world.authoredProps.length >= this.propCap) return;
+    }
+    const extras = defaultStamp(model);
+    if (!this.world.library.has(model)) return;
     const prop: AuthoredProp = {
       id: `edit-${this.nextId++}`,
-      model: this.activeModel,
+      model,
       x,
       z,
-      rotationY: Math.random() * Math.PI * 2,
+      rotationY: this.kind === 'child' ? 0 : Math.random() * Math.PI * 2,
       ...extras,
+      y,
     };
     this.world.appendAuthored(prop);
     this.selectedPathId = null;
@@ -510,9 +911,16 @@ export class LayoutStudio {
     this.emit();
   }
 
-  private moveSelected(x: number, z: number) {
+  private showDropGhost(point: THREE.Vector3) {
+    this.brush.visible = true;
+    this.brush.position.set(point.x, point.y + 0.09, point.z);
+    const extras = defaultStamp(this.holdingModel ?? this.activeModel);
+    this.brush.scale.setScalar(Math.max(0.55, extras.height * 0.2));
+  }
+
+  private moveSelected(x: number, z: number, y?: number) {
     if (!this.selectedId) return;
-    this.world.patchAuthored(this.selectedId, { x, z });
+    this.world.patchAuthored(this.selectedId, Number.isFinite(y) ? { x, z, y } : { x, z });
     this.markDirty();
     this.syncMarker();
   }
@@ -526,6 +934,16 @@ export class LayoutStudio {
   }
 
   private removeSelected() {
+    if (this.selectedSpawnId) {
+      this.world.applyAuthoredSpawns(
+        this.world.spawnZones.filter((zone) => zone.id !== this.selectedSpawnId),
+      );
+      this.selectedSpawnId = null;
+      this.world.spawnLayer.setSelected(null);
+      this.markDirty();
+      this.emit();
+      return;
+    }
     if (this.selectedPathId) {
       this.world.applyAuthoredPaths(
         this.world.paintedPaths.filter((path) => path.id !== this.selectedPathId),
@@ -539,6 +957,7 @@ export class LayoutStudio {
     if (!this.selectedId) return;
     this.world.removeAuthored(this.selectedId);
     this.selectedId = null;
+    this.moveArmed = false;
     this.markDirty();
     this.syncMarker();
     this.emit();
@@ -551,8 +970,12 @@ export class LayoutStudio {
       return;
     }
     this.marker.visible = true;
-    this.marker.position.set(selected.x, this.world.groundAt(selected.x, selected.z) + 0.08, selected.z);
+    this.marker.position.set(selected.x, this.stampWorldY(selected) + 0.08, selected.z);
     this.marker.scale.setScalar(Math.max(0.6, selected.height * 0.18));
+  }
+
+  private stampWorldY(prop: { x: number; z: number; y?: number }): number {
+    return Number.isFinite(prop.y) ? prop.y! : this.world.groundAt(prop.x, prop.z);
   }
 
   private groundPoint(clientX: number, clientY: number): THREE.Vector3 | null {

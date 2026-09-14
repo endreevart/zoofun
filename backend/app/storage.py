@@ -80,3 +80,35 @@ async def save_asset(settings: Settings, key: str, data: bytes, content_type: st
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return None
+
+
+def creature_still_key(child_id: str, spec_id: str) -> str:
+    child = "".join(ch for ch in child_id if ch.isalnum() or ch in "-_")[:32]
+    safe = "".join(ch for ch in spec_id if ch.isalnum() or ch in "-_")[:64]
+    if not child or not safe:
+        raise ValueError("bad spec id")
+    return f"creatures/{child}/{safe}.png"
+
+
+def creature_still_path(settings: Settings, child_id: str, spec_id: str) -> Path:
+    return Path(settings.storage_local_root) / creature_still_key(child_id, spec_id)
+
+
+def write_creature_still(
+    settings: Settings, child_id: str, spec_id: str, data: bytes
+) -> Path | None:
+    """Save a PNG still next to other generated assets. Sync: zoo upsert is sync."""
+    if not data:
+        return None
+    try:
+        key = creature_still_key(child_id, spec_id)
+    except ValueError:
+        return None
+    try:
+        path = Path(settings.storage_local_root) / key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return path
+    except OSError:
+        logger.exception("could not write creature still %s", spec_id)
+        return None

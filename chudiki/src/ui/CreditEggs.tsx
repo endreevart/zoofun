@@ -1,27 +1,25 @@
-import { creditEggCounts } from '../game/commerceQuota';
+import { assetUrl } from '../assetUrl';
 
 type CreditEggsProps = {
   count: number;
-  /** Show one dim egg when nothing is left, so the tray still reads. */
+  /** Show a dim figurine when nothing is left, so the tray still reads. */
   emptyMark?: boolean;
+  showCount?: boolean;
 };
 
-/** A row of toy eggs: one egg is one remaining creature. */
-export function CreditEggs({ count, emptyMark = true }: CreditEggsProps) {
-  const { filled, extra } = creditEggCounts(count);
-  if (count <= 0 && emptyMark) {
-    return (
-      <span className="credit-eggs" aria-hidden="true">
-        <span className="credit-egg is-empty" />
-      </span>
-    );
-  }
+/** Remaining creations as one chudik token plus a number. */
+export function CreditEggs({ count, emptyMark = true, showCount = true }: CreditEggsProps) {
+  const n = Math.max(0, Math.floor(count));
+  if (n <= 0 && !emptyMark) return null;
   return (
-    <span className="credit-eggs" aria-hidden="true">
-      {Array.from({ length: filled }, (_, index) => (
-        <span key={index} className={`credit-egg hue-${index % 6}`} />
-      ))}
-      {extra > 0 ? <span className="credit-extra">+{extra}</span> : null}
+    <span className={`credit-chudiks${n <= 0 ? ' is-empty' : ''}`} aria-hidden="true">
+      <img
+        className="credit-chudik"
+        src={assetUrl('hud/credit-chudik.png')}
+        alt=""
+        draggable={false}
+      />
+      {showCount ? <span className="credit-chudik-count">{n}</span> : null}
     </span>
   );
 }

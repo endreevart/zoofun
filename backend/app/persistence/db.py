@@ -13,6 +13,7 @@ from sqlalchemy.pool import NullPool
 
 from app.persistence.models import PackRow
 from app.settings import get_settings
+from app.worlds import DEFAULT_WORLDS, is_world_sku
 
 _engine: Engine | None = None
 _Session: sessionmaker[Session] | None = None
@@ -20,7 +21,8 @@ _Session: sessionmaker[Session] | None = None
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 DEFAULT_PACKS = (
-    ("pack_5", 5, 1990, False),
+    ("pack_1", 1, 99, False),
+    ("pack_5", 5, 399, False),
     ("pack_10", 10, 3490, True),
     ("pack_15", 15, 4690, False),
     ("pack_20", 20, 5790, False),
@@ -89,19 +91,22 @@ def session() -> Iterator[Session]:
 
 
 def seed_packs(db: Session) -> None:
-    existing = set(db.scalars(select(PackRow.id)))
-    for pack_id, animals, price, featured in DEFAULT_PACKS:
-        if pack_id in existing:
-            continue
-        db.add(
-            PackRow(
-                id=pack_id,
-                animals=animals,
-                price_rub=price,
-                list_price_rub=0,
-                featured=featured,
+    rows = {row.id: row for row in db.scalars(select(PackRow)).all()}
+    for pack_id, animals, price, featured in (*DEFAULT_PACKS, *DEFAULT_WORLDS):
+        row = rows.get(pack_id)
+        if row is None:
+            db.add(
+                PackRow(
+                    id=pack_id,
+                    animals=animals,
+                    price_rub=price,
+                    list_price_rub=price if is_world_sku(pack_id) else 0,
+                    featured=featured,
+                )
             )
-        )
+            continue
+        if is_world_sku(pack_id) and row.list_price_rub == 0 and row.price_rub == price:
+            row.list_price_rub = price
 
 
 def apply_migrations() -> None:
@@ -121,6 +126,18 @@ def ping_database() -> None:
 
 
 def init_schema() -> None:
+    engine = get_engine()
+    if engine.dialect.name == "postgresql":
+        with engine.connect() as lock:
+            lock.execute(text("SELECT pg_advisory_lock(87236401)"))
+            try:
+                apply_migrations()
+                with session() as db:
+                    seed_packs(db)
+            finally:
+                lock.execute(text("SELECT pg_advisory_unlock(87236401)"))
+                lock.commit()
+        return
     apply_migrations()
     with session() as db:
         seed_packs(db)

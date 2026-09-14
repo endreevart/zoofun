@@ -12,6 +12,10 @@
 	servers {
 		protocols h1 h2
 	}
+	# Mail.ru Webmaster fetches http://zooo.fun/ and does not follow the
+	# automatic HTTP→HTTPS 308. Keep a 200 only on the homepage; everything
+	# else still moves to HTTPS.
+	auto_https disable_redirects
 }
 
 # Access log is not optional here. Without it a question like "did T-Bank ever
@@ -27,12 +31,30 @@
 	}
 }
 
-www.zooo.fun {
+http://zooo.fun, http://www.zooo.fun {
+	import accesslog
+	@mailru path / /index.html
+	handle @mailru {
+		header Content-Type "text/html; charset=utf-8"
+		header Cache-Control "no-store"
+		respond `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="mailru-domain" content="h17F6aTb5ZKpqXLu"></head><body></body></html>` 200
+	}
+	handle {
+		redir https://zooo.fun{uri} 308
+	}
+}
+
+http://crm.zooo.fun {
+	import accesslog
+	redir https://crm.zooo.fun{uri} 308
+}
+
+https://www.zooo.fun {
 	import accesslog
 	redir https://zooo.fun{uri} permanent
 }
 
-zooo.fun {
+https://zooo.fun {
 	import accesslog
 	reverse_proxy https://72.56.100.86 {
 		header_up Host {host}
@@ -45,7 +67,7 @@ zooo.fun {
 	}
 }
 
-crm.zooo.fun {
+https://crm.zooo.fun {
 	import accesslog
 	reverse_proxy https://72.56.100.86 {
 		header_up Host {host}

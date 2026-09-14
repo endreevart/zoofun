@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { assignToFeeders, livePlace, slotBeside } from './feedingPlan.ts';
+import { assignToFeeders, feedSpots, livePlace, slotBeside } from './feedingPlan.ts';
 
 const feeders = [
   { id: 'a', x: 0, z: 0, rotationY: 0 },
@@ -52,5 +52,10 @@ assert.ok(crowd.some((row) => row.place >= 2));
 const eat = slotBeside(feeders[0], 0, { x: 0, z: -5 });
 const wait = slotBeside(feeders[0], 1, { x: 0, z: -5 });
 assert.ok(Math.hypot(wait.x - eat.x, wait.z - eat.z) > 0.8);
+
+assert.equal(feedSpots(feeders, { x: 3, z: 4 })[0]?.id, 'a');
+assert.deepEqual(feedSpots([], { x: 3, z: 4 }), [
+  { id: 'meadow', x: 3, z: 4, rotationY: 0 },
+]);
 
 console.log('feedingPlan ok');

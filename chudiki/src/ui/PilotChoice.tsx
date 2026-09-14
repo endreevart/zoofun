@@ -1,54 +1,75 @@
-import { assetUrl } from '../assetUrl';
 import { kindById, type ChudikSpec } from '../game/creatures/ChudikSpec';
+import { CreatureMenuIcon } from './CreatureMenuIcon';
 
 type Props = {
   spec: ChudikSpec;
+  pic: string | null;
   onPilot: () => void;
-  /** Null hides the button (residents have no portrait to wash). */
+  /** Null hides the button (park animals have no wash game). */
   onWash: (() => void) | null;
   onFeedGame: (() => void) | null;
   onPuzzle: (() => void) | null;
+  onSettings: () => void;
   onDismiss: () => void;
 };
 
 /**
- * After a tap: the chudik already said hello. Walk as them, wash them,
- * feed them, or rebuild their portrait as a puzzle. Drawn creatures get
- * the care games.
+ * After a tap: walk as them, wash them, feed them, or rebuild their portrait.
+ * The gear opens the same extra settings that used to live behind a long press.
  */
-export function PilotChoice({ spec, onPilot, onWash, onFeedGame, onPuzzle, onDismiss }: Props) {
+export function PilotChoice({
+  spec,
+  pic,
+  onPilot,
+  onWash,
+  onFeedGame,
+  onPuzzle,
+  onSettings,
+  onDismiss,
+}: Props) {
   const kind = kindById(spec.kindId);
   return (
-    <div className="pilot-choice">
-      <p className="pilot-choice-name">
-        <span>{kind.emoji}</span>
-        {spec.name}
-      </p>
-      <button className="big-button primary" type="button" onClick={onPilot}>
-        <span className="icon">🕹️</span>
-        <span>Вести</span>
-      </button>
-      {onWash ? (
-        <button className="big-button" type="button" onClick={onWash}>
-          <img className="mg-button-sprite" src={assetUrl('/ui/sponge.png')} alt="" />
-          <span>Помыть</span>
+    <div className="pilot-choice" role="dialog" aria-label={spec.name}>
+      <div className="pilot-choice-id">
+        {pic ? (
+          <img className="pilot-choice-face" src={pic} alt="" />
+        ) : (
+          <span className="pilot-choice-face is-emoji">{kind.emoji}</span>
+        )}
+        <p className="pilot-choice-name">{spec.name}</p>
+      </div>
+      <div className="pilot-choice-tools">
+        <button className="pilot-tool" type="button" onClick={onSettings} aria-label="Настройки">
+          <CreatureMenuIcon name="gear" />
         </button>
-      ) : null}
-      {onFeedGame ? (
-        <button className="big-button" type="button" onClick={onFeedGame}>
-          <img className="mg-button-sprite" src={assetUrl('/ui/apple.png')} alt="" />
-          <span>Кормить</span>
+        <button className="pilot-tool" type="button" onClick={onDismiss} aria-label="Закрыть">
+          <CreatureMenuIcon name="close" />
         </button>
-      ) : null}
-      {onPuzzle ? (
-        <button className="big-button" type="button" onClick={onPuzzle}>
-          <span className="icon">🧩</span>
-          <span>Пазл</span>
+      </div>
+      <div className="pilot-choice-actions">
+        <button className="pilot-act is-lead" type="button" onClick={onPilot}>
+          <CreatureMenuIcon name="lead" />
+          <span>Вести</span>
         </button>
-      ) : null}
-      <button className="pilot-dismiss" type="button" onClick={onDismiss} aria-label="Не сейчас">
-        ✖️
-      </button>
+        {onWash ? (
+          <button className="pilot-act" type="button" onClick={onWash}>
+            <CreatureMenuIcon name="wash" />
+            <span>Помыть</span>
+          </button>
+        ) : null}
+        {onFeedGame ? (
+          <button className="pilot-act" type="button" onClick={onFeedGame}>
+            <CreatureMenuIcon name="feed" />
+            <span>Кормить</span>
+          </button>
+        ) : null}
+        {onPuzzle ? (
+          <button className="pilot-act" type="button" onClick={onPuzzle}>
+            <CreatureMenuIcon name="puzzle" />
+            <span>Пазл</span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
