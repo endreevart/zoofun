@@ -31,3 +31,8 @@ The geometry is identical to the reviewed files. Stamp textures are resized to
 rejected because visual QA exposed lawn facets or holes. Desktop keeps every
 reviewed file above; development can force it with
 `?quality=low&assetLod=full` for A/B screenshots.
+
+Do not COLLAPSE the isle. GPU memory is cut with quantization + Meshopt, then
+UASTC, via `scripts/pack-gpu-glb.sh`. Measure after `IdyllicLibrary` flatten
+(attributes must stay Int16). Phone low-tier loads `whimsy-isle-mobile-gpu.glb`.
+Keep `-q` / `-qm` next to it for A/B (`?assetLod=full` still uses the raw isle).

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { IdyllicLibrary } from './IdyllicLibrary';
+import { placePackedMesh } from './packModel';
 
 const SIZE = 192;
 
@@ -60,7 +61,9 @@ export function renderCatalogThumbs(
     while (group.children.length) group.remove(group.children[0]);
     const model = library.get(name);
     for (const primitive of model.primitives) {
-      group.add(new THREE.Mesh(primitive.geometry, primitive.material));
+      const mesh = new THREE.Mesh(primitive.geometry, primitive.material);
+      placePackedMesh(mesh, primitive);
+      group.add(mesh);
     }
     const box = new THREE.Box3().setFromObject(group);
     box.getSize(size);

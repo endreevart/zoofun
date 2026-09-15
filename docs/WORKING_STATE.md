@@ -130,7 +130,7 @@ Legal HTML under `public/legal/` (mirrors in `zoofun/docs/legal/`). Consents req
 
 ## Quality / mobile (open)
 
-Low-tier phone path is in `chudiki/src/game/render/quality.ts` and `PostFx.ts` (DPR 1, no MSAA/GTAO/bloom/shafts, FXAA, 30 FPS, 1024 shadows / 512 after context loss). Chrome/ANGLE iPhone emulation on 2026-09-15 held ~30 FPS on garden/meadow/grove; world-switch memory did not grow. Physical iPhone Safari is still unproven — see `handoff/evidence/mobile-optimization-2026-09-14/VERIFY-2026-09-15.md`. Do not collapse `whimsy-isle-mobile.glb` geometry.
+Low-tier phone path is in `chudiki/src/game/render/quality.ts` and `PostFx.ts` (DPR **2**, Save-Data 1.25, safe-mode 1, no MSAA/GTAO/bloom/shafts, FXAA, 30 FPS, 1024 shadows / 512 after context loss). Chrome/ANGLE iPhone emulation on 2026-09-15 held ~30 FPS on garden/meadow/grove; world-switch memory did not grow. Physical iPhone Safari is still unproven — see `handoff/evidence/mobile-optimization-2026-09-14/VERIFY-2026-09-15.md`. Do not collapse `whimsy-isle-mobile.glb` geometry. Packed extras keep quantized attributes on the mesh matrix (`packModel.ts`); `compileAsync` runs before the first frame; GLB loads cap at 2. GPU packs (Meshopt / KTX2) come from `chudiki/scripts/pack-gpu-glb.sh`.
 
 Landing hero uses video (`HeroFilm`) plus stills; Caddy serves `/landing/*.mp4` as files with long cache.
 

@@ -5,6 +5,7 @@ import { createToyMaterial } from '../core/geometry';
 import { buildMeshBounds } from '../render/bvhRaycast';
 import { createFlatShadowCatcher, createShadowCatcher } from './islandShadowCatcher';
 import { lawnHeightWindow, peakHeight } from './islandHeights';
+import { placePackedMesh } from '../assets/packModel';
 import {
   BURROW,
   CREEK_POINTS,
@@ -146,10 +147,9 @@ export class Terrain {
       // Never cast: a grassy platform shadowing itself produces acne.
       mesh.castShadow = false;
       mesh.receiveShadow = true;
-      mesh.matrixAutoUpdate = false;
-      mesh.updateMatrix();
+      placePackedMesh(mesh, primitive);
       mesh.name = name;
-      if (tight) buildMeshBounds(mesh);
+      buildMeshBounds(mesh);
       this.group.add(mesh);
       placed.push(mesh);
     }

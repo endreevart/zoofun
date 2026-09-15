@@ -1596,6 +1596,22 @@ html.is-cinema #root {
   gap: 10px;
   font-size: 20px;
   font-weight: 800;
+  white-space: nowrap;
+}
+
+.icon-button.primary {
+  background: linear-gradient(180deg, #ffd85e, var(--sun));
+}
+
+.gate-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.gate-actions .icon-button.wide {
+  flex: 1;
+  min-height: 56px;
 }
 
 .icon-button.go {
@@ -1791,12 +1807,15 @@ html.is-cinema #root {
 
 .pack-promo-apply {
   min-width: 64px;
+  min-height: 44px;
+  padding: 0 16px;
   border: 0;
   border-radius: 16px;
   background: #7fe231;
   font: inherit;
   font-weight: 800;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .pack-promo-error {

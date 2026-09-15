@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { TuningValues } from '../render/tuning';
 import { quality, type QualitySettings } from '../render/quality';
+import { hangingLightScale } from './hangingLight';
 
 /**
  * Lighting ported from build_scene() in scripts/render-idyllic-world.py.
@@ -36,8 +37,10 @@ export class Lighting {
   private fill: THREE.DirectionalLight;
   private bounce: THREE.DirectionalLight;
   private hanging = false;
+  private look: QualitySettings;
 
   constructor(look: QualitySettings = quality(), hanging = false) {
+    this.look = look;
     this.group.name = 'lighting';
 
     this.sun = new THREE.DirectionalLight(SUN_WARM.clone(), 1);
@@ -96,9 +99,9 @@ export class Lighting {
       FOCUS.z - Math.cos(azimuth) * horizontal * SUN_DISTANCE,
     );
 
-    // A little less fill than the garden so umbra still reads, but not ink.
-    this.sky.intensity = values.skyIntensity * (this.hanging ? 0.88 : 1);
-    this.fill.intensity = values.fillIntensity * (this.hanging ? 0.78 : 1);
-    this.bounce.intensity = values.bounceIntensity * (this.hanging ? 0.85 : 1);
+    const scale = hangingLightScale(this.hanging, this.look.tier);
+    this.sky.intensity = values.skyIntensity * scale.sky;
+    this.fill.intensity = values.fillIntensity * scale.fill;
+    this.bounce.intensity = values.bounceIntensity * scale.bounce;
   }
 }

@@ -1,10 +1,16 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { assetUrl } from '../../assetUrl';
 import { quality } from '../render/quality';
 import { stylize, trackRoughness } from '../render/stylized';
 import { dressLotusWater } from '../world/cartoonWater';
+import { isPackedFoliage } from './packFoliage';
+import { flattenPackedScene, GLB_LOAD_BATCH, type PackedPrimitive } from './packModel';
 import { disposeObjectResources, materialTextures, TextureDisposer } from './resourceDisposal';
+
+export { GLB_LOAD_BATCH } from './packModel';
 
 /**
  * Loads the Idyllic Fantasy Nature assets exported by
@@ -47,7 +53,7 @@ const EXTRA_MODELS = [
   {
     name: 'whimsy-isle',
     path: `${assetUrl('models/props/meadow/whimsy-isle.glb')}?v=raw`,
-    mobilePath: `${assetUrl('models/props/meadow/whimsy-isle-mobile.glb')}?v=mobile4`,
+    mobilePath: `${assetUrl('models/props/meadow/whimsy-isle-mobile-gpu.glb')}?v=gpu1`,
   },
   { name: 'whimsywood-tree', path: assetUrl('models/props/meadow/whimsywood-tree.glb') },
   { name: 'blossom-tree', path: assetUrl('models/props/meadow/blossom-tree.glb') },
@@ -112,11 +118,7 @@ type Manifest = {
   ground: Record<string, string>;
 };
 
-export type IdyllicPrimitive = {
-  geometry: THREE.BufferGeometry;
-  material: THREE.MeshStandardMaterial;
-  materialName: string;
-};
+export type IdyllicPrimitive = PackedPrimitive;
 
 export type IdyllicModel = {
   name: string;
@@ -131,6 +133,7 @@ export class IdyllicLibrary {
   private textures = new Map<string, THREE.Texture>();
   private manifest!: Manifest;
   private loader = new GLTFLoader();
+  private ktx2?: KTX2Loader;
   private inflight = new Map<string, Promise<void>>();
   private ownedTextures = new Set<THREE.Texture>();
   private textureDisposer = new TextureDisposer();
@@ -142,8 +145,10 @@ export class IdyllicLibrary {
     onProgress?: (done: number, total: number) => void,
     preload: readonly string[] = ['floating-island'],
     signal?: AbortSignal,
+    renderer?: THREE.WebGLRenderer,
   ): Promise<IdyllicLibrary> {
     const library = new IdyllicLibrary();
+    library.attachDecoders(renderer);
     const abort = () => library.dispose();
     signal?.addEventListener('abort', abort, { once: true });
     library.unlinkAbort = () => signal?.removeEventListener('abort', abort);
@@ -159,6 +164,16 @@ export class IdyllicLibrary {
       library.dispose();
       throw error;
     }
+  }
+
+  private attachDecoders(renderer?: THREE.WebGLRenderer) {
+    this.loader.setMeshoptDecoder(MeshoptDecoder);
+    if (!renderer) return;
+    const ktx2 = new KTX2Loader();
+    ktx2.setTranscoderPath(assetUrl('basis/'));
+    ktx2.detectSupport(renderer);
+    this.loader.setKTX2Loader(ktx2);
+    this.ktx2 = ktx2;
   }
 
   canLoad(name: string): boolean {
@@ -177,7 +192,7 @@ export class IdyllicLibrary {
     this.assertActive();
     const wanted = [...new Set(names)].filter((name) => this.canLoad(name));
     let done = 0;
-    const batchSize = 8;
+    const batchSize = GLB_LOAD_BATCH;
     for (let i = 0; i < wanted.length; i += batchSize) {
       await Promise.all(
         wanted.slice(i, i + batchSize).map(async (name) => {
@@ -266,7 +281,7 @@ export class IdyllicLibrary {
   }
 
   /** Keeps a packed GLB material instead of swapping it for a pack atlas. */
-  private keepMaterial(source: THREE.Material): THREE.MeshStandardMaterial {
+  private keepMaterial(source: THREE.Material, modelName: string): THREE.MeshStandardMaterial {
     const material =
       source instanceof THREE.MeshStandardMaterial
         ? source.clone()
@@ -279,7 +294,14 @@ export class IdyllicLibrary {
     material.vertexColors = false;
     if (material.map) material.map.colorSpace = THREE.SRGBColorSpace;
     material.roughness = Math.max(material.roughness, 0.72);
-    stylize(material, { translucent: false });
+    const foliage = isPackedFoliage(modelName);
+    // Meshy canopies are leaf cards. Front-only + no bleed turns the
+    // camera-facing underside into a black blob on the phone.
+    if (foliage) {
+      material.side = THREE.DoubleSide;
+      material.shadowSide = THREE.DoubleSide;
+    }
+    stylize(material, { translucent: foliage });
     trackRoughness(material);
     this.materials.set(material.uuid, material);
     return material;
@@ -354,33 +376,18 @@ export class IdyllicLibrary {
   }
 
   /**
-   * Collapses a GLB into one primitive per material, in world space, with the
-   * footprint centred on the origin and the base at y = 0.
+   * Packed extras keep loader attribute types. Centering lives on
+   * primitive.matrix — see packModel.ts.
    */
   private flattenPacked(name: string, scene: THREE.Object3D): IdyllicModel {
-    scene.updateMatrixWorld(true);
-    const primitives: IdyllicPrimitive[] = [];
-
-    scene.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      const geometry = mesh.geometry.clone();
-      geometry.applyMatrix4(mesh.matrixWorld);
-      if (name === 'wooden-lantern') geometry.rotateX(Math.PI / 2);
-      if (name === 'garden-gate') standGardenGate(geometry);
-      if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
-      const source = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-      if (!source) return;
-      const material = this.keepMaterial(source);
-      if (name === 'lotus-pond') dressLotusWater(material);
-      primitives.push({
-        geometry,
-        material,
-        materialName: source.name || name,
-      });
-    });
-
-    return this.centerPrimitives(name, primitives);
+    return flattenPackedScene(
+      name,
+      scene,
+      (source) => this.keepMaterial(source, name),
+      (modelName, material) => {
+        if (modelName === 'lotus-pond') dressLotusWater(material);
+      },
+    );
   }
 
   private flatten(name: string, scene: THREE.Object3D, keepMaterials = false): IdyllicModel {
@@ -418,7 +425,7 @@ export class IdyllicLibrary {
       }
       primitives.push({
         geometry: merged,
-        material: keepMaterials ? this.keepMaterial(bucket.source) : this.material(materialName),
+        material: keepMaterials ? this.keepMaterial(bucket.source, name) : this.material(materialName),
         materialName,
       });
     }
@@ -463,6 +470,8 @@ export class IdyllicLibrary {
     this.textures.clear();
     this.ownedTextures.clear();
     this.inflight.clear();
+    this.ktx2?.dispose();
+    this.ktx2 = undefined;
   }
 }
 
@@ -508,8 +517,11 @@ const MEADOW_MOBILE_MODELS = new Set([
 function extraModelPath(extra: ExtraModel): string {
   if (quality().tier !== 'low') return extra.path;
   let mobilePath = 'mobilePath' in extra ? extra.mobilePath : undefined;
+  if (!mobilePath && extra.name === 'floating-island') {
+    mobilePath = `${assetUrl('models/props/floating-island-gpu.glb')}?v=gpu1`;
+  }
   if (!mobilePath && ROOT_MOBILE_MODELS.has(extra.name)) {
-    mobilePath = `${assetUrl(`models/props/mobile/${extra.name}.glb`)}?v=mobile1`;
+    mobilePath = `${assetUrl(`models/props/mobile/${extra.name}-gpu.glb`)}?v=gpu1`;
   }
   if (!mobilePath && MEADOW_MOBILE_MODELS.has(extra.name)) {
     mobilePath = `${assetUrl(`models/props/meadow/mobile/${extra.name}.glb`)}?v=mobile1`;
@@ -523,76 +535,6 @@ function extraModelPath(extra: ExtraModel): string {
     /* SSR/tests */
   }
   return mobilePath;
-}
-
-/**
- * Put the arch on its two posts. Meshy and Blender glTF disagree about Y-up,
- * so we do not trust a baked rotation: find the wide end (feet) and the narrow
- * end (crown), then rotate until feet sit at min Y.
- */
-function standGardenGate(geometry: THREE.BufferGeometry) {
-  const pos = geometry.getAttribute('position');
-  if (!pos) return;
-  const point = new THREE.Vector3();
-  const min = new THREE.Vector3(Infinity, Infinity, Infinity);
-  const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
-  for (let i = 0; i < pos.count; i++) {
-    point.fromBufferAttribute(pos, i);
-    min.min(point);
-    max.max(point);
-  }
-  const size = max.clone().sub(min);
-
-  const endSpread = (axis: 0 | 1 | 2, high: boolean) => {
-    const lo = min.getComponent(axis);
-    const span = size.getComponent(axis) || 1;
-    const edge = high ? lo + span * 0.92 : lo + span * 0.08;
-    const a = ((axis + 1) % 3) as 0 | 1 | 2;
-    const b = ((axis + 2) % 3) as 0 | 1 | 2;
-    let minA = Infinity;
-    let maxA = -Infinity;
-    let minB = Infinity;
-    let maxB = -Infinity;
-    let hits = 0;
-    for (let i = 0; i < pos.count; i++) {
-      point.fromBufferAttribute(pos, i);
-      const t = point.getComponent(axis);
-      if (high ? t < edge : t > edge) continue;
-      hits++;
-      const va = point.getComponent(a);
-      const vb = point.getComponent(b);
-      if (va < minA) minA = va;
-      if (va > maxA) maxA = va;
-      if (vb < minB) minB = vb;
-      if (vb > maxB) maxB = vb;
-    }
-    if (hits < 8) return 0;
-    return maxA - minA + (maxB - minB);
-  };
-
-  let axis: 0 | 1 | 2 = 1;
-  let score = -1;
-  let feetHigh = false;
-  for (const candidate of [0, 1, 2] as const) {
-    const low = endSpread(candidate, false);
-    const high = endSpread(candidate, true);
-    const contrast = Math.abs(high - low);
-    if (contrast > score) {
-      score = contrast;
-      axis = candidate;
-      feetHigh = high > low;
-    }
-  }
-
-  if (axis === 1) {
-    if (feetHigh) geometry.rotateZ(Math.PI);
-    return;
-  }
-  if (axis === 2) {
-    geometry.rotateX(feetHigh ? Math.PI / 2 : -Math.PI / 2);
-    return;
-  }
-  geometry.rotateZ(feetHigh ? -Math.PI / 2 : Math.PI / 2);
 }
 
 const ATTRIBUTES = ['position', 'normal', 'uv', 'color'] as const;

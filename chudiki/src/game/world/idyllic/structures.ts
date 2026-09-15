@@ -19,6 +19,7 @@ import type { Rng } from '../../core/rng';
 import { range } from '../../core/rng';
 import { createToyMaterial } from '../../core/geometry';
 import { withWhiteVertexColors } from './geometry';
+import { placePackedMesh } from '../../assets/packModel';
 
 /**
  * The built landmarks, ported from build_bridge / build_gate_and_house /
@@ -103,6 +104,7 @@ function placeModel(
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.name = name;
+    placePackedMesh(mesh, primitive);
     parent.add(mesh);
   }
 }
@@ -570,6 +572,7 @@ function buildGate(library: IdyllicLibrary, terrain: Terrain, rng: Rng): THREE.G
         mesh.scale.setScalar(scale);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        placePackedMesh(mesh, primitive);
         group.add(mesh);
       }
     }

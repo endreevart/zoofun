@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { IdyllicLibrary } from './IdyllicLibrary';
+import { multiplyPlacement } from './packModel';
 
 /**
  * Collects placements first, then emits one InstancedMesh per model primitive.
@@ -149,6 +150,7 @@ export class InstancedScatter {
               quaternion,
               scale,
             );
+            multiplyPlacement(matrix, primitive);
             mesh.setMatrixAt(index, matrix);
 
             if (placement.tint) {
@@ -226,6 +228,7 @@ export function composePlacement(
   modelSize: THREE.Vector3,
   placement: Placement,
   matrix: THREE.Matrix4,
+  basis?: THREE.Matrix4,
 ) {
   const modelWidth = Math.max(modelSize.x, modelSize.z);
   const unitByHeight = modelSize.y > 1e-4 ? 1 / modelSize.y : 1;
@@ -242,6 +245,7 @@ export function composePlacement(
     quaternion,
     scale,
   );
+  if (basis) matrix.multiply(basis);
 }
 
 /** Small brightness/hue jitter so repeated models stop reading as copies. */

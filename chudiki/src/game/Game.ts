@@ -258,6 +258,7 @@ export class Game {
           catalog: options.catalog,
           diyProps: options.diyProps,
           signal: this.startAbort.signal,
+          renderer: this.renderer,
         },
       );
     } catch (error) {
@@ -327,6 +328,18 @@ export class Game {
     if (!isHangingShell(this.world.shell)) this.seedParkResidents();
     if (this.creatures.size > 0) {
       await this.loadRecordings([...this.creatures.keys()]);
+    }
+    if (this.disposed) return;
+    // compileAsync walks the scene before a shadow pass exists. Programs then
+    // cache without a live map, and the garden isle samples empty shadows.
+    if (this.renderer.shadowMap.enabled) {
+      this.renderer.shadowMap.needsUpdate = true;
+      this.renderer.render(this.scene, this.camera);
+    }
+    try {
+      await this.renderer.compileAsync(this.scene, this.camera);
+    } catch {
+      /* First frame still draws; compile is only to skip the hitch. */
     }
     if (this.disposed) return;
 

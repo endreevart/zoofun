@@ -49,7 +49,7 @@ assert.equal(phone.shafts, false);
 assert.equal(phone.shadows, true);
 assert.equal(phone.softShadows, false, 'PCFSoft plus a 2048 map is the iPhone hitch');
 assert.equal(phone.antialias, false, 'canvas MSAA is unused once PostFx owns the frame');
-assert.equal(phone.pixelRatio, 1.25);
+assert.equal(phone.pixelRatio, 2);
 assert.equal(phone.shadowMapSize, 1024);
 assert.equal(phone.composerHalfFloat, false, 'HalfFloat MSAA targets go black on iOS');
 assert.equal(phone.composerSamples, 0);
@@ -60,7 +60,7 @@ assert.ok(phone.grassBlades < desk.grassBlades);
 
 const safari = settingsFromHints({ ...iphone, deviceMemory: undefined });
 assert.equal(safari.tier, 'low');
-assert.equal(safari.pixelRatio, 1.25);
+assert.equal(safari.pixelRatio, 2);
 
 const forcedLow = settingsFromHints(desktop, 'low');
 assert.equal(forcedLow.tier, 'low');
@@ -95,7 +95,7 @@ assert.equal(desk.bloom, true);
 assert.equal(desk.softShadows, true);
 
 const gardenPhone = lookForShell(phone, false);
-assert.equal(gardenPhone.pixelRatio, 1.25);
+assert.equal(gardenPhone.pixelRatio, 2);
 assert.equal(gardenPhone.composerHalfFloat, false);
 assert.equal(gardenPhone.softShadows, false);
 
@@ -111,4 +111,10 @@ assert.equal(meadowDesk.softShadows, true);
 
 const meadowPhone = lookForShell(phone, true);
 assert.equal(meadowPhone.softShadows, true);
+assert.equal(meadowPhone.pixelRatio, 2);
 assert.equal(gardenPhone.softShadows, false);
+
+const twoX = settingsFromHints({ ...iphone, devicePixelRatio: 2 });
+assert.equal(twoX.pixelRatio, 2);
+const oneX = settingsFromHints({ ...iphone, devicePixelRatio: 1 });
+assert.equal(oneX.pixelRatio, 1);

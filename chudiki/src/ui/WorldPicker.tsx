@@ -356,12 +356,12 @@ export function WorldPicker({ worlds, onOpen, onError }: Props) {
               onChange={setPromo}
               onApply={() => void applyPromo(paySku ?? payingKind.constructionSku)}
             />
-            <div style={{ marginTop: 18, display: 'flex', gap: 8 }}>
+            <div className="gate-actions">
               <button className="icon-button wide" type="button" onClick={closePay}>
                 Отмена
               </button>
               <button
-                className="big-button primary"
+                className="icon-button wide primary"
                 type="button"
                 disabled={busy}
                 onClick={() => {

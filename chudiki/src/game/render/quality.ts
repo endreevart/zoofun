@@ -42,6 +42,13 @@ export type QualityHints = {
 
 const PHONE_UA = /Android.+Mobile|iPhone|iPod/i;
 
+/** Safe mode stays 1×. Save-Data keeps the old cheap blit. Everyone else 2×. */
+function phonePixelRatio(hints: QualityHints, safeMode: boolean): number {
+  if (safeMode) return 1;
+  if (hints.saveData) return 1.25;
+  return Math.min(hints.devicePixelRatio || 2, 2);
+}
+
 export function settingsFromHints(
   hints: QualityHints,
   force: QualityTier | null = null,
@@ -55,12 +62,14 @@ export function settingsFromHints(
       (hints.coarsePointer && hints.shortSide <= 520));
 
   if (phone) {
-    // One CSS pixel, plain PCF, 8-bit composer, no canvas MSAA. The garden
-    // PostFx blit ignores the canvas's own MSAA, so that extra buffer was
-    // paid for and never seen — until iOS ran out of GPU memory.
+    // 8-bit composer, no canvas MSAA. The garden PostFx blit ignores the
+    // canvas's own MSAA, so that extra buffer was paid for and never seen —
+    // until iOS ran out of GPU memory. 1.25× on a 3× iPhone is why the
+    // lawn looked like a screenshot of a screenshot; 2× is still well
+    // under native and only two 8-bit targets.
     return {
       tier: 'low',
-      pixelRatio: safeMode ? 1 : 1.25,
+      pixelRatio: phonePixelRatio(hints, safeMode),
       antialias: false,
       shadows: !safeMode,
       shadowMapSize: safeMode ? 512 : 1024,

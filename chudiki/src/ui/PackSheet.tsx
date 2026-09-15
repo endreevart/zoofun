@@ -205,12 +205,12 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
               onChange={setPromo}
               onApply={() => void applyPromo(pending.id)}
             />
-            <div style={{ marginTop: 18, display: 'flex', gap: 8 }}>
+            <div className="gate-actions">
               <button className="icon-button wide" type="button" onClick={closePay}>
                 Отмена
               </button>
               <button
-                className="big-button primary"
+                className="icon-button wide primary"
                 type="button"
                 disabled={busy === pending.id}
                 onClick={() => void pay(pending)}

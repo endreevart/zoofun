@@ -107,6 +107,7 @@ export class World implements WalkableQuery {
       catalog?: string[];
       diyProps?: AuthoredProp[];
       signal?: AbortSignal;
+      renderer?: THREE.WebGLRenderer;
     } = {},
   ): Promise<World> {
     const mode = options.mode ?? 'authored';
@@ -120,7 +121,7 @@ export class World implements WalkableQuery {
         ...(shell === 'garden' ? ['grass_a', 'grass_b'] : []),
         ...stamps,
         ...diyProps.map((prop) => prop.model),
-      ], options.signal);
+      ], options.signal, options.renderer);
       const saved: LayoutDocument = { props: diyProps, paths: [], spawns: [] };
       try {
         return new World(library, seed, saved, null, 'diy', shell);
@@ -136,7 +137,7 @@ export class World implements WalkableQuery {
       island,
       ...(shell === 'garden' ? ['grass_a', 'grass_b'] : []),
       ...props.map((prop) => prop.model),
-    ], options.signal);
+    ], options.signal, options.renderer);
     try {
       return new World(library, seed, saved, baked, 'authored', shell);
     } catch (error) {
@@ -341,14 +342,16 @@ export class World implements WalkableQuery {
     if (!group || !this.library.has(next.model)) return;
     const model = this.library.get(next.model);
     const matrix = new THREE.Matrix4();
-    composePlacement(model.size, this.placementOf(next), matrix);
     group.traverse((object) => {
       const mesh = object as THREE.InstancedMesh;
       if (!mesh.isInstancedMesh) return;
-      if (mesh.name.split(':')[0] !== next.model) return;
+      const [modelName, materialName] = mesh.name.split(':');
+      if (modelName !== next.model) return;
       const ids = mesh.userData.propIds as string[] | undefined;
       const instance = ids?.indexOf(next.id) ?? -1;
       if (instance < 0) return;
+      const primitive = model.primitives.find((item) => item.materialName === materialName);
+      composePlacement(model.size, this.placementOf(next), matrix, primitive?.matrix);
       mesh.setMatrixAt(instance, matrix);
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere();
