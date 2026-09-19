@@ -22,6 +22,7 @@ assert.equal(shouldSendToAuth(null, '', false), true);
 assert.equal(shouldSendToAuth(null, '?studio=1', false), true, 'shipped island ignores studio');
 assert.equal(shouldSendToAuth(null, '?studio=1', true), false);
 assert.equal(shouldSendToAuth(null, '?arcade=1', true), false);
+assert.equal(shouldSendToAuth(null, '?ui=pick', true), false);
 assert.equal(shouldSendToAuth(null, '?tv=1', false), false);
 assert.equal(shouldSendToAuth(null, '?visit=abc12345', false), false);
 assert.equal(shouldSendToAuth('parent-token', '?tv=1', false), false);

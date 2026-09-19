@@ -4,13 +4,20 @@ import { disposeScatter, InstancedScatter } from '../assets/InstancedScatter';
 import type { IdyllicLibrary } from '../assets/IdyllicLibrary';
 import {
   defaultStamp,
-  DIY_PROP_CAP,
   plazaChildCatalog,
   toPlacement,
   type AuthoredProp,
 } from '../world/layoutAuthored';
 import { getIslandAudio } from '../audio/AudioBus';
 import { PLAZA_WALK } from './plazaCopy';
+import {
+  nearPlazaProps,
+  plazaCastsShadow,
+  plazaLawnLocked,
+  plazaViewCell,
+  takePlazaStampRoom,
+  PLAZA_STAMP_CAP,
+} from './plazaView';
 import {
   deletePlazaStamp,
   fetchPlazaStamps,
@@ -22,7 +29,7 @@ import { resolveModelUrl } from '../drawing/modelUrl';
 import { API_BASE } from '../../api';
 import { asPlazaProp } from './plazaStamp';
 import { clearPlazaHold, isPlazaToyModel, isPlazaToyPreparing, type PlazaLawnToy } from './plazaToy';
-import { seatPlazaToyGlb } from './plazaToyFit';
+import { compactPlazaToyGlb, seatPlazaToyGlb } from './plazaToyFit';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const TAP_SLOP = 24;
@@ -34,6 +41,7 @@ export type PlazaBuildState = {
   selectedId: string | null;
   count: number;
   cap: number;
+  locked: boolean;
   moveArmed: boolean;
 };
 
@@ -78,6 +86,11 @@ export class PlazaStudio {
   private toyGhostMesh: THREE.Object3D | null = null;
   private toyGhostMeshSrc = '';
   private toyGhostAt = new THREE.Vector3();
+  private viewX = 0;
+  private viewZ = 0;
+  private viewCell = '';
+  private shadeCell = '';
+  private viewToken = 0;
 
   constructor(options: {
     library: IdyllicLibrary;
@@ -133,7 +146,8 @@ export class PlazaStudio {
       holdingModel: this.holdingModel,
       selectedId: this.selectedId,
       count: this.props.length,
-      cap: DIY_PROP_CAP,
+      cap: PLAZA_STAMP_CAP,
+      locked: plazaLawnLocked(this.props),
       moveArmed: this.moveArmed,
     };
   }
@@ -177,7 +191,7 @@ export class PlazaStudio {
 
   /** Same as the garden: tap the card again to put the toy down. */
   setActiveModel(model: string) {
-    if (this.props.length >= DIY_PROP_CAP && this.holdingModel !== model) return;
+    if (plazaLawnLocked(this.props) && this.holdingModel !== model) return;
     this.holdingModel = this.holdingModel === model ? null : model;
     this.selectedId = null;
     this.moveArmed = false;
@@ -592,7 +606,11 @@ export class PlazaStudio {
     });
     if (keep && !this.props.some((prop) => prop.id === keep)) this.selectedId = null;
     const wanted = [
-      ...new Set(this.props.map((prop) => prop.model).filter((model) => !isPlazaToyModel(model))),
+      ...new Set(
+        this.viewProps()
+          .map((prop) => prop.model)
+          .filter((model) => !isPlazaToyModel(model)),
+      ),
     ];
     if (wanted.length) await this.library.ensureAll(wanted);
     this.rebuild();
@@ -602,7 +620,7 @@ export class PlazaStudio {
 
   private async stamp(x: number, z: number) {
     const model = this.holdingModel;
-    if (!model || this.props.length >= DIY_PROP_CAP) return;
+    if (!model || plazaLawnLocked(this.props)) return;
     const toy = isPlazaToyModel(model);
     if (!toy) {
       if (!this.library.has(model)) await this.library.ensure(model);
@@ -625,7 +643,7 @@ export class PlazaStudio {
       modelUrl: this.toyModelUrls.get(model),
       meshStatus: this.toyMeshStatus.get(model),
     };
-    this.props = [...this.props, prop];
+    this.props = takePlazaStampRoom([...this.props, prop], PLAZA_STAMP_CAP);
     this.selectedId = tempId;
     if (toy) {
       clearPlazaHold();
@@ -639,7 +657,10 @@ export class PlazaStudio {
     this.busy += 1;
     const body = await placePlazaStamp(model, prop.x, prop.z, prop.height);
     this.busy = Math.max(0, this.busy - 1);
-    if (!body) return;
+    if (!body) {
+      void this.pull();
+      return;
+    }
     this.rev = body.rev;
     if (body.stamp.still_url) this.toyStills.set(model, body.stamp.still_url);
     if (body.stamp.model_url) this.toyModelUrls.set(model, body.stamp.model_url);
@@ -760,21 +781,90 @@ export class PlazaStudio {
     return hit ? this.hit.clone() : null;
   }
 
+  /** Load and shade only what sits near the walking child. */
+  syncView(x: number, z: number) {
+    this.viewX = x;
+    this.viewZ = z;
+    const cell = plazaViewCell(x, z);
+    if (cell !== this.viewCell) {
+      this.viewCell = cell;
+      void this.ensureNearThenRebuild();
+      return;
+    }
+    const shade = plazaViewCell(x, z, 8);
+    if (shade !== this.shadeCell) {
+      this.shadeCell = shade;
+      this.paintNearShadows();
+    }
+  }
+
+  private viewProps(): AuthoredProp[] {
+    const near = nearPlazaProps(this.props, this.viewX, this.viewZ);
+    const selected = this.selected();
+    if (selected && !near.some((row) => row.id === selected.id)) return [...near, selected];
+    return near;
+  }
+
+  private toyVisible(prop: AuthoredProp): boolean {
+    if (prop.id === this.selectedId) return true;
+    return nearPlazaProps([prop], this.viewX, this.viewZ).length > 0;
+  }
+
+  private async ensureNearThenRebuild() {
+    const token = ++this.viewToken;
+    const wanted = [
+      ...new Set(
+        this.viewProps()
+          .map((prop) => prop.model)
+          .filter((model) => !isPlazaToyModel(model) && !this.library.has(model)),
+      ),
+    ];
+    if (wanted.length) await this.library.ensureAll(wanted);
+    if (token !== this.viewToken) return;
+    this.rebuild();
+  }
+
+  private paintNearShadows() {
+    this.nature?.traverse((object) => {
+      const mesh = object as THREE.InstancedMesh;
+      if (!mesh.isInstancedMesh) return;
+      const sphere = mesh.boundingSphere;
+      if (!sphere) {
+        mesh.castShadow = false;
+        return;
+      }
+      mesh.castShadow = plazaCastsShadow(sphere.center.x, sphere.center.z, this.viewX, this.viewZ);
+      mesh.receiveShadow = true;
+    });
+    this.toyLayer?.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const world = mesh.getWorldPosition(new THREE.Vector3());
+      mesh.castShadow = plazaCastsShadow(world.x, world.z, this.viewX, this.viewZ);
+      mesh.receiveShadow = false;
+    });
+  }
+
   private rebuild() {
     if (this.nature) disposeScatter(this.nature);
     const scatter = new InstancedScatter(this.library);
-    for (const prop of this.props) {
-      if (!this.library.has(prop.model)) continue;
+    const placed = this.viewProps().filter((prop) => !isPlazaToyModel(prop.model) && this.library.has(prop.model));
+    for (const prop of placed) {
       scatter.place(prop.model, toPlacement(prop, 0));
     }
     this.nature = scatter.build({
       name: 'plaza-nature',
-      castShadow: true,
+      spatial: true,
+      spatialMinTriangles: 0,
+      castShadow: false,
       receiveShadow: true,
     });
-    this.tagInstances(this.nature);
+    this.tagInstances(this.nature, placed);
     this.scene.add(this.nature);
     this.rebuildToys();
+    this.viewCell = plazaViewCell(this.viewX, this.viewZ);
+    this.shadeCell = plazaViewCell(this.viewX, this.viewZ, 8);
+    this.paintNearShadows();
   }
 
   private clearToys() {
@@ -795,13 +885,14 @@ export class PlazaStudio {
     const group = new THREE.Group();
     group.name = 'plaza-toys';
     for (const prop of this.props) {
-      if (!isPlazaToyModel(prop.model)) continue;
+      if (!isPlazaToyModel(prop.model) || !this.toyVisible(prop)) continue;
       const modelUrl = prop.modelUrl || this.toyModelUrls.get(prop.model);
       if (modelUrl) this.placeToyGlb(group, prop, modelUrl);
       else this.placeToyStill(group, prop);
     }
     this.scene.add(group);
     this.toyLayer = group;
+    this.paintNearShadows();
   }
 
   private placeToyStill(group: THREE.Group, prop: AuthoredProp) {
@@ -813,7 +904,7 @@ export class PlazaStudio {
     });
     const card = new THREE.Mesh(
       new THREE.PlaneGeometry(Math.max(0.6, prop.height * 0.72), Math.max(0.8, prop.height)),
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshLambertMaterial({
         transparent: true,
         opacity: preparing ? 0.82 : 1,
         side: THREE.DoubleSide,
@@ -823,16 +914,17 @@ export class PlazaStudio {
     card.position.set(prop.x, Math.max(0.4, prop.height / 2), prop.z);
     card.rotation.y = prop.rotationY;
     card.userData.propId = prop.id;
-    card.castShadow = true;
+    card.castShadow = plazaCastsShadow(prop.x, prop.z, this.viewX, this.viewZ);
+    card.receiveShadow = false;
     const cached = this.toyTextures.get(src);
     if (cached) {
-      (card.material as THREE.MeshStandardMaterial).map = cached;
-      (card.material as THREE.MeshStandardMaterial).needsUpdate = true;
+      (card.material as THREE.MeshLambertMaterial).map = cached;
+      (card.material as THREE.MeshLambertMaterial).needsUpdate = true;
     } else {
       this.loader.load(src, (texture) => {
         texture.colorSpace = THREE.SRGBColorSpace;
         this.toyTextures.set(src, texture);
-        const material = card.material as THREE.MeshStandardMaterial;
+        const material = card.material as THREE.MeshLambertMaterial;
         material.map = texture;
         material.needsUpdate = true;
         const image = texture.image as { width?: number; height?: number };
@@ -868,6 +960,7 @@ export class PlazaStudio {
     this.gltf.load(
       resolved,
       (gltf) => {
+        compactPlazaToyGlb(gltf.scene);
         this.toyGlbs.set(resolved, gltf.scene);
         this.rebuildToys();
       },
@@ -890,14 +983,15 @@ export class PlazaStudio {
       x: prop.x,
       z: prop.z,
       rotationY: prop.rotationY,
+      castShadow: plazaCastsShadow(prop.x, prop.z, this.viewX, this.viewZ),
     });
     clone.userData.propId = prop.id;
     group.add(clone);
   }
 
-  private tagInstances(group: THREE.Group) {
+  private tagInstances(group: THREE.Group, placed: AuthoredProp[]) {
     const idsByModel = new Map<string, string[]>();
-    for (const prop of this.props) {
+    for (const prop of placed) {
       const list = idsByModel.get(prop.model) ?? [];
       list.push(prop.id);
       idsByModel.set(prop.model, list);

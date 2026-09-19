@@ -1,8 +1,13 @@
 /** Which picture the hatch screen should show: studio toy vs generated garden. */
 
 export const HATCH_DRAW_ANOTHER = 'Нарисовать ещё';
-export const HATCH_GO_GARDEN = 'В сад!';
+export const HATCH_GO_GARDEN = 'В сад';
+export const HATCH_TAP_HINT = 'Нажми на Зуфика — увидишь его сад';
 export const HATCH_MESH_WAIT = 'Объём ещё лепится — можно не ждать';
+
+export function hatchStillLabel(count: number): string {
+  return `Доступно: ${Math.max(0, Math.floor(count))}`;
+}
 
 export function hatchPreviewSrc(
   still: string | null,

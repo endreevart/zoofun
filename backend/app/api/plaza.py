@@ -12,7 +12,7 @@ from app.accounts.creatures import creature_id, is_plaza_ready
 from app.accounts.store import ChildProfile, ParentAccount, store
 from app.analytics.actions import record_action
 from app.api.deps import require_session, require_session_image
-from app.crm.queries import creature_image
+from app.crm.queries import creature_image, creature_model_bytes, creature_postcard
 from app.plaza import digs as plaza_digs
 from app.plaza import stamps as plaza_stamps
 from app.plaza.rooms import (
@@ -319,28 +319,57 @@ async def plaza_stamps_delete(
     return removed
 
 
+def _plaza_owner_child(parent_id: str, child_id: str, spec_id: str) -> str | None:
+    wanted = spec_id.strip()
+    if not wanted:
+        return None
+    owned = any(creature_id(row) == wanted for row in store.list_zoo(child_id))
+    if owned:
+        return child_id
+    try:
+        peers = room_of(parent_id)
+    except PlazaUnavailable as exc:
+        raise _unavailable() from exc
+    hit = next((item for item in peers if item.spec_id == wanted), None)
+    return hit.child_id if hit is not None else None
+
+
 @router.get("/portraits/{spec_id}")
 async def plaza_portrait(
     spec_id: str,
     pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session_image)],
 ) -> Response:
     parent, child = pair
-    wanted = spec_id.strip()
-    if not wanted:
-        raise HTTPException(status_code=404, detail="no_image")
-    owned = any(creature_id(row) == wanted for row in store.list_zoo(child.id))
-    owner_child = child.id if owned else None
+    owner_child = _plaza_owner_child(parent.id, child.id, spec_id)
     if owner_child is None:
-        try:
-            peers = room_of(parent.id)
-        except PlazaUnavailable as exc:
-            raise _unavailable() from exc
-        hit = next((item for item in peers if item.spec_id == wanted), None)
-        if hit is None:
-            raise HTTPException(status_code=404, detail="no_image")
-        owner_child = hit.child_id
-    image = creature_image(owner_child, wanted)
+        raise HTTPException(status_code=404, detail="no_image")
+    image = creature_postcard(owner_child, spec_id.strip()) or creature_image(
+        owner_child, spec_id.strip()
+    )
     if image is None:
         raise HTTPException(status_code=404, detail="no_image")
     raw, media = image
     return Response(content=raw, media_type=media, headers={"Cache-Control": "private, max-age=60"})
+
+
+@router.get("/models/{spec_id}")
+async def plaza_model(
+    spec_id: str,
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session_image)],
+) -> Response:
+    parent, child = pair
+    owner_child = _plaza_owner_child(parent.id, child.id, spec_id)
+    if owner_child is None:
+        raise HTTPException(status_code=404, detail="no_model")
+    raw = creature_model_bytes(owner_child, spec_id.strip())
+    if raw is None:
+        raise HTTPException(status_code=404, detail="no_model")
+    safe = "".join(ch for ch in spec_id.strip() if ch.isalnum() or ch in "-_") or "zufik"
+    return Response(
+        content=raw,
+        media_type="model/gltf-binary",
+        headers={
+            "Cache-Control": "private, max-age=60",
+            "Content-Disposition": f'attachment; filename="{safe}.glb"',
+        },
+    )

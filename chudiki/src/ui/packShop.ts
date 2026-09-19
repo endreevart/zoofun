@@ -42,9 +42,18 @@ export function packShopTitle(remaining: number, forFriend = false): string {
   return remaining > 0 ? 'Пополнить сад' : 'Ваш первый Зуфик ожил!';
 }
 
+export function packShopRemainLabel(remaining: number): string {
+  const n = Math.max(0, Math.floor(remaining));
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `Осталось ${n} оживление`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `Осталось ${n} оживления`;
+  return `Осталось ${n} оживлений`;
+}
+
 export function packShopLead(remaining: number, forFriend = false): string {
   if (remaining > 0) {
-    return 'Каждый зуфик — 10 картинок. Удаление слот не возвращает.';
+    return 'Каждый зуфик — 10 картинок. Удаление не возвращает оживление.';
   }
   if (forFriend) {
     return 'Этот рисунок ждёт. Оживите его или сразу соберите маленькую компанию.';

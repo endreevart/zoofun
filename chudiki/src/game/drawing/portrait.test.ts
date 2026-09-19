@@ -144,4 +144,5 @@ assert.equal(
   displayStillUrl('/v1/plaza/toys/ab12/still'),
   '/api/zoo/v1/plaza/toys/ab12/still',
 );
+assert.equal(displayStillUrl('/v1/plaza/models/spot-1'), '/api/zoo/v1/plaza/models/spot-1');
 assert.equal(displayStillUrl(null), null);

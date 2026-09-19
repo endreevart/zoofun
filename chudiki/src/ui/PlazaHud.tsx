@@ -91,10 +91,15 @@ export function PlazaHud({
       : [];
     if (!names.length) return;
     let cancelled = false;
-    void studio.ensure(names).then(() => {
-      if (cancelled) return;
-      setThumbs((prev) => ({ ...prev, ...studio.thumbs(names) }));
-    });
+    void (async () => {
+      for (const name of names) {
+        await studio.ensure([name]);
+        if (cancelled) return;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (cancelled) return;
+        setThumbs((prev) => ({ ...prev, ...studio.thumbs([name]) }));
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -126,12 +131,12 @@ export function PlazaHud({
   const selected = studio.selected();
   const canEdit = Boolean(selected && (!isPlazaToyModel(selected.model) || selected.mine !== false));
   const picking = Boolean(group);
-  const full = state.cap > 0 && state.count >= state.cap;
+  const locked = state.locked;
   const fill = state.cap > 0 ? Math.min(1, state.count / state.cap) : 0;
   const pin = selected && canEdit ? pinPropActions(hud, propActionsRect()) : null;
 
   const pickModel = (model: string) => {
-    if (full && state.holdingModel !== model) {
+    if (locked && state.holdingModel !== model) {
       if (claimCueOnce('diy_full')) onSpeak('diy_full');
       return;
     }
@@ -146,7 +151,7 @@ export function PlazaHud({
   };
 
     const pickToy = (toy: PlazaLawnToy) => {
-    if (full && state.holdingModel !== toy.model) {
+    if (locked && state.holdingModel !== toy.model) {
       if (claimCueOnce('diy_full')) onSpeak('diy_full');
       return;
     }
@@ -187,7 +192,7 @@ export function PlazaHud({
                   key={toy.id}
                   type="button"
                   aria-busy={preparing || undefined}
-                  aria-disabled={full && state.holdingModel !== toy.model}
+                  aria-disabled={locked && state.holdingModel !== toy.model}
                   className={`diy-card${state.holdingModel === toy.model ? ' is-on' : ''}${preparing ? ' is-preparing' : ''}`}
                   onClick={() => pickToy(toy)}
                 >
@@ -201,7 +206,7 @@ export function PlazaHud({
             <button
               key={model}
               type="button"
-              aria-disabled={full && state.holdingModel !== model}
+              aria-disabled={locked && state.holdingModel !== model}
               className={`diy-card${state.holdingModel === model ? ' is-on' : ''}`}
               onClick={() => pickModel(model)}
             >

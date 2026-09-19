@@ -73,10 +73,15 @@ export function DiyHud({ game, building, arcade = false, onSetBuild, onPicking, 
       : [];
     if (!names.length) return;
     let cancelled = false;
-    void game.library.ensureAll(names).then(() => {
-      if (cancelled) return;
-      setThumbs((prev) => ({ ...prev, ...game.captureCatalogThumbs(names) }));
-    });
+    void (async () => {
+      for (const name of names) {
+        await game.library.ensure(name);
+        if (cancelled) return;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (cancelled) return;
+        setThumbs((prev) => ({ ...prev, ...game.captureCatalogThumbs([name]) }));
+      }
+    })();
     return () => {
       cancelled = true;
     };

@@ -12,6 +12,7 @@ import {
   fetchPlazaReady,
   fetchPlazaToys,
   leavePlaza,
+  toysFromLocal,
   type PlazaMound,
   type PlazaPeer,
   type PlazaTicket,
@@ -25,11 +26,20 @@ import {
   type PlazaEmoteId,
 } from '../game/plaza/plazaCopy';
 import { loadCreatures } from '../game/persistence/zooStore';
+import { API_BASE } from '../api';
+import { resolveModelUrl } from '../game/drawing/modelUrl';
+import { preloadMeshyModel } from '../game/creatures/DrawingChudikBuilder';
 import { getIslandAudio } from '../game/audio/AudioBus';
 import { PLAZA_CUE_IDS, PLAZA_TOY_WAIT_MS, plazaHidesHome, plazaIntroSpec } from '../game/plaza/plazaCues';
 import type { CueId } from '../game/audio/cues';
 import { greetPlazaLawn, hintPlaza, resetPlazaEnter, speakPlaza, stopPlazaVoice, watchPlazaIntro } from '../game/plaza/plazaVoice';
-import { moundsFromRoom, ticketsFromRoom, PLAZA_FIND_MS } from '../game/plaza/plazaDig';
+import {
+  moundsFromRoom,
+  refillPlazaMounds,
+  ticketsFromRoom,
+  PLAZA_FIND_MS,
+  PLAZA_TICKET_CRYSTALS,
+} from '../game/plaza/plazaDig';
 import {
   absorbPlazaToys,
   clearPlazaHold,
@@ -77,6 +87,7 @@ export function PlazaYard({ onLeave, onError, onCredit, onDraw, onPhoto, onDrawT
   const leaving = useRef(false);
   const digging = useRef(false);
   const localOnly = useRef(false);
+  const localWins = useRef(0);
   const burstId = useRef(0);
   const findTimer = useRef(0);
   const walk = useRef({ forward: 0, right: 0 });
@@ -117,8 +128,13 @@ export function PlazaYard({ onLeave, onError, onCredit, onDraw, onPhoto, onDrawT
   const join = async (specId: string, roster: PlazaToy[]) => {
     void getIslandAudio().unlock();
     trackAction('plaza.enter');
-    await rememberSelf(specId, roster);
-    const room = await enterPlaza(specId);
+    const selfTask = rememberSelf(specId, roster);
+    const roomTask = enterPlaza(specId);
+    const records = await loadCreatures();
+    const modelUrl = records.find((row) => row.spec.id === specId)?.spec.drawing?.modelUrl;
+    if (modelUrl) void preloadMeshyModel(resolveModelUrl(modelUrl, API_BASE));
+    await selfTask;
+    const room = await roomTask;
     if (room) {
       localOnly.current = false;
       applyRoom(room);
@@ -130,12 +146,19 @@ export function PlazaYard({ onLeave, onError, onCredit, onDraw, onPhoto, onDrawT
       return;
     }
     localOnly.current = true;
+    localWins.current = 0;
     applyRoom(soloPlazaRoom(toy));
   };
 
   useEffect(() => {
     let dead = false;
     void (async () => {
+      const local = toysFromLocal(await loadCreatures());
+      if (dead) return;
+      if (plazaPickMode(local.length) === 'many') {
+        setToys(local);
+        setPhase('pick');
+      }
       const ready = await fetchPlazaReady();
       if (dead) return;
       const mode = plazaPickMode(ready.length);
@@ -379,10 +402,11 @@ export function PlazaYard({ onLeave, onError, onCredit, onDraw, onPhoto, onDrawT
     };
     void (async () => {
       if (localOnly.current) {
-        setMounds((list) => list.filter((item) => item.id !== id));
+        setMounds((list) => refillPlazaMounds(list.filter((item) => item.id !== id)));
         setNearMound(null);
         digging.current = false;
-        if (hit) {
+        if (hit && localWins.current < PLAZA_TICKET_CRYSTALS) {
+          localWins.current += 1;
           const ticket = { id: `local-${Date.now()}`, x: hit.x, z: hit.z };
           celebrate([ticket]);
           window.setTimeout(() => {
@@ -434,7 +458,10 @@ export function PlazaYard({ onLeave, onError, onCredit, onDraw, onPhoto, onDrawT
   if (phase === 'need') {
     return (
       <div className="plaza-sheet" role="dialog" aria-label="Нужен зуфик">
-        <div className="plaza-pick plaza-need">
+        <div
+          className="plaza-pick plaza-need"
+          style={{ ['--plaza-meadow' as string]: `url("${assetUrl('/ui/bg-meadow.webp')}")` }}
+        >
           <FirstDrawPrompt plaza onDraw={onDraw} onPhoto={onPhoto} onClose={onLeave} />
         </div>
       </div>

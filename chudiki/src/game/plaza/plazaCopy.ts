@@ -15,10 +15,17 @@ export const PLAZA_EMOTES = [
 export type PlazaEmoteId = (typeof PLAZA_EMOTES)[number]['id'];
 
 /** Walkable radius and the grass disk diameter, in metres. */
-export const PLAZA_WALK = 125;
-export const PLAZA_PLANE = 480;
+export const PLAZA_WALK = 280;
+export const PLAZA_PLANE = 960;
+/** Shared lawn may hold more stamps than a private DIY garden. Oldest catalog trees yield. */
+export const PLAZA_STAMP_CAP = 400;
+/** Load and draw catalog meshes inside this radius of the child. */
+export const PLAZA_LOAD_R = 78;
+/** Shadow casters only this close; farther trees stay unshaded. */
+export const PLAZA_SHADOW_R = 26;
+export const PLAZA_VIEW_CELL = 18;
 /** Plaza-only haze so the disk rim melts into the sky. */
-export const PLAZA_FOG = 0.004;
+export const PLAZA_FOG = 0.0025;
 
 export function plazaOnlineLabel(count: number): string {
   const n = Math.max(0, Math.floor(count));
@@ -148,6 +155,7 @@ export function soloPlazaRoom(toy: PlazaToyRow): {
     spec_id: string;
     name: string;
     portrait: string;
+    model?: string;
     emote: string;
     self: boolean;
   }>;

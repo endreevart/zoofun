@@ -126,6 +126,7 @@ export function shouldSendToAuth(
     if (params.has('visit')) return false;
     if (dev && params.has('studio')) return false;
     if (dev && params.has('arcade')) return false;
+    if (dev && params.has('ui')) return false;
   } catch {
     /* ignore */
   }

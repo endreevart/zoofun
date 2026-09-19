@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   lookForHeavyIsland,
+  lookForPlaza,
   lookForShell,
   settingsFromHints,
   type QualityHints,
@@ -76,9 +77,19 @@ assert.equal(recovered.composerHalfFloat, false);
 assert.equal(recovered.maxFps, 30);
 
 const tablet = settingsFromHints(ipad);
-assert.equal(tablet.tier, 'high');
-assert.equal(tablet.gtao, false);
-assert.equal(tablet.bloom, true);
+assert.equal(tablet.tier, 'low');
+assert.equal(tablet.bloom, false);
+assert.equal(tablet.maxFps, 30);
+
+const ipadOs = settingsFromHints({
+  coarsePointer: true,
+  shortSide: 1024,
+  saveData: false,
+  deviceMemory: 8,
+  userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+  devicePixelRatio: 2,
+});
+assert.equal(ipadOs.tier, 'low');
 
 const saver = settingsFromHints({ ...desktop, saveData: true });
 assert.equal(saver.tier, 'low');
@@ -118,3 +129,11 @@ const twoX = settingsFromHints({ ...iphone, devicePixelRatio: 2 });
 assert.equal(twoX.pixelRatio, 2);
 const oneX = settingsFromHints({ ...iphone, devicePixelRatio: 1 });
 assert.equal(oneX.pixelRatio, 1);
+
+const plazaPad = lookForPlaza(tablet);
+assert.equal(plazaPad.bloom, false);
+assert.equal(plazaPad.shafts, false);
+assert.equal(plazaPad.pixelRatio, 1);
+assert.equal(plazaPad.softShadows, false);
+assert.equal(plazaPad.shadowMapSize, 512);
+assert.equal(plazaPad.maxFps, 30);

@@ -11,3 +11,7 @@ export function transferTitle(name: string): string {
 export function transferSummary(name: string, destTitle: string): string {
   return `${name} переедет в «${destTitle}»`;
 }
+
+export function fullMoveSummary(destTitle: string): string {
+  return `Зуфунята переедут в «${destTitle}»`;
+}

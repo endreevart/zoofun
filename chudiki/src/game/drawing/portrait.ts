@@ -35,8 +35,8 @@ export function displayStillUrl(url: string | null): string | null {
   const token = readParentToken();
   if (!token) return resolved;
   const needsToken =
-    /\/v1\/zoo\/creatures\/[^/?#]+\/(?:portrait|postcard)(?:\?|$)/.test(resolved) ||
-    /\/v1\/plaza\/portraits\/[^/?#]+(?:\?|$)/.test(resolved) ||
+    /\/v1\/zoo\/creatures\/[^/?#]+\/(?:portrait|postcard|model)(?:\?|$)/.test(resolved) ||
+    /\/v1\/plaza\/(?:portraits|models)\/[^/?#]+(?:\?|$)/.test(resolved) ||
     /\/v1\/plaza\/toys\/[^/?#]+\/still(?:\?|$)/.test(resolved);
   if (!needsToken) return resolved;
   const sep = resolved.includes('?') ? '&' : '?';

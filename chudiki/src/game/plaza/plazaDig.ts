@@ -7,14 +7,65 @@ export const PLAZA_DIG_NEAR = 5.6;
 /** Draw pad after the ticket has had a moment to float. */
 export const PLAZA_FIND_MS = 2800;
 export const PLAZA_TICKET = '/plaza/ticket.png';
+export const PLAZA_CRYSTAL_MIN = 30;
+export const PLAZA_CRYSTAL_MAX = 30;
+export const PLAZA_CRYSTAL_COUNT = 30;
+export const PLAZA_TICKET_CRYSTALS = 8;
+export const PLAZA_CRYSTAL_INNER = 28;
+export const PLAZA_CRYSTAL_OUTER = 265;
+const MIN_R = PLAZA_CRYSTAL_INNER;
+const MAX_R = PLAZA_CRYSTAL_OUTER;
+const MIN_GAP = 16;
 
-export function localPlazaMounds(): PlazaMound[] {
-  return [
-    { id: 'm0', x: 34, z: 16 },
-    { id: 'm1', x: -30, z: 38 },
-    { id: 'm2', x: 42, z: -28 },
-    { id: 'm3', x: -38, z: -20 },
-  ];
+function mulberry(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function placeAway(from: readonly PlazaMound[], id: string, rand: () => number): PlazaMound {
+  let gap = MIN_GAP;
+  for (let attempt = 0; attempt < 96; attempt += 1) {
+    const radius = Math.sqrt(MIN_R * MIN_R + rand() * (MAX_R * MAX_R - MIN_R * MIN_R));
+    const angle = rand() * Math.PI * 2;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    if (from.every((item) => Math.hypot(item.x - x, item.z - z) >= gap)) {
+      return { id, x, z };
+    }
+    if (attempt === 32 || attempt === 64) gap *= 0.7;
+  }
+  const radius = MIN_R + rand() * (MAX_R - MIN_R);
+  const angle = rand() * Math.PI * 2;
+  return { id, x: Math.cos(angle) * radius, z: Math.sin(angle) * radius };
+}
+
+export function localPlazaMounds(count = PLAZA_CRYSTAL_COUNT, seed = 1): PlazaMound[] {
+  const n = Math.min(PLAZA_CRYSTAL_MAX, Math.max(PLAZA_CRYSTAL_MIN, count));
+  const rand = mulberry(seed);
+  const mounds: PlazaMound[] = [];
+  for (let i = 0; i < n; i += 1) {
+    mounds.push(placeAway(mounds, `m${i}`, rand));
+  }
+  return mounds;
+}
+
+export function refillPlazaMounds(
+  current: readonly PlazaMound[],
+  target = PLAZA_CRYSTAL_COUNT,
+): PlazaMound[] {
+  const next = current.slice();
+  let seq = next.length;
+  const rand = Math.random;
+  while (next.length < target) {
+    seq += 1;
+    next.push(placeAway(next, `m${seq}-${Math.floor(rand() * 1e9)}`, rand));
+  }
+  return next;
 }
 
 export function moundsFromRoom(raw: unknown): PlazaMound[] {

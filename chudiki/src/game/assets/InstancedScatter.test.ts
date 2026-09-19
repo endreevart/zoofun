@@ -39,6 +39,15 @@ assert.deepEqual(
 );
 assert.equal(flowers.length, 1, 'cheap objects keep the minimum draw-call count');
 
+const plazaScatter = new InstancedScatter(library);
+for (const [index, x] of [0, 24, 48, 72, 96, 120].entries()) {
+  plazaScatter.place('flower', { position: new THREE.Vector3(x, 0, index * 8), height: 1 });
+}
+const plazaRoot = plazaScatter.build({ spatial: true, spatialMinTriangles: 0 });
+const plazaFlowers = plazaRoot.children.filter((child) => child.name.startsWith('flower:')) as THREE.InstancedMesh[];
+assert.ok(plazaFlowers.length > 1 && plazaFlowers.length <= 4, 'plaza cheap trees still split for frustum culling');
+disposeScatter(plazaRoot);
+
 setScatterFrustumCulling(root, false);
 assert.ok(trees.every((mesh) => !mesh.frustumCulled));
 setScatterFrustumCulling(root, true);

@@ -34,6 +34,7 @@ import { PlazaYard } from './ui/PlazaYard';
 import { MoveCreaturesSheet } from './ui/MoveCreaturesSheet';
 import { WorldFullPrompt } from './ui/WorldFullPrompt';
 import { WorldDestSheet } from './ui/WorldDestSheet';
+import { LayoutPreview, readLayoutPreview } from './ui/layoutPreview';
 import { DiyHud } from './ui/DiyHud';
 import { SoundSheet } from './ui/SoundSheet';
 import { isAuthoringStudio, isStudio, studioWorldId } from './studioMode';
@@ -328,6 +329,8 @@ function transferPreviewWorlds(): { currentId: string; worlds: GardenWorld[] } |
 
 export function App() {
   if (isTvReceiver()) return <TvReceiver />;
+  const uiPreview = readLayoutPreview();
+  if (uiPreview) return <LayoutPreview mode={uiPreview} />;
   if (sendUnsignedVisitorToAuth()) return null;
 
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -2409,14 +2412,15 @@ export function App() {
         return;
       }
       const game = gameRef.current;
+      const pending: typeof records = [];
       for (const record of records) {
         if (!fitting.includes(record.spec.id)) continue;
-        const next = { ...record.spec, worldId: home };
+        const next = { ...record, spec: { ...record.spec, worldId: home } };
+        pending.push(next);
         if (here === home) {
-          await game?.receiveMoved(next);
+          void game?.receiveMoved(next.spec);
           continue;
         }
-        await saveCreature({ ...record, spec: next });
         if (creatureWorldId(record.spec.worldId) === here) {
           game?.unloadCreature(record.spec.id);
         }
@@ -2424,7 +2428,9 @@ export function App() {
       setMoveDest(null);
       setMoveFrom([]);
       setPickFrom(null);
+      setFullOpen(false);
       flash(fitting.length === ids.length ? 'Зуфунята переехали.' : 'Часть переехала — там мало места.');
+      await Promise.all(pending.map((row) => saveCreature(row, { cloud: 'later' })));
     },
     [flash, world],
   );
@@ -3022,6 +3028,7 @@ export function App() {
             postcardDone={hatchLook.postcardDone}
             name={hatchLook.name}
             canDrawAnother={hatchCanDrawAnother(stillRemainingNow(), remainingNow())}
+            stillRemaining={stillRemainingNow() ?? null}
             meshCooking={hatchLook.meshCooking !== false}
             onDrawAnother={drawAnotherFromHatch}
             onPuzzle={hatchLook.src ? () => {
@@ -3197,7 +3204,9 @@ export function App() {
 
       {fullOpen ? (
         <WorldFullPrompt
-          destinations={moveDestinations(world, quota?.worlds ?? [])}
+          currentId={world ?? WORLD_AUTHORED}
+          worlds={quota?.worlds ?? []}
+          onClose={() => setFullOpen(false)}
           onBuy={() => {
             setFullOpen(false);
             setWorld(null);
@@ -3239,7 +3248,7 @@ export function App() {
 
       {world ? (
       <div className="hud-chrome">
-        {quota && screen === 'zoo' && ready && !guestOn ? (
+        {quota && screen === 'zoo' && ready && !guestOn && !moveDest && !fullOpen && !pickFrom ? (
           <QuotaDock remaining={quota.remaining} stillRemaining={quota.stillRemaining} showStills={quota.used >= 1} onTopUp={() => {
             speak('shop');
             trackAction('shop.topup');

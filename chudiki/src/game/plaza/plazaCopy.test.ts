@@ -5,6 +5,9 @@ import {
   plazaToyStill,
   PLAZA_EMOTES,
   PLAZA_FOG,
+  PLAZA_LOAD_R,
+  PLAZA_SHADOW_R,
+  PLAZA_STAMP_CAP,
   PLAZA_PICK_HINT,
   PLAZA_PICK_HINT_ART,
   PLAZA_PICK_NEXT,
@@ -30,6 +33,7 @@ import {
   plazaPickWindow,
   soloPlazaRoom,
 } from './plazaCopy.ts';
+import { PLAZA_CRYSTAL_COUNT, PLAZA_CRYSTAL_OUTER } from './plazaDig.ts';
 
 assert.equal(plazaOnlineLabel(0), 'Пока тихо');
 assert.equal(plazaOnlineLabel(1), '1 игрок сейчас');
@@ -78,11 +82,16 @@ const solo = soloPlazaRoom({ spec_id: 'a', name: 'Пятнышко', portrait: s
 assert.equal(solo.peers[0].self, true);
 assert.equal(solo.peers.length, 1);
 assert.equal(solo.stamps_rev, 0);
-assert.equal(solo.mounds.length, 4);
+assert.equal(solo.mounds.length, PLAZA_CRYSTAL_COUNT);
 assert.deepEqual(solo.tickets, []);
 
 assert.ok(PLAZA_PLANE > PLAZA_WALK * 2);
+assert.ok(PLAZA_WALK >= 250);
+assert.ok(PLAZA_CRYSTAL_OUTER < PLAZA_WALK);
 assert.ok(PLAZA_FOG > 0);
+assert.equal(PLAZA_STAMP_CAP, 400);
+assert.ok(PLAZA_LOAD_R < PLAZA_WALK);
+assert.ok(PLAZA_SHADOW_R < PLAZA_LOAD_R);
 
 assert.deepEqual(
   PLAZA_EMOTES.map((item) => item.id),

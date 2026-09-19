@@ -12,7 +12,7 @@ from app.persistence.db import session
 from app.persistence.models import PlazaMetaRow, PlazaStampRow, PlazaToyRow
 from app.plaza import toys as plaza_toys
 
-CAP = 258
+CAP = 400
 WALK = 125.0
 STAMP_MODELS = frozenset(
     {
@@ -157,6 +157,25 @@ def list_stamps(viewer_id: str = "") -> dict[str, Any]:
         }
 
 
+def _evict_oldest_catalog(db, need: int) -> int:
+    """Oldest catalog trees yield so a new stamp can land. Paid toys stay."""
+    want = max(0, int(need))
+    if want <= 0:
+        return 0
+    rows = list(
+        db.scalars(select(PlazaStampRow).order_by(PlazaStampRow.created_at, PlazaStampRow.id)).all()
+    )
+    dropped = 0
+    for row in rows:
+        if dropped >= want:
+            break
+        if plaza_toys.is_toy_model(row.model):
+            continue
+        db.delete(row)
+        dropped += 1
+    return dropped
+
+
 def place(model: str, x: float, z: float, height: float, parent_id: str) -> dict[str, Any] | str:
     kind = model.strip()
     toy_id = plaza_toys.toy_id_of_model(kind)
@@ -171,7 +190,11 @@ def place(model: str, x: float, z: float, height: float, parent_id: str) -> dict
             height = toy.height
         count = db.scalar(select(func.count()).select_from(PlazaStampRow)) or 0
         if count >= CAP:
-            return "plaza_full"
+            freed = _evict_oldest_catalog(db, int(count) - CAP + 1)
+            db.flush()
+            count = int(count) - freed
+            if count >= CAP:
+                return "plaza_full"
         now = time.time()
         row = PlazaStampRow(
             id=secrets.token_hex(8),

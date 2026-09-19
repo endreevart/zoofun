@@ -81,6 +81,7 @@ def test_plaza_emote_and_payload() -> None:
     other = next(item for item in body["peers"] if not item["self"])
     assert other["emote"] == "hello"
     assert other["name"] == "Б"
+    assert other["model"] == "/v1/plaza/models/s2"
     assert "parent_id" not in other
     assert rooms.emote("p1", "nope") is None
 
@@ -154,12 +155,43 @@ async def test_plaza_http_enter_heartbeat_and_portrait() -> None:
         spy = await client.get("/v1/plaza/portraits/spot-1", headers=head_c)
         assert spy.status_code == 404
 
+        assert guest.json()["peers"][0]["model"].startswith("/v1/plaza/models/")
+        missing_mesh = await client.get("/v1/plaza/models/spot-1", headers=head_b)
+        assert missing_mesh.status_code == 404
+        spy_mesh = await client.get("/v1/plaza/models/spot-1", headers=head_c)
+        assert spy_mesh.status_code == 404
+
         left = await client.post("/v1/plaza/leave", headers=head_a)
         assert left.status_code == 200
         gone = await client.post("/v1/plaza/heartbeat", headers=head_a)
         assert gone.status_code == 404
         after = await client.get("/v1/plaza/status")
         assert after.json()["online"] == 1
+
+
+@pytest.mark.asyncio
+async def test_plaza_peer_mesh_is_room_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.api.plaza.creature_model_bytes", lambda *_args, **_kwargs: b"glTF")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        token_a = await _register(client, "mesh-a@example.com")
+        token_b = await _register(client, "mesh-b@example.com")
+        token_c = await _register(client, "mesh-c@example.com")
+        head_a = {"Authorization": f"Bearer {token_a}"}
+        head_b = {"Authorization": f"Bearer {token_b}"}
+        head_c = {"Authorization": f"Bearer {token_c}"}
+        await client.put("/v1/zoo/creatures/spot-1", headers=head_a, json=_living("spot-1"))
+        await client.put(
+            "/v1/zoo/creatures/spot-b",
+            headers=head_b,
+            json=_living("spot-b", "Капля"),
+        )
+        await client.post("/v1/plaza/enter", headers=head_a, json={"spec_id": "spot-1"})
+        await client.post("/v1/plaza/enter", headers=head_b, json={"spec_id": "spot-b"})
+        mesh = await client.get("/v1/plaza/models/spot-1", headers=head_b)
+        assert mesh.status_code == 200
+        assert mesh.content == b"glTF"
+        spy = await client.get("/v1/plaza/models/spot-1", headers=head_c)
+        assert spy.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -234,19 +266,51 @@ async def test_plaza_stamps_are_shared() -> None:
         assert empty.json()["rev"] == 3
 
 
-def test_plaza_smash_pays_every_mound_while_prizes_allowed():
+def test_plaza_oldest_catalog_yields(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.plaza import stamps
+
+    assert stamps.CAP == 400
+    monkeypatch.setattr(stamps, "CAP", 3)
+    ids: list[str] = []
+    for index in range(4):
+        placed = stamps.place("lp_tree_01", float(index), 0, 2, "p-yield")
+        assert isinstance(placed, dict)
+        ids.append(placed["stamp"]["id"])
+    listed = stamps.list_stamps()["stamps"]
+    have = {row["id"] for row in listed}
+    assert len(listed) == 3
+    assert ids[0] not in have
+    assert ids[-1] in have
+
+
+def test_plaza_crystals_scatter_and_only_eight_pay():
     from app.plaza import digs
 
     digs.reset_digs()
     hunt = digs.ensure("p-hunt", True)
-    assert len(hunt.mounds) == 4
-    assert hunt.prizes == {item.id for item in hunt.mounds}
+    assert digs.COUNT_MIN <= len(hunt.mounds) <= digs.COUNT_MAX
+    assert len(hunt.prizes) == digs.PRIZE_COUNT
+    assert hunt.prizes <= {item.id for item in hunt.mounds}
+    radii = [((item.x ** 2 + item.z ** 2) ** 0.5) for item in hunt.mounds]
+    assert min(radii) >= digs.MIN_R - 0.01
+    assert max(radii) <= digs.MAX_R + 0.01
+    ids = [item.id for item in hunt.mounds]
+    assert len(set(ids)) == len(ids)
+    first = list(hunt.mounds)
     wins = 0
-    for mound in list(hunt.mounds):
-        kind, _left, _x, _z = digs.smash("p-hunt", mound.id, True)
+    for mound in first:
+        kind, left, _x, _z = digs.smash("p-hunt", mound.id, True)
+        assert digs.COUNT_MIN <= len(left) <= digs.COUNT_MAX
         if kind == "prize":
             wins += 1
-    assert wins == 4
+    assert wins == digs.PRIZE_COUNT
+    leftover = digs.ensure("p-hunt", True)
+    extra = 0
+    for mound in list(leftover.mounds):
+        kind, _left, _x, _z = digs.smash("p-hunt", mound.id, True)
+        if kind == "prize":
+            extra += 1
+    assert extra == 0
 
 
 def test_plaza_smash_is_empty_when_tickets_are_gone():
@@ -272,7 +336,7 @@ async def test_plaza_dig_grants_until_daily_cap() -> None:
         entered = await client.post("/v1/plaza/enter", headers=head, json={"spec_id": "spot-dig"})
         assert entered.status_code == 200
         mounds = entered.json()["mounds"]
-        assert len(mounds) == 4
+        assert len(mounds) == 30
         assert all("prize" not in row for row in mounds)
         me = await client.get("/v1/auth/me", headers=head)
         start = me.json()["remaining"]
@@ -281,20 +345,19 @@ async def test_plaza_dig_grants_until_daily_cap() -> None:
         for row in mounds:
             dug = await client.post("/v1/plaza/dig", headers=head, json={"id": row["id"]})
             assert dug.status_code == 200
-            if dug.json()["found"]:
+            body = dug.json()
+            assert len(body["mounds"]) == 30
+            if body["found"]:
                 wins += 1
-                last_remaining = dug.json()["remaining"]
-                ticket = dug.json()["ticket"]
+                last_remaining = body["remaining"]
+                ticket = body["ticket"]
                 assert ticket["id"]
-                assert any(row["id"] == ticket["id"] for row in dug.json()["tickets"])
-        assert wins == 4
-        assert last_remaining == start + 4
+                assert any(item["id"] == ticket["id"] for item in body["tickets"])
+        assert wins == TICKETS_PER_DAY
+        assert last_remaining == start + TICKETS_PER_DAY
         parent_id = next(iter(store.parents))
-        assert store.plaza_tickets_left() == TICKETS_PER_DAY - 4
-        for _ in range(TICKETS_PER_DAY - 4):
-            assert store.claim_plaza_credit(parent_id) is not None
-        assert store.claim_plaza_credit(parent_id) is None
         assert store.plaza_tickets_left() == 0
+        assert store.claim_plaza_credit(parent_id) is None
         again = await client.post("/v1/plaza/enter", headers=head, json={"spec_id": "spot-dig"})
         more = 0
         for row in again.json()["mounds"]:

@@ -6,10 +6,11 @@ import { API_BASE } from '../../api';
 import { assetUrl } from '../../assetUrl';
 import type { ChudikSpec } from '../creatures/ChudikSpec';
 import { buildDrawingChudik } from '../creatures/DrawingChudikBuilder';
+import { displayStillUrl } from '../drawing/portrait';
 import { resolveModelUrl } from '../drawing/modelUrl';
 import { zoomFromPinch } from '../interaction/cameraPinch';
 import { PostFx } from '../render/PostFx';
-import { lookForShell, quality } from '../render/quality';
+import { lookForPlaza, quality } from '../render/quality';
 import { updateStylizedSun } from '../render/stylized';
 import { tuning } from '../render/tuning';
 import { Lighting } from '../world/lighting';
@@ -19,8 +20,9 @@ import { getIslandAudio } from '../audio/AudioBus';
 import { idleJump, stepJump } from './plazaJump';
 import { hintPlaza } from './plazaVoice';
 import { nearMound, PLAZA_TICKET, type PlazaMound, type PlazaTicket } from './plazaDig';
-import { PLAZA_EMOTES, PLAZA_FOG, PLAZA_PLANE, PLAZA_WALK, type PlazaEmoteId } from './plazaCopy';
+import { PLAZA_EMOTES, PLAZA_FOG, PLAZA_PLANE, PLAZA_SHADOW_R, PLAZA_WALK, type PlazaEmoteId } from './plazaCopy';
 import { PLAZA_CRYSTAL, PLAZA_GLB, type PlazaPeer } from './plazaApi';
+import { seatWorld } from './plazaPeers';
 import { PlazaStudio } from './plazaStudio';
 
 export type PlazaBurst = { id: number; kind: PlazaEmoteId };
@@ -137,8 +139,8 @@ function prepareCrystal(scene: THREE.Object3D): THREE.Group {
   scene.position.y -= fitted.min.y;
   scene.traverse((node) => {
     if (node instanceof THREE.Mesh) {
-      node.castShadow = true;
-      node.receiveShadow = true;
+      node.castShadow = false;
+      node.receiveShadow = false;
     }
   });
   return root;
@@ -177,21 +179,22 @@ function clearMounds(group: THREE.Group, shared: boolean) {
   }
 }
 
-function tree(height: number, shade: number): THREE.Group {
+function tree(
+  height: number,
+  trunkMat: THREE.Material,
+  crownMat: THREE.Material,
+  trunkGeo: THREE.BufferGeometry,
+  crownGeo: THREE.BufferGeometry,
+): THREE.Group {
   const group = new THREE.Group();
-  const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.14, 0.22, height * 0.32, 6),
-    new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 1 }),
-  );
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
   trunk.position.y = height * 0.16;
-  trunk.castShadow = true;
-  const crown = new THREE.Mesh(
-    new THREE.SphereGeometry(height * 0.4, 10, 8),
-    new THREE.MeshStandardMaterial({ color: shade, roughness: 0.9 }),
-  );
+  trunk.scale.set(1, height * 0.32, 1);
+  trunk.castShadow = false;
+  const crown = new THREE.Mesh(crownGeo, crownMat);
   crown.position.y = height * 0.58;
-  crown.scale.set(1, 1.15, 1);
-  crown.castShadow = true;
+  crown.scale.set(height * 0.4, height * 0.46, height * 0.4);
+  crown.castShadow = false;
   group.add(trunk, crown);
   return group;
 }
@@ -199,7 +202,7 @@ function tree(height: number, shade: number): THREE.Group {
 function makeGround(): THREE.Group {
   const group = new THREE.Group();
   const rim = PLAZA_PLANE / 2;
-  const geo = new THREE.CircleGeometry(rim, 96);
+  const geo = new THREE.CircleGeometry(rim, 48);
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
   const haze = new THREE.Color(0.42, 0.8, 1);
@@ -220,7 +223,7 @@ function makeGround(): THREE.Group {
   group.add(grass);
 
   const skirt = new THREE.Mesh(
-    new THREE.RingGeometry(rim * 0.88, rim * 1.42, 80),
+    new THREE.RingGeometry(rim * 0.88, rim * 1.42, 48),
     new THREE.MeshBasicMaterial({
       color: haze,
       fog: true,
@@ -235,16 +238,26 @@ function makeGround(): THREE.Group {
   group.add(skirt);
 
   const shades = [0x3f7a32, 0x4f8c3a, 0x35682a, 0x5a9a42, 0x2f6828];
+  const trunkGeo = new THREE.CylinderGeometry(0.14, 0.22, 1, 5);
+  const crownGeo = new THREE.SphereGeometry(1, 8, 6);
+  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8a5a32 });
+  const crownMats = shades.map((shade) => new THREE.MeshLambertMaterial({ color: shade }));
   const belts = [
-    { count: 36, inner: PLAZA_WALK + 6, span: 8, height: 2.8 },
-    { count: 52, inner: PLAZA_WALK + 20, span: 14, height: 4.4 },
-    { count: 68, inner: PLAZA_WALK + 40, span: 22, height: 6.2 },
+    { count: 16, inner: PLAZA_WALK + 6, span: 8, height: 2.8 },
+    { count: 22, inner: PLAZA_WALK + 20, span: 14, height: 4.4 },
+    { count: 28, inner: PLAZA_WALK + 40, span: 22, height: 6.2 },
   ];
   for (const belt of belts) {
     for (let i = 0; i < belt.count; i += 1) {
       const angle = (i / belt.count) * Math.PI * 2 + belt.inner * 0.01;
       const radius = belt.inner + (i % 7) * (belt.span / 7);
-      const plant = tree(belt.height + (i % 5) * 0.55, shades[i % shades.length]);
+      const plant = tree(
+        belt.height + (i % 5) * 0.55,
+        trunkMat,
+        crownMats[i % crownMats.length],
+        trunkGeo,
+        crownGeo,
+      );
       plant.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
       group.add(plant);
     }
@@ -256,6 +269,83 @@ function emoteSrc(kind: string): string {
   return PLAZA_EMOTES.find((item) => item.id === kind)?.src ?? PLAZA_EMOTES[0].src;
 }
 
+const PEER_COLORS = ['#f2c14e', '#7ec8e3', '#e07a5f', '#81b29a', '#f4a261', '#9b8ec4', '#e9c46a', '#2a9d8f'];
+
+function peerLetterMap(name: string, seat: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = PEER_COLORS[((Math.trunc(seat) % PEER_COLORS.length) + PEER_COLORS.length) % PEER_COLORS.length];
+    ctx.beginPath();
+    ctx.arc(128, 128, 108, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#3b332c';
+    ctx.font = '800 120px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText((name.trim()[0] || '?').toUpperCase(), 128, 138);
+  }
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  return map;
+}
+
+function peerNameSprite(name: string): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const label = name.trim().slice(0, 16) || 'Зуфик';
+  if (ctx) {
+    ctx.fillStyle = 'rgba(255, 250, 240, 0.94)';
+    ctx.fillRect(12, 10, 232, 44);
+    ctx.fillStyle = '#3b332c';
+    ctx.font = '700 26px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, 128, 33);
+  }
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthTest: false }));
+  sprite.scale.set(1.7, 0.42, 1);
+  sprite.position.y = 1.95;
+  sprite.renderOrder = 4;
+  return sprite;
+}
+
+function peerCard(map: THREE.Texture, height = 1.7): THREE.Mesh {
+  const image = map.image as { width?: number; height?: number } | undefined;
+  const aspect = (image?.width || 1) / (image?.height || 1);
+  const card = new THREE.Mesh(
+    new THREE.PlaneGeometry(height * Math.min(aspect, 1.35), height),
+    new THREE.MeshBasicMaterial({
+      map,
+      transparent: true,
+      alphaTest: 0.08,
+      side: THREE.DoubleSide,
+    }),
+  );
+  card.position.y = height / 2;
+  card.name = 'peer-card';
+  return card;
+}
+
+function fitPeerToy(scene: THREE.Object3D, targetHeight: number) {
+  scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(scene);
+  const size = box.getSize(new THREE.Vector3());
+  const tall = Math.max(size.y, 0.001);
+  scene.scale.setScalar(targetHeight / tall);
+  scene.updateMatrixWorld(true);
+  const fitted = new THREE.Box3().setFromObject(scene);
+  scene.position.x -= (fitted.min.x + fitted.max.x) / 2;
+  scene.position.y -= fitted.min.y;
+  scene.position.z -= (fitted.min.z + fitted.max.z) / 2;
+}
+
 type Particle = {
   sprite: THREE.Sprite;
   age: number;
@@ -264,19 +354,6 @@ type Particle = {
   vy: number;
   vz: number;
 };
-
-function seatWorld(seat: number): { x: number; z: number } {
-  const ring = [
-    { x: 4.5, z: 2.2 },
-    { x: -4.2, z: 2.6 },
-    { x: 6.5, z: -1.8 },
-    { x: -6.2, z: -1.4 },
-    { x: 2.2, z: -5.4 },
-    { x: -2.8, z: -5.8 },
-    { x: 0.4, z: 6.2 },
-  ];
-  return ring[Math.max(0, seat) % ring.length];
-}
 
 function keysWalk(): Walk {
   const held = new Set(
@@ -361,10 +438,20 @@ export function PlazaGlb({
     const scene = new THREE.Scene();
     const haze = hazeForShell('meadow');
     scene.fog = new THREE.FogExp2(haze.getHex(), PLAZA_FOG);
-    const camera = new THREE.PerspectiveCamera(46, 1, 0.4, 1400);
-    const lookSettings = lookForShell(quality(), true);
+    const camera = new THREE.PerspectiveCamera(46, 1, 0.4, 1800);
+    const lookSettings = lookForPlaza(quality());
     const lighting = new Lighting(lookSettings, true);
     lighting.apply(tuning.get());
+    const sunLift = lighting.sun.position.clone().sub(lighting.sun.target.position);
+    const shadowSpan = PLAZA_SHADOW_R + 6;
+    lighting.sun.shadow.camera.left = -shadowSpan;
+    lighting.sun.shadow.camera.right = shadowSpan;
+    lighting.sun.shadow.camera.top = shadowSpan;
+    lighting.sun.shadow.camera.bottom = -shadowSpan;
+    lighting.sun.shadow.camera.far = 80;
+    lighting.sun.shadow.camera.updateProjectionMatrix();
+    const plazaShadow = lighting.sun.shadow as { intensity?: number };
+    if (plazaShadow.intensity !== undefined) plazaShadow.intensity = 0.48;
     scene.add(lighting.group);
 
     const sky = createSky('meadow');
@@ -516,30 +603,65 @@ export function PlazaGlb({
     }
 
     const paintOthers = () => {
+      paintGen += 1;
+      const gen = paintGen;
       othersGroup.clear();
       for (const peer of othersRef.current) {
         if (peer.self) continue;
         const spot = seatWorld(peer.seat);
         const root = new THREE.Group();
         root.position.set(spot.x, 0, spot.z);
-        if (peer.portrait) {
-          textureLoader.load(peer.portrait, (texture) => {
-            if (stop) return;
-            texture.colorSpace = THREE.SRGBColorSpace;
-            const image = texture.image as { width?: number; height?: number };
-            const aspect = (image.width || 1) / (image.height || 1);
-            const height = 1.55;
-            const card = new THREE.Mesh(
-              new THREE.PlaneGeometry(height * Math.min(aspect, 1.35), height),
-              new THREE.MeshStandardMaterial({ map: texture, transparent: true, side: THREE.DoubleSide }),
-            );
-            card.position.y = height / 2;
-            root.add(card);
-          });
-        }
+        root.userData.billboard = true;
+        const fallback = peerCard(peerLetterMap(peer.name, peer.seat), 1.55);
+        root.add(fallback);
+        root.add(peerNameSprite(peer.name));
         othersGroup.add(root);
+        const src = displayStillUrl(peer.portrait) ?? peer.portrait.trim();
+        if (src) {
+          textureLoader.load(
+            src,
+            (texture) => {
+              if (stop || gen !== paintGen || root.userData.mesh) return;
+              texture.colorSpace = THREE.SRGBColorSpace;
+              const old = root.getObjectByName('peer-card');
+              if (old) root.remove(old);
+              root.add(peerCard(texture));
+            },
+            undefined,
+            () => {
+              /* keep the letter standee */
+            },
+          );
+        }
+        const model = displayStillUrl(peer.model?.trim() || null);
+        if (!model) continue;
+        peerLoader.load(
+          model,
+          (gltf) => {
+            if (stop || gen !== paintGen) return;
+            const toy = gltf.scene.clone(true);
+            fitPeerToy(toy, 2.5);
+            toy.name = 'peer-mesh';
+            toy.traverse((node) => {
+              if (!(node instanceof THREE.Mesh)) return;
+              node.castShadow = lookSettings.shadows;
+              node.receiveShadow = false;
+            });
+            const old = root.getObjectByName('peer-card');
+            if (old) root.remove(old);
+            root.userData.billboard = false;
+            root.userData.mesh = true;
+            root.add(toy);
+          },
+          undefined,
+          () => {
+            /* still/letter standee stays */
+          },
+        );
       }
     };
+    let paintGen = 0;
+    const peerLoader = new GLTFLoader();
     paintOthers();
     paintOthersRef.current = paintOthers;
 
@@ -615,8 +737,16 @@ export function PlazaGlb({
     let stepAcc = 0.18;
     let wasGrounded = true;
 
+    let lastFrameAt = 0;
     const draw = () => {
       if (stop) return;
+      frame = window.requestAnimationFrame(draw);
+      const cap = lookSettings.maxFps;
+      if (cap > 0) {
+        const now = performance.now();
+        if (now - lastFrameAt < 1000 / cap - 1) return;
+        lastFrameAt = now;
+      }
       const dt = Math.min(0.05, clock.getDelta());
       const pad = walkRef.current.current;
       const keys = keysWalk();
@@ -755,8 +885,13 @@ export function PlazaGlb({
       );
       look.set(avatar.position.x, avatar.position.y + 1.15, avatar.position.z);
       camera.lookAt(look);
+      lighting.sun.target.position.set(avatar.position.x, 0, avatar.position.z);
+      lighting.sun.position.copy(lighting.sun.target.position).add(sunLift);
+      lighting.sun.target.updateMatrixWorld();
+      studio?.syncView(avatar.position.x, avatar.position.z);
       if (billboardSelf) bounce.rotation.y = wrapPi(camYaw - facing);
       for (const child of othersGroup.children) {
+        if (!child.userData.billboard) continue;
         child.lookAt(camera.position.x, child.position.y + 0.8, camera.position.z);
       }
       updateStylizedSun(lighting.sun, camera);
@@ -805,7 +940,6 @@ export function PlazaGlb({
       camera.updateProjectionMatrix();
       postFx.setSize(w, h);
       postFx.render(dt);
-      frame = window.requestAnimationFrame(draw);
     };
     draw();
 
@@ -911,7 +1045,7 @@ export function PlazaGlb({
     othersRef.current = others;
     const key = others
       .filter((peer) => !peer.self)
-      .map((peer) => `${peer.seat}:${peer.spec_id}:${peer.portrait}`)
+      .map((peer) => `${peer.seat}:${peer.spec_id}:${peer.portrait}:${peer.model ?? ''}`)
       .join('|');
     if (key === othersKey.current) return;
     othersKey.current = key;

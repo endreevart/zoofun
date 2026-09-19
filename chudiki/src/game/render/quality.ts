@@ -41,6 +41,7 @@ export type QualityHints = {
 };
 
 const PHONE_UA = /Android.+Mobile|iPhone|iPod/i;
+const TABLET_UA = /iPad|Android(?!.*Mobile)/i;
 
 /** Safe mode stays 1×. Save-Data keeps the old cheap blit. Everyone else 2×. */
 function phonePixelRatio(hints: QualityHints, safeMode: boolean): number {
@@ -59,7 +60,9 @@ export function settingsFromHints(
     : hints.saveData ||
       (hints.deviceMemory !== undefined && hints.deviceMemory <= 4) ||
       PHONE_UA.test(hints.userAgent) ||
-      (hints.coarsePointer && hints.shortSide <= 520));
+      TABLET_UA.test(hints.userAgent) ||
+      (/Macintosh/i.test(hints.userAgent) && hints.coarsePointer) ||
+      (hints.coarsePointer && hints.shortSide <= 1024));
 
   if (phone) {
     // 8-bit composer, no canvas MSAA. The garden PostFx blit ignores the
@@ -179,4 +182,19 @@ export function lookForShell(base: QualitySettings, hanging: boolean): QualitySe
   }
   if (base.tier === 'low') return lookForHeavyIsland(base);
   return base;
+}
+
+/**
+ * Shared lawn: a huge grass disk, crystals, catalog stamps, and other
+ * toys. iPad used to sit on the desktop garden look and hitch.
+ */
+export function lookForPlaza(base: QualitySettings): QualitySettings {
+  return {
+    ...lookForHeavyIsland(base),
+    pixelRatio: 1,
+    shadows: true,
+    softShadows: false,
+    shadowMapSize: 512,
+    maxFps: 30,
+  };
 }

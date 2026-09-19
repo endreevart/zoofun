@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { EYE } from '../core/palette';
 import { bakePaintables, blobGeometry, createToyMaterial } from '../core/geometry';
+import { displayStillUrl, portraitUrlOf } from '../drawing/portrait';
 import type { ChudikSpec, DrawingData } from './ChudikSpec';
 import type { ChudikRig } from './ChudikBuilder';
 
 const meshyLoader = new GLTFLoader();
+const meshyCache = new Map<string, Promise<GLTF>>();
 
 export async function preloadMeshyModel(url: string): Promise<boolean> {
   try {
@@ -17,16 +20,70 @@ export async function preloadMeshyModel(url: string): Promise<boolean> {
 }
 
 async function loadMeshyGltf(url: string) {
-  let last: unknown;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    try {
-      return await meshyLoader.loadAsync(url);
-    } catch (error) {
-      last = error;
-      await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)));
+  const hit = meshyCache.get(url);
+  if (hit) return hit;
+  const task = (async () => {
+    let last: unknown;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      try {
+        return await meshyLoader.loadAsync(url);
+      } catch (error) {
+        last = error;
+        await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)));
+      }
     }
+    throw last instanceof Error ? last : new Error('glb missing');
+  })();
+  meshyCache.set(url, task);
+  try {
+    return await task;
+  } catch (error) {
+    meshyCache.delete(url);
+    throw error;
   }
-  throw last instanceof Error ? last : new Error('glb missing');
+}
+
+/** Postcard card so a Meshy wait is never an empty lawn with only a shadow. */
+function addWaitingStill(
+  holder: THREE.Group,
+  drawing: DrawingData,
+  scale: number,
+  disposables: Array<THREE.BufferGeometry | THREE.Material | THREE.Texture>,
+) {
+  const url = displayStillUrl(
+    portraitUrlOf(drawing) ?? drawing.postcardUrl?.trim() ?? drawing.textureUrl?.trim() ?? null,
+  );
+  const height = scale * 1.05;
+  if (!url) {
+    const placeholder = new THREE.Mesh(
+      blobGeometry(scale * 0.28, new THREE.Vector3(1, 1.15, 0.95), 18),
+      createToyMaterial({ color: drawing.sideColor, roughness: 0.62 }),
+    );
+    placeholder.position.y = scale * 0.32;
+    placeholder.castShadow = true;
+    holder.add(placeholder);
+    disposables.push(placeholder.geometry, placeholder.material);
+    return;
+  }
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(height * 0.82, height),
+    createToyMaterial({ color: 0xfff6df, roughness: 0.68, side: THREE.DoubleSide }),
+  );
+  mesh.position.y = height / 2;
+  mesh.castShadow = true;
+  holder.add(mesh);
+  disposables.push(mesh.geometry, mesh.material);
+  new THREE.TextureLoader().load(url, (texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const image = texture.image as { width?: number; height?: number };
+    const aspect = (image.width || 1) / (image.height || 1);
+    mesh.scale.set(Math.min(aspect, 1.25), 1, 1);
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    material.map = texture;
+    material.transparent = true;
+    material.needsUpdate = true;
+    disposables.push(texture);
+  });
 }
 
 /**
@@ -438,15 +495,7 @@ function buildMeshyChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
   const disposables: Array<THREE.BufferGeometry | THREE.Material | THREE.Texture> = [];
   const holder = new THREE.Group();
   squash.add(holder);
-
-  const placeholder = new THREE.Mesh(
-    blobGeometry(scale * 0.28, new THREE.Vector3(1, 1.15, 0.95), 18),
-    createToyMaterial({ color: drawing.sideColor, roughness: 0.62 }),
-  );
-  placeholder.position.y = scale * 0.32;
-  placeholder.castShadow = true;
-  holder.add(placeholder);
-  disposables.push(placeholder.geometry, placeholder.material);
+  addWaitingStill(holder, drawing, scale, disposables);
 
   const rig: ChudikRig = {
     root,
@@ -476,9 +525,7 @@ function buildMeshyChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
   void loadMeshyGltf(drawing.modelUrl!).then((gltf) => {
     if (cancelled) return;
     holder.clear();
-    placeholder.geometry.dispose();
-    if (placeholder.material instanceof THREE.Material) placeholder.material.dispose();
-    const scene = gltf.scene;
+    const scene = gltf.scene.clone(true);
     fitMeshyModel(scene, scale);
     scene.traverse((obj) => {
       if (!(obj instanceof THREE.Mesh)) return;
@@ -492,7 +539,7 @@ function buildMeshyChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
     rig.height = Math.max(scale * 0.6, size.y);
     rig.radius = Math.max(size.x, size.z) * 0.5;
   }).catch((error) => {
-    console.warn('[meshy] glb failed, keeping clay', error);
+    console.warn('[meshy] glb failed, keeping still', error);
   });
 
   return rig;

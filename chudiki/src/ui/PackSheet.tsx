@@ -5,6 +5,7 @@ import { siteAuthUrl } from '../parentSession';
 import { CreditEggs } from './CreditEggs';
 import {
   packShopLead,
+  packShopRemainLabel,
   packShopTitle,
   packShopView,
   packsForShop,
@@ -148,8 +149,8 @@ export function PackSheet({ remaining, onClose, onError, friendPreview, forReviv
             </h2>
             {remaining > 0 ? (
               <p className="pack-shop-remain">
-                <CreditEggs count={remaining} />
-                <span>Ещё {remaining}</span>
+                <CreditEggs count={remaining} showCount={false} />
+                <span>{packShopRemainLabel(remaining)}</span>
               </p>
             ) : null}
           </div>

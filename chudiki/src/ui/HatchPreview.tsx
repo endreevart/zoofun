@@ -2,13 +2,51 @@ import { useState } from 'react';
 import { downloadPortrait, portraitFileName } from '../game/drawing/portrait';
 import { composePostcard, postcardFileName } from '../game/drawing/postcard';
 import { HudIcon } from './HudIcon';
+import { CreatureMenuIcon } from './CreatureMenuIcon';
 import {
   HATCH_DRAW_ANOTHER,
   HATCH_GO_GARDEN,
   HATCH_MESH_WAIT,
+  HATCH_TAP_HINT,
   hatchPreviewMode,
   hatchPreviewSrc,
+  hatchStillLabel,
 } from './hatchView';
+
+function HatchBackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M15 5 L8 12 L15 19"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function HatchLeaves() {
+  return (
+    <svg className="hatch-leaves" viewBox="0 0 88 64" aria-hidden="true">
+      <path d="M58 8c18 6 28 22 22 36-14-2-28-14-32-30 4-4 8-6 10-6z" fill="#b7d86a" />
+      <path d="M72 18c8 10 8 22 0 30-10-6-16-16-16-26 6-2 12-4 16-4z" fill="#8fc15a" />
+      <path d="M18 14c16 10 20 28 8 40-16-8-24-22-20-36 4-2 8-4 12-4z" fill="#c8e087" opacity="0.85" />
+    </svg>
+  );
+}
+
+function PostcardMark() {
+  return (
+    <svg className="hatch-tile-ico" viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="6" y="10" width="36" height="28" rx="6" fill="#f4ead0" stroke="#d7c49a" strokeWidth="2" />
+      <path d="M8 30l10-9 8 7 6-5 10 9" fill="#8ec85a" />
+      <circle cx="16" cy="18" r="3" fill="#f0c44a" />
+    </svg>
+  );
+}
 
 /**
  * After submit the child only goes forward. The still is the studio toy.
@@ -16,13 +54,13 @@ import {
  * shows it once it lands. A local meadow composite is only the fallback
  * if that second paint never arrived.
  */
-
 export function HatchPreview({
   src,
   postcardSrc,
   postcardDone = false,
   name,
   canDrawAnother = true,
+  stillRemaining = null,
   meshCooking = false,
   onDrawAnother,
   onForward,
@@ -33,6 +71,7 @@ export function HatchPreview({
   postcardDone?: boolean;
   name?: string;
   canDrawAnother?: boolean;
+  stillRemaining?: number | null;
   meshCooking?: boolean;
   onDrawAnother: () => void;
   onForward: () => void;
@@ -66,12 +105,17 @@ export function HatchPreview({
     <div
       className={`hatch-preview${mode === 'garden' ? ' is-garden' : ' is-studio'}`}
       role="dialog"
-      aria-label="Вот кто получился"
+      aria-label={name ? name : 'Вот кто получился'}
     >
       {src ? (
         <>
-          <p className="hatch-preview-lead">Вот кто получился</p>
-          {name ? <h2 className="hatch-preview-name">{name}</h2> : null}
+          <div className="hatch-head">
+            <button className="hatch-back" type="button" aria-label="В сад" onClick={onForward}>
+              <HatchBackIcon />
+            </button>
+            {name ? <h1 className="hatch-preview-name">{name}</h1> : <span className="hatch-preview-name" />}
+            <HatchLeaves />
+          </div>
           <button
             className="hatch-preview-art-btn"
             type="button"
@@ -81,60 +125,58 @@ export function HatchPreview({
             <img className="hatch-preview-art" src={art ?? src} alt="" />
           </button>
           <p className="hatch-preview-hint">
-            {mode === 'garden' ? 'В саду' : waitingGarden ? 'Рисуем сад…' : 'Нажми — увидишь сад'}
+            {mode === 'garden' ? 'В саду' : waitingGarden ? 'Рисуем сад…' : HATCH_TAP_HINT}
           </p>
-          <div className="hatch-preview-save">
-            <button
-              className="save-chip"
-              type="button"
-              disabled={saving !== null}
-              onClick={() => void save('photo')}
-            >
-              <span className="icon">{saving === 'photo' ? '⏳' : '⬇️'}</span>
-              <span>Фото</span>
+          <div className="hatch-tools">
+            <button className="hatch-go" type="button" onClick={onForward}>
+              {HATCH_GO_GARDEN}
             </button>
-            <button
-              className={`save-chip${mode === 'garden' ? ' is-on' : ''}`}
-              type="button"
-              disabled={saving !== null}
-              onClick={() => {
-                setWantGarden(true);
-                void save('postcard');
-              }}
-            >
-              <span className="icon">
-                {saving === 'postcard' || waitingGarden ? '⏳' : '🖼️'}
-              </span>
-              <span>Открытка из сада</span>
-            </button>
-          </div>
-          <div className="hatch-preview-actions">
-            <button
-              className="big-button go hatch-preview-go"
-              type="button"
-              disabled={!canDrawAnother}
-              aria-label={HATCH_DRAW_ANOTHER}
-              onClick={onDrawAnother}
-            >
-              <HudIcon name="draw" />
-              <span>{HATCH_DRAW_ANOTHER}</span>
-            </button>
-            <button
-              className="big-button primary hatch-preview-go"
-              type="button"
-              onClick={onForward}
-            >
-              <span className="icon">🌿</span>
-              <span>{HATCH_GO_GARDEN}</span>
-            </button>
-            {onPuzzle ? (
-              <button className="big-button hatch-preview-go" type="button" onClick={onPuzzle}>
-                <span className="icon">🧩</span>
-                <span>Собрать пазл</span>
+            <div className="hatch-grid">
+              <button
+                className="hatch-tile"
+                type="button"
+                disabled={saving !== null}
+                onClick={() => void save('photo')}
+              >
+                <HudIcon name="photo" />
+                <span>{saving === 'photo' ? '…' : 'Фото'}</span>
               </button>
-            ) : null}
+              <button
+                className={`hatch-tile${mode === 'garden' ? ' is-on' : ''}`}
+                type="button"
+                disabled={saving !== null}
+                onClick={() => {
+                  setWantGarden(true);
+                  void save('postcard');
+                }}
+              >
+                {saving === 'postcard' || waitingGarden ? <span className="hatch-tile-wait">…</span> : <PostcardMark />}
+                <span>Открытка</span>
+              </button>
+              <button
+                className="hatch-tile is-draw"
+                type="button"
+                disabled={!canDrawAnother}
+                aria-label={HATCH_DRAW_ANOTHER}
+                onClick={onDrawAnother}
+              >
+                <HudIcon name="draw" />
+                <span>{HATCH_DRAW_ANOTHER}</span>
+                {stillRemaining != null ? (
+                  <em className="hatch-still">{hatchStillLabel(stillRemaining)}</em>
+                ) : null}
+              </button>
+              {onPuzzle ? (
+                <button className="hatch-tile" type="button" onClick={onPuzzle}>
+                  <CreatureMenuIcon name="puzzle" />
+                  <span>Собрать пазл</span>
+                </button>
+              ) : (
+                <span className="hatch-tile is-gap" />
+              )}
+            </div>
+            {meshCooking ? <p className="hatch-preview-wait">{HATCH_MESH_WAIT}</p> : null}
           </div>
-          {meshCooking ? <p className="hatch-preview-wait">{HATCH_MESH_WAIT}</p> : null}
         </>
       ) : (
         <>

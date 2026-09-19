@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import {
+  canBeginWalkHold,
+  COMPACT_WALK,
+  ignoreWalkCancel,
+  isHeldPointer,
+  shouldCaptureWalkPointer,
+  touchStillHeld,
+} from '../game/interaction/walkHold';
 import { MOBILE_STICK_GAIN, clampStickTravel, stickWalk } from '../game/interaction/walkStick';
 
 type Props = {
@@ -7,7 +15,6 @@ type Props = {
 };
 
 const HELD = new Set<string>();
-const COMPACT_WALK = '(max-width: 1280px)';
 
 function emit(onWalk: (forward: number, right: number) => void) {
   const forward = (HELD.has('up') ? 1 : 0) + (HELD.has('down') ? -1 : 0);
@@ -29,6 +36,21 @@ function useCompactWalk(): boolean {
   }, []);
 
   return compact;
+}
+
+function capturePointer(node: HTMLElement, pointerId: number, pointerType: string) {
+  if (!shouldCaptureWalkPointer(pointerType)) return;
+  try {
+    node.setPointerCapture(pointerId);
+  } catch {
+    /* already released */
+  }
+}
+
+function blockCallout(node: HTMLElement) {
+  const block = (event: Event) => event.preventDefault();
+  node.addEventListener('contextmenu', block);
+  return () => node.removeEventListener('contextmenu', block);
 }
 
 /**
@@ -69,25 +91,25 @@ function WalkStick({ onWalk, className }: Props) {
     onWalkRef.current(walk.forward, walk.right);
   };
 
-  const reset = () => {
+  const reset = (pointerId?: number) => {
+    if (pointerId !== undefined && !isHeldPointer(dragId.current, pointerId)) return;
     dragId.current = null;
     paintKnob(0, 0);
     onWalkRef.current(0, 0);
   };
 
   useEffect(() => {
+    const node = baseRef.current;
     const onMove = (event: PointerEvent) => {
-      if (dragId.current !== event.pointerId) return;
+      if (!isHeldPointer(dragId.current, event.pointerId)) return;
       moveTo(event.clientX, event.clientY);
     };
     const onUp = (event: PointerEvent) => {
-      if (dragId.current !== event.pointerId) return;
-      reset();
+      if (ignoreWalkCancel(event)) return;
+      reset(event.pointerId);
     };
     const onTouchEnd = (event: TouchEvent) => {
-      if (dragId.current === null) return;
-      if (event.touches.length > 0) return;
-      reset();
+      if (!touchStillHeld(event.touches, dragId.current)) reset();
     };
     const hide = () => {
       if (document.visibilityState === 'hidden') reset();
@@ -97,17 +119,15 @@ function WalkStick({ onWalk, className }: Props) {
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
     window.addEventListener('touchend', onTouchEnd);
-    window.addEventListener('touchcancel', onTouchEnd);
-    window.addEventListener('blur', reset);
     document.addEventListener('visibilitychange', hide);
+    const unbind = node ? blockCallout(node) : () => {};
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
       window.removeEventListener('touchend', onTouchEnd);
-      window.removeEventListener('touchcancel', onTouchEnd);
-      window.removeEventListener('blur', reset);
       document.removeEventListener('visibilitychange', hide);
+      unbind();
       reset();
     };
   }, []);
@@ -122,10 +142,16 @@ function WalkStick({ onWalk, className }: Props) {
       aria-valuemax={1}
       aria-valuenow={0}
       onPointerDown={(event) => {
-        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (!canBeginWalkHold(event)) return;
+        event.preventDefault();
         event.stopPropagation();
         dragId.current = event.pointerId;
+        capturePointer(event.currentTarget, event.pointerId, event.pointerType);
         moveTo(event.clientX, event.clientY);
+      }}
+      onLostPointerCapture={(event) => {
+        if (ignoreWalkCancel(event)) return;
+        reset(event.pointerId);
       }}
     >
       <div className="walk-stick-well" aria-hidden="true" />
@@ -135,21 +161,29 @@ function WalkStick({ onWalk, className }: Props) {
 }
 
 function WalkArrows({ onWalk, className }: Props) {
-  useEffect(
-    () => () => {
+  const onWalkRef = useRef(onWalk);
+  onWalkRef.current = onWalk;
+
+  useEffect(() => {
+    const tick = () => {
+      if (HELD.size) emit(onWalkRef.current);
+      raf = window.requestAnimationFrame(tick);
+    };
+    let raf = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(raf);
       HELD.clear();
-      onWalk(0, 0);
-    },
-    [onWalk],
-  );
+      onWalkRef.current(0, 0);
+    };
+  }, []);
 
   const press = (dir: string) => {
     HELD.add(dir);
-    emit(onWalk);
+    emit(onWalkRef.current);
   };
   const release = (dir: string) => {
     HELD.delete(dir);
-    emit(onWalk);
+    emit(onWalkRef.current);
   };
 
   return (
@@ -185,38 +219,81 @@ function PadButton({
   onRelease: (dir: string) => void;
   children: string;
 }) {
+  const nodeRef = useRef<HTMLDivElement | null>(null);
   const held = useRef(false);
+  const pointerId = useRef<number | null>(null);
+  const onPressRef = useRef(onPress);
   const onReleaseRef = useRef(onRelease);
+  onPressRef.current = onPress;
   onReleaseRef.current = onRelease;
 
+  const end = (id: number) => {
+    if (!isHeldPointer(pointerId.current, id)) return;
+    pointerId.current = null;
+    if (!held.current) return;
+    held.current = false;
+    onReleaseRef.current(dir);
+  };
+
   useEffect(() => {
-    const up = () => {
-      if (!held.current) return;
-      held.current = false;
-      onReleaseRef.current(dir);
+    const node = nodeRef.current;
+    if (!node) return;
+    const onUp = (event: PointerEvent) => {
+      if (ignoreWalkCancel(event)) return;
+      end(event.pointerId);
     };
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
-    window.addEventListener('blur', up);
+    const onTouchEnd = (event: TouchEvent) => {
+      const id = pointerId.current;
+      if (id === null) return;
+      if (touchStillHeld(event.touches, id)) return;
+      end(id);
+    };
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('touchend', onTouchEnd);
+    const unbind = blockCallout(node);
     return () => {
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
-      window.removeEventListener('blur', up);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('touchend', onTouchEnd);
+      unbind();
     };
   }, [dir]);
 
   return (
-    <button
-      type="button"
+    <div
+      ref={nodeRef}
+      role="button"
+      tabIndex={0}
       className={`walk-btn ${className}`}
       aria-label={label}
       onPointerDown={(event) => {
+        if (!canBeginWalkHold(event)) return;
         event.preventDefault();
+        event.stopPropagation();
+        pointerId.current = event.pointerId;
         held.current = true;
-        onPress(dir);
+        capturePointer(event.currentTarget, event.pointerId, event.pointerType);
+        onPressRef.current(dir);
+      }}
+      onLostPointerCapture={(event) => {
+        if (ignoreWalkCancel(event)) return;
+        end(event.pointerId);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== ' ' && event.key !== 'Enter') return;
+        event.preventDefault();
+        if (held.current) return;
+        pointerId.current = -1;
+        held.current = true;
+        onPressRef.current(dir);
+      }}
+      onKeyUp={(event) => {
+        if (event.key !== ' ' && event.key !== 'Enter') return;
+        end(-1);
       }}
     >
       {children}
-    </button>
+    </div>
   );
 }

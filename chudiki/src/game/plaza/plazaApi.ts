@@ -19,6 +19,7 @@ export type PlazaPeer = {
   spec_id: string;
   name: string;
   portrait: string;
+  model?: string;
   emote: string;
   self: boolean;
 };
@@ -112,15 +113,14 @@ export async function fetchPlazaReady(): Promise<PlazaToy[]> {
 }
 
 export async function enterPlaza(specId: string): Promise<PlazaRoom | null> {
-  const records = await loadCreatures();
-  const record = records.find((row) => row.spec.id === specId);
-  if (record) {
-    try {
-      await upsertCloudCreature(record);
-    } catch {
+  void loadCreatures()
+    .then((records) => {
+      const record = records.find((row) => row.spec.id === specId);
+      if (record) return upsertCloudCreature(record);
+    })
+    .catch(() => {
       /* local lawn still works */
-    }
-  }
+    });
   return readJson<PlazaRoom>('/v1/plaza/enter', {
     method: 'POST',
     body: JSON.stringify({ spec_id: specId }),

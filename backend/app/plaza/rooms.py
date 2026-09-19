@@ -459,6 +459,7 @@ def public_peer(seat: Seat, self_id: str) -> dict[str, Any]:
         "spec_id": seat.spec_id,
         "name": seat.name,
         "portrait": f"/v1/plaza/portraits/{seat.spec_id}",
+        "model": f"/v1/plaza/models/{seat.spec_id}",
         "emote": _live_emote(seat, now),
         "self": seat.parent_id == self_id,
     }

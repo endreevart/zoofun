@@ -6,7 +6,15 @@ import {
   hatchMeshCooking,
   hatchPreviewMode,
   hatchPreviewSrc,
+  hatchStillLabel,
+  HATCH_GO_GARDEN,
+  HATCH_TAP_HINT,
 } from './hatchView.ts';
+
+assert.equal(HATCH_GO_GARDEN, 'В сад');
+assert.ok(HATCH_TAP_HINT.includes('Зуфика'));
+assert.equal(hatchStillLabel(3), 'Доступно: 3');
+assert.equal(hatchStillLabel(-2), 'Доступно: 0');
 
 assert.equal(hatchPreviewSrc(null, null, false), null);
 assert.equal(hatchPreviewSrc('toy.png', null, true), 'toy.png');

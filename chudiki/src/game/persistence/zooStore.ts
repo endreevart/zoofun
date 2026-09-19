@@ -165,8 +165,17 @@ async function clearVoiceRecordings(): Promise<void> {
   });
 }
 
-export async function saveCreature(record: StoredCreature): Promise<void> {
+export async function saveCreature(
+  record: StoredCreature,
+  opts: { cloud?: 'wait' | 'later' } = {},
+): Promise<void> {
   await transact(CREATURES, 'readwrite', (s) => s.put(record));
+  if (opts.cloud === 'later') {
+    void upsertCloudCreature(record).catch((error) => {
+      console.warn('[zoo] could not sync creature', error);
+    });
+    return;
+  }
   try {
     await upsertCloudCreature(record);
   } catch (error) {

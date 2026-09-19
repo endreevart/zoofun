@@ -4,6 +4,7 @@ import {
   FRIEND_PACK_ID,
   packAnimalLabel,
   packShopLead,
+  packShopRemainLabel,
   packShopTitle,
   packShopView,
   packsForShop,
@@ -23,7 +24,12 @@ const catalog: Pack[] = [
 assert.equal(packShopTitle(3), 'Пополнить сад');
 assert.equal(packShopTitle(0), 'Ваш первый Зуфик ожил!');
 assert.equal(packShopTitle(0, true), 'Оживите этого друга');
+assert.equal(packShopRemainLabel(1), 'Осталось 1 оживление');
+assert.equal(packShopRemainLabel(2), 'Осталось 2 оживления');
+assert.equal(packShopRemainLabel(11), 'Осталось 11 оживлений');
+assert.equal(packShopRemainLabel(22), 'Осталось 22 оживления');
 assert.match(packShopLead(3), /10 картинок/);
+assert.match(packShopLead(3), /не возвращает оживление/);
 assert.match(packShopLead(0), /10 картинок/);
 assert.match(packShopLead(0, true), /ждёт/);
 assert.equal(packAnimalLabel(1), '1 зверь');

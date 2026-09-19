@@ -93,6 +93,8 @@ export class InstancedScatter {
     name?: string;
     /** Opt-in: at most four cullable batches per expensive repeated model. */
     spatial?: boolean;
+    /** Triangle floor before a repeated model splits. Plaza passes 0. */
+    spatialMinTriangles?: number;
   } = {}): THREE.Group {
     const group = new THREE.Group();
     group.name = options.name ?? 'nature';
@@ -115,7 +117,11 @@ export class InstancedScatter {
         const geometry = primitive.geometry;
         return sum + (geometry.index?.count ?? geometry.getAttribute('position')?.count ?? 0) / 3;
       }, 0);
-      const batches = spatialBatches(placements, options.spatial === true && triangles >= 10_000);
+      const minTriangles = options.spatialMinTriangles ?? 10_000;
+      const batches = spatialBatches(
+        placements,
+        options.spatial === true && triangles >= minTriangles,
+      );
 
       for (const indices of batches) {
         for (const primitive of model.primitives) {
