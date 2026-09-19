@@ -97,6 +97,7 @@ export class World implements WalkableQuery {
   private walkGridTimer = 0;
   private natureFrustumCulling = true;
   private lastContactAzimuth = Number.NaN;
+  private gardenJoy = 0;
 
   static async create(
     seed = 20260901,
@@ -423,8 +424,14 @@ export class World implements WalkableQuery {
   }
 
   /** Pushes tunable look parameters into the lights and the fog. */
+  setGardenJoy(amount: number) {
+    this.gardenJoy = Math.max(0, Math.min(1, amount));
+    this.apply(tuning.get());
+  }
+
   apply(values: TuningValues) {
     this.lighting.apply(values);
+    this.lighting.applyJoy(this.gardenJoy);
     if (isHangingShell(this.shell) && values.sunAzimuth !== this.lastContactAzimuth) {
       this.refreshContactShadows(values.sunAzimuth);
     }

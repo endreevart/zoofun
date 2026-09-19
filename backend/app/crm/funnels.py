@@ -18,6 +18,7 @@ from app.persistence.models import (
 )
 from app.worlds import pack_label
 
+from . import retention as return_metrics
 from .window import TimeWindow, as_window, in_window
 
 PACK_PAYMENT = PaymentRow.pack_id.like("pack_%")
@@ -90,6 +91,14 @@ FUNNELS = [
         "group": "retention",
         "group_label": "Удержание",
         "inverted": True,
+    },
+    {
+        "key": "return",
+        "label": "Возвращаемость",
+        "description": "Первый заход в сад → снова пришли → успели за выбранные дни",
+        "entity": "parent",
+        "group": "retention",
+        "group_label": "Удержание",
     },
 ]
 
@@ -788,6 +797,61 @@ def repeat(period: int | TimeWindow = 30) -> dict:
     return _detail("repeat", steps)
 
 
+def _return_samples(rows: list, *, returned: bool) -> list[dict]:
+    limit, offset = _window()
+    picked = rows[offset : offset + limit] if limit else []
+    samples = []
+    for row in picked:
+        if returned and row.days_to_return is not None:
+            subtitle = f"через {row.days_to_return} дн."
+            at = row.return_at or row.first_at
+        else:
+            subtitle = "первый заход"
+            at = row.first_at
+        samples.append(_sample(id=row.parent_id, title=row.email, subtitle=subtitle, at=at))
+    return samples
+
+
+def returned(period: int | TimeWindow = 30, days: int | None = None) -> dict:
+    window = as_window(period, 30)
+    days = return_metrics.clamp_days(days)
+    as_of = return_metrics.as_of_date(window)
+    with session() as db:
+        rows = return_metrics.load_first_visits(db, window)
+    ready = [row for row in rows if return_metrics.mature(row, days, as_of)]
+    came_back = [row for row in rows if row.days_to_return is not None]
+    came_back_n = [row for row in ready if return_metrics.returned_within(row, days)]
+    steps = [
+        _step(
+            "first_island",
+            "Первый заход в сад",
+            len(rows),
+            None,
+            _return_samples(rows, returned=False),
+        ),
+        _step(
+            "returned_again",
+            "Зашли ещё раз",
+            len(came_back),
+            len(rows),
+            _return_samples(came_back, returned=True),
+        ),
+        _step(
+            "returned_n",
+            f"Вернулись за {days} дн.",
+            len(came_back_n),
+            len(ready) or len(rows),
+            _return_samples(came_back_n, returned=True),
+        ),
+    ]
+    detail = _detail("return", steps)
+    rates = return_metrics.rates(window, days)
+    detail["days"] = days
+    detail["return_pct"] = rates["returned_pct"]
+    detail["eligible"] = rates["eligible"]
+    return detail
+
+
 def death() -> dict:
     now = time.time()
     with session() as db:
@@ -836,7 +900,7 @@ def death() -> dict:
     return _detail("death", steps, inverted=True)
 
 
-def build(key: str, period: int | TimeWindow = 30) -> dict:
+def build(key: str, period: int | TimeWindow = 30, days: int | None = None) -> dict:
     builders = {
         "product": product,
         "site": site,
@@ -845,12 +909,15 @@ def build(key: str, period: int | TimeWindow = 30) -> dict:
         "island": island,
         "commerce": commerce,
         "repeat": repeat,
+        "return": returned,
         "death": lambda _period=0: death(),
     }
     if key not in builders:
         raise KeyError(key)
     if key == "death":
         return death()
+    if key == "return":
+        return returned(period, days)
     if key == "product":
         return product(period)
     return builders[key](period)

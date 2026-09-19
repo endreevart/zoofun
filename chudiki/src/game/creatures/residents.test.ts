@@ -1,15 +1,7 @@
 import assert from 'node:assert/strict';
-import { canCarePlay, hasOwnCreature, isParkResidentId, PARK_RESIDENTS } from './residents.ts';
+import { canCarePlay, hasOwnCreature, isParkResidentId } from './residents.ts';
 
-assert.equal(PARK_RESIDENTS.length, 4);
-const ids = PARK_RESIDENTS.map((resident) => resident.id);
-assert.equal(new Set(ids).size, 4);
-for (const resident of PARK_RESIDENTS) {
-  assert.equal(isParkResidentId(resident.id), true);
-  assert.ok(resident.id.startsWith('resident_'));
-  assert.ok(resident.model.endsWith('.glb'));
-  assert.ok(resident.name.length >= 2);
-}
+assert.equal(isParkResidentId('resident_cypa'), true);
 assert.equal(isParkResidentId('ch_tyapa'), false);
 assert.equal(isParkResidentId('drawing_meshy_glade'), false);
 assert.equal(hasOwnCreature([]), false);

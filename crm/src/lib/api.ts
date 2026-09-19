@@ -66,6 +66,8 @@ export const crmApi = {
     }),
   me: () => request<{ ok: boolean; display_name: string }>("/v1/crm/me"),
   overview: (period?: PeriodQuery) => request<Overview>(crmPath("/v1/crm/analytics/overview", period)),
+  growthSpeed: (period?: PeriodQuery) =>
+    request<GrowthSpeed>(crmPath("/v1/crm/analytics/growth-speed", period)),
   traffic: (period?: PeriodQuery) => request<Traffic>(crmPath("/v1/crm/analytics/traffic", period)),
   usage: (period?: PeriodQuery) => request<Usage>(crmPath("/v1/crm/analytics/usage", period)),
   usageCopies: (period?: PeriodQuery, page?: ListQuery & { q?: string; sort?: string; order?: string }) =>
@@ -88,8 +90,8 @@ export const crmApi = {
   packs: (period?: PeriodQuery) => request<Packs>(crmPath("/v1/crm/packs", period)),
   funnelSummary: (period?: PeriodQuery) =>
     request<FunnelSummary>(crmPath("/v1/crm/analytics/funnels/summary", period)),
-  funnel: (key: string, period?: PeriodQuery) =>
-    request<FunnelDetail>(`/v1/crm/analytics/funnels/${encodeURIComponent(key)}?${periodQueryString(period ?? { range: "month" })}`),
+  funnel: (key: string, period?: PeriodQuery, extra?: { days?: number }) =>
+    request<FunnelDetail>(crmPath(`/v1/crm/analytics/funnels/${encodeURIComponent(key)}`, period, extra)),
   parents: (
     period?: PeriodQuery,
     page?: ListQuery & {
@@ -113,7 +115,7 @@ export const crmApi = {
   },
   payments: (period?: PeriodQuery, page?: ListQuery & { status?: string }) =>
     request<Paged<PaymentRow> & { revenue_rub: number }>(crmPath("/v1/crm/payments", period, page)),
-  creatures: (period?: PeriodQuery, page?: ListQuery & { kind?: CreatureKind }) =>
+  creatures: (period?: PeriodQuery, page?: ListQuery & { kind?: CreatureKind; q?: string }) =>
     request<Paged<CreatureRow>>(crmPath("/v1/crm/creatures", period, page)),
   mailMeta: () => request<MailMeta>("/v1/crm/mail/meta"),
   mailSets: () => request<{ items: MailSet[] }>("/v1/crm/mail/sets"),
@@ -218,6 +220,50 @@ export type Overview = {
   charts: { parents: Point[]; dau: Point[] };
   sections: { key: string; label: string }[];
   window?: { range: string; from: string; to: string };
+  retention?: {
+    d1: number | null;
+    d7: number | null;
+    d30: number | null;
+    days: number;
+    returned_pct: number | null;
+    eligible: number;
+    returned: number;
+  };
+};
+
+export type GrowthSpeed = {
+  as_of: string;
+  cards: {
+    parents_total: number;
+    parents_last_hour: number;
+    parents_today: number;
+    parents_week: number;
+    avg_per_day: number;
+    growth_rate_pct: number | null;
+    peak_day_count: number;
+    peak_day_date: string;
+    children_total: number;
+    children_today: number;
+    creatures_total: number;
+    creatures_today: number;
+    parents_period: number;
+    parents_prev_period: number;
+  };
+  peaks: {
+    top_parent_days: Point[];
+    peak_hour_today: Point;
+    max_velocity: Point;
+    days_with_growth: number;
+  };
+  recent_parents: { id: string; email: string; created_at: number }[];
+  charts: {
+    daily_parents: Point[];
+    daily_children: Point[];
+    daily_creatures: Point[];
+    cumulative_parents: Point[];
+    hourly_today: Point[];
+    velocity: Point[];
+  };
 };
 
 export type Point = { date: string; count: number };
@@ -356,6 +402,9 @@ export type FunnelDetail = {
   steps: FunnelStep[];
   end_conversion_pct: number;
   avg_step_drop_pct: number;
+  days?: number;
+  return_pct?: number | null;
+  eligible?: number;
 };
 
 export type FunnelSummary = {
@@ -388,6 +437,9 @@ export type ParentRow = {
   id: string;
   email: string;
   remaining: number;
+  still_remaining?: number;
+  still_quota?: number;
+  still_used?: number;
   creatures: number;
   created_at: number;
   last_login_at: number | null;
@@ -439,6 +491,8 @@ export type CreatureRow = {
   has_image: boolean;
   painted: boolean;
   has_model: boolean;
+  has_postcard?: boolean;
+  postcard_url?: string | null;
   world_id?: string;
   lawn_title?: string;
   lawn_kind?: string;

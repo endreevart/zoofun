@@ -1,9 +1,12 @@
 {
   "name": "ZOOFUN",
   "short_name": "ZOOFUN",
+  "id": "/island",
   "description": "Сказочный зоопарк вашего ребенка",
-  "start_url": ".",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#00b8ec",
   "theme_color": "#00b8ec",
   "lang": "ru",

@@ -24,6 +24,7 @@ export {
   GROVE_CATALOG_MODELS,
   catalogForShell,
   childCatalogForShell,
+  plazaChildCatalog,
   catalogGroup,
   type CatalogGroupId,
 } from './layoutCatalog';
@@ -51,6 +52,10 @@ export type AuthoredProp = {
   /** World Y of the island polygon the stamp sits on. */
   y?: number;
   sink?: number;
+  mine?: boolean;
+  stillUrl?: string;
+  modelUrl?: string;
+  meshStatus?: string;
   fit?: 'height' | 'width';
   stretch?: number;
   tiltX?: number;

@@ -8,8 +8,10 @@ import time
 from sqlalchemy import and_, func, or_, select
 
 from app.accounts.creatures import hatch_job_id, usable_still
+from app.accounts.stills import still_quota, still_remaining
 from app.accounts.worlds import garden_worlds_of
 from app.analytics.geo import country_label
+from app.generation.jobs import public_postcard_src
 from app.persistence.db import session
 from app.persistence.models import (
     AnalyticsEventRow,
@@ -22,6 +24,7 @@ from app.persistence.models import (
     StylizeJobRow,
     WorldRow,
 )
+from app.commerce.skus import sku_kind
 from app.worlds import (
     ISLAND_KINDS,
     WORLD_AUTHORED,
@@ -37,6 +40,7 @@ from app.worlds import (
 )
 
 from . import ops
+from . import retention as return_metrics
 from .window import (
     ALLOWED_PERIODS,
     TimeWindow,
@@ -101,12 +105,16 @@ def _creature_kind_clause(kind: str):
 
 
 def _parent_item(row: ParentRow, creatures: int) -> dict:
+    used = int(getattr(row, "still_used", 0) or 0)
     return {
         "id": row.id,
         "email": row.email,
         "quota_total": row.quota_total,
         "generation_used": row.generation_used,
         "remaining": max(0, row.quota_total - row.generation_used),
+        "still_used": used,
+        "still_quota": still_quota(row.quota_total),
+        "still_remaining": still_remaining(row.quota_total, used),
         "creatures": int(creatures),
         "created_at": row.created_at,
         "last_login_at": row.last_login_at,
@@ -374,6 +382,7 @@ def overview(period: int | TimeWindow = 30) -> dict:
     parent_days = {str(day): int(count) for day, count in parent_rows if day}
     dau_days = {str(day): int(count) for day, count in dau_rows if day}
     queues = ops.queue_counts(window)
+    retention = return_metrics.rates(window)
 
     return _payload(
         window,
@@ -401,6 +410,7 @@ def overview(period: int | TimeWindow = 30) -> dict:
             "world_revenue_rub": int(world_revenue),
             "abandoned_checkouts": queues["abandoned_checkouts"],
             "stuck_meshes": queues["stuck_meshes"],
+            "retention": retention,
             "charts": {
                 "parents": _series(parent_days, window),
                 "dau": _series(dau_days, window),
@@ -1197,7 +1207,7 @@ def packs_table(period: int | TimeWindow = 0) -> dict:
                 {
                     "id": pack.id,
                     "title": pack_label(pack.id, pack.animals),
-                    "kind": "world" if is_world_sku(pack.id) else "pack",
+                    "kind": sku_kind(pack.id),
                     "animals": pack.animals,
                     "price_rub": pack.price_rub,
                     "sold": sold,
@@ -1206,7 +1216,11 @@ def packs_table(period: int | TimeWindow = 0) -> dict:
                 }
             )
         items.sort(
-            key=lambda item: (0 if item["kind"] == "pack" else 1, item["animals"], item["id"])
+            key=lambda item: (
+                {"pack": 0, "world": 1, "plaza_toy": 2}.get(item["kind"], 3),
+                item["animals"],
+                item["id"],
+            )
         )
     return _payload(window, {"items": items})
 
@@ -1554,18 +1568,24 @@ def _gallery_items(db, rows: list) -> list[dict]:
                 _is_painted(painted),
             )
         )
-        if job_id and not has_still:
+        if job_id:
             job_ids.append(job_id)
     job_stills: set[str] = set()
+    job_postcards: dict[str, str | None] = {}
     if job_ids:
-        job_stills = set(
-            db.scalars(
-                select(StylizeJobRow.id).where(
-                    StylizeJobRow.id.in_(job_ids),
-                    StylizeJobRow.image_base64.is_not(None),
-                )
-            )
-        )
+        meta = db.execute(
+            select(
+                StylizeJobRow.id,
+                StylizeJobRow.image_base64,
+                StylizeJobRow.postcard_status,
+                StylizeJobRow.postcard_url,
+            ).where(StylizeJobRow.id.in_(job_ids))
+        ).all()
+        job_stills = {job_id for job_id, still, _status, _url in meta if still}
+        for job_id, _still, status, url in meta:
+            if status != "ready":
+                continue
+            job_postcards[job_id] = public_postcard_src(url)
     items = []
     for (
         child_id,
@@ -1602,6 +1622,8 @@ def _gallery_items(db, rows: list) -> list[dict]:
                 "has_image": has_still or job_id in job_stills,
                 "painted": painted,
                 "has_model": has_model,
+                "has_postcard": job_id in job_postcards,
+                "postcard_url": job_postcards.get(job_id),
             }
         )
     return items
@@ -1613,6 +1635,7 @@ def creatures_gallery(
     offset: int = 0,
     parent_id: str | None = None,
     kind: str = "all",
+    q: str | None = None,
 ) -> dict:
     cap, skip = _page(limit, offset)
     window = as_window(period, 0)
@@ -1643,68 +1666,117 @@ def creatures_gallery(
             select(func.count())
             .select_from(CreatureRow)
             .join(ChildRow, ChildRow.id == CreatureRow.child_id)
+            .join(ParentRow, ParentRow.id == ChildRow.parent_id)
         )
         if window.start > 0:
             query = query.where(in_window(CreatureRow.created_at, window))
             count_q = count_q.where(in_window(CreatureRow.created_at, window))
         if parent_id:
             query = query.where(ParentRow.id == parent_id)
-            count_q = count_q.where(ChildRow.parent_id == parent_id)
+            count_q = count_q.where(ParentRow.id == parent_id)
+        needle = _email_needle(q)
+        if needle:
+            hay = func.lower(ParentRow.email)
+            query = query.where(hay.contains(needle.lower()))
+            count_q = count_q.where(hay.contains(needle.lower()))
         if kind_clause is not None:
             query = query.where(kind_clause)
             count_q = count_q.where(kind_clause)
         total = db.scalar(count_q) or 0
         rows = db.execute(
-            query.order_by(CreatureRow.created_at.desc()).limit(cap).offset(skip)
+            query.order_by(CreatureRow.created_at.desc(), CreatureRow.spec_id.desc())
+            .limit(cap)
+            .offset(skip)
         ).all()
         items = _gallery_items(db, rows)
     return _paged(items, total, cap, skip)
 
 
-def creature_image(child_id: str, spec_id: str) -> tuple[bytes, str] | None:
+def _creature_job_id(row: CreatureRow) -> str:
+    return (row.hatch_job_id or "").strip() or hatch_job_id(_creature_spec(row.payload))
+
+
+def _still_from_row(db, row: CreatureRow) -> tuple[bytes, str] | None:
     from app.settings import get_settings
     from app.storage import creature_still_path, write_creature_still
 
-    with session() as db:
-        row = db.get(CreatureRow, {"child_id": child_id, "spec_id": spec_id})
-        if row is None:
-            return None
-        path = creature_still_path(get_settings(), child_id, spec_id)
-        if path.is_file():
-            return path.read_bytes(), "image/png"
-        decoded = decode_creature_image(row.payload)
-        if decoded:
-            write_creature_still(get_settings(), child_id, spec_id, decoded[0])
-            return decoded
-        job_id = hatch_job_id(_creature_spec(row.payload)) or getattr(row, "hatch_job_id", "")
-        if not job_id:
-            return None
-        still = _decode_job_still(db.get(StylizeJobRow, job_id))
-        if still:
-            write_creature_still(get_settings(), child_id, spec_id, still[0])
-        return still
+    settings = get_settings()
+    path = creature_still_path(settings, row.child_id, row.spec_id)
+    if path.is_file():
+        return path.read_bytes(), "image/png"
+    decoded = decode_creature_image(row.payload)
+    if decoded:
+        write_creature_still(settings, row.child_id, row.spec_id, decoded[0])
+        return decoded
+    job_id = _creature_job_id(row)
+    if not job_id:
+        return None
+    still = _decode_job_still(db.get(StylizeJobRow, job_id))
+    if still:
+        write_creature_still(settings, row.child_id, row.spec_id, still[0])
+    return still
 
 
-def creature_model_path(child_id: str, spec_id: str):
-    """Local GLB only. Never fetch creature.model_url — that would be SSRF."""
-    from pathlib import Path
-
-    from app.providers.meshy import JOB_ID_RE, meshy_model_path
+def creature_image(child_id: str, spec_id: str) -> tuple[bytes, str] | None:
+    """Own file, job still, or the same spec on another child (guest copy)."""
     from app.settings import get_settings
+    from app.storage import write_creature_still
 
     with session() as db:
         row = db.get(CreatureRow, {"child_id": child_id, "spec_id": spec_id})
         if row is None:
             return None
-        job_id = (row.hatch_job_id or "").strip() or hatch_job_id(_creature_spec(row.payload))
+        found = _still_from_row(db, row)
+        if found:
+            return found
+        twins = db.scalars(
+            select(CreatureRow).where(
+                CreatureRow.spec_id == spec_id,
+                CreatureRow.child_id != child_id,
+            )
+        ).all()
+        for other in twins:
+            found = _still_from_row(db, other)
+            if found:
+                write_creature_still(get_settings(), child_id, spec_id, found[0])
+                return found
+        return None
+
+
+def creature_postcard(child_id: str, spec_id: str) -> tuple[bytes, str] | None:
+    from app.providers.meshy import JOB_ID_RE
+    from app.settings import get_settings
+    from app.storage import read_asset
+
+    with session() as db:
+        row = db.get(CreatureRow, {"child_id": child_id, "spec_id": spec_id})
+        if row is None:
+            return None
+        job_id = _creature_job_id(row)
+    if not job_id or not JOB_ID_RE.fullmatch(job_id):
+        return None
+    data = read_asset(get_settings(), f"postcards/{job_id}.png")
+    if not data:
+        return None
+    return data, "image/png"
+
+
+def creature_model_bytes(child_id: str, spec_id: str) -> bytes | None:
+    """GLB from our disk or bucket. Never fetch creature.model_url — that would be SSRF."""
+    from app.providers.meshy import JOB_ID_RE
+    from app.settings import get_settings
+    from app.storage import read_asset
+
+    with session() as db:
+        row = db.get(CreatureRow, {"child_id": child_id, "spec_id": spec_id})
+        if row is None:
+            return None
+        job_id = _creature_job_id(row)
     if not job_id or not JOB_ID_RE.fullmatch(job_id):
         return None
     settings = get_settings()
-    path = Path(settings.storage_local_root) / "meshes" / f"{job_id}.glb"
-    if path.is_file():
-        return path
-    try:
-        legacy = meshy_model_path(settings, job_id)
-    except ValueError:
-        return None
-    return legacy if legacy.is_file() else None
+    for key in (f"meshes/{job_id}.glb", f"meshy/{job_id}.glb"):
+        data = read_asset(settings, key)
+        if data:
+            return data
+    return None

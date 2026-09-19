@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from sqlalchemy import delete, func, select
 
 from app.accounts.worlds import grant_world
+from app.commerce.skus import is_plaza_toy_sku
 from app.persistence.db import seed_packs, session
 from app.persistence.models import OperatorSessionRow, PackRow, ParentRow, PaymentRow
 from app.worlds import ISLAND_KINDS, is_world_sku
@@ -106,7 +107,11 @@ class CommerceStore:
                 seed_packs(db)
                 rows = db.scalars(select(PackRow)).all()
             return sorted(
-                (_pack(row) for row in rows if not is_world_sku(row.id)),
+                (
+                    _pack(row)
+                    for row in rows
+                    if not is_world_sku(row.id) and not is_plaza_toy_sku(row.id)
+                ),
                 key=lambda pack: pack.animals,
             )
 
@@ -121,6 +126,14 @@ class CommerceStore:
                 (_pack(row) for row in rows if is_world_sku(row.id)),
                 key=lambda pack: order.get(pack.id, 99),
             )
+
+    def list_plaza_toys(self) -> list[Pack]:
+        with session() as db:
+            rows = db.scalars(select(PackRow)).all()
+            if not rows:
+                seed_packs(db)
+                rows = db.scalars(select(PackRow)).all()
+            return [_pack(row) for row in rows if is_plaza_toy_sku(row.id)]
 
     def get_pack(self, pack_id: str) -> Pack | None:
         with session() as db:
@@ -224,6 +237,8 @@ class CommerceStore:
             row.error_message = None
             if is_world_sku(row.pack_id):
                 grant_world(parent, row.pack_id)
+            elif is_plaza_toy_sku(row.pack_id):
+                parent.plaza_toy_quota = int(getattr(parent, "plaza_toy_quota", 0) or 0) + 1
             else:
                 parent.quota_total += row.animals
             db.flush()

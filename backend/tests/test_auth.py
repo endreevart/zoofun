@@ -57,6 +57,37 @@ async def test_register_login_me_and_logout() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dev_session_mints_a_stable_local_parent() -> None:
+    from app.accounts.store import DEV_PARENT_EMAIL
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post("/v1/auth/dev-session")
+        assert first.status_code == 200
+        body = first.json()
+        assert body["parent_email"] == DEV_PARENT_EMAIL
+        token = body["token"]
+        me = await client.get("/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert me.status_code == 200
+        assert me.json()["child"]["id"] == body["child"]["id"]
+        second = await client.post("/v1/auth/dev-session")
+        assert second.status_code == 200
+        assert second.json()["child"]["id"] == body["child"]["id"]
+        assert second.json()["token"] != token
+
+
+def test_ensure_dev_parent_resets_a_changed_password() -> None:
+    from app.accounts.store import DEV_PARENT_EMAIL, DEV_PARENT_PASSWORD
+
+    store = AccountStore()
+    store.register(DEV_PARENT_EMAIL, DEV_PARENT_PASSWORD)
+    store.replace_password(DEV_PARENT_EMAIL, "other12")
+    opened = store.ensure_dev_parent()
+    assert store.session(opened.token) is not None
+    again = store.login(DEV_PARENT_EMAIL, DEV_PARENT_PASSWORD)
+    assert again.token
+
+
+@pytest.mark.asyncio
 async def test_register_rejects_short_password() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(

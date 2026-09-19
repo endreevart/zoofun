@@ -135,5 +135,13 @@ assert.equal(
   wireStill,
 );
 assert.equal(displayStillUrl(wireStill), '/api/zoo/v1/zoo/creatures/ch_mesh/portrait');
+assert.equal(
+  displayStillUrl('/v1/zoo/creatures/ch_mesh/postcard'),
+  '/api/zoo/v1/zoo/creatures/ch_mesh/postcard',
+);
 assert.equal(displayStillUrl('https://s3.example/postcards/x.png'), 'https://s3.example/postcards/x.png');
+assert.equal(
+  displayStillUrl('/v1/plaza/toys/ab12/still'),
+  '/api/zoo/v1/plaza/toys/ab12/still',
+);
 assert.equal(displayStillUrl(null), null);

@@ -9,6 +9,7 @@ type Props = {
   onWash: (() => void) | null;
   onFeedGame: (() => void) | null;
   onPuzzle: (() => void) | null;
+  onTeleport: (() => void) | null;
   onSettings: () => void;
   onDismiss: () => void;
 };
@@ -24,6 +25,7 @@ export function PilotChoice({
   onWash,
   onFeedGame,
   onPuzzle,
+  onTeleport,
   onSettings,
   onDismiss,
 }: Props) {
@@ -67,6 +69,12 @@ export function PilotChoice({
           <button className="pilot-act" type="button" onClick={onPuzzle}>
             <CreatureMenuIcon name="puzzle" />
             <span>Пазл</span>
+          </button>
+        ) : null}
+        {onTeleport ? (
+          <button className="pilot-act" type="button" onClick={onTeleport}>
+            <CreatureMenuIcon name="move" />
+            <span>Телепорт</span>
           </button>
         ) : null}
       </div>

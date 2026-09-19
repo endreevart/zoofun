@@ -7,16 +7,19 @@ from typing import Annotated, Any
 
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from app.analytics.actions import record_action
 from app.accounts.store import ChildProfile, ParentAccount, store
 from app.api.deps import require_session
 from app.commerce.promo import QuoteError, quote_pack
 from app.commerce.settlement import reconcile_parent, verify_notification
+from app.commerce.skus import is_plaza_toy_sku
 from app.commerce.store import Pack, commerce
 from app.ops.log import write_log
+from app.plaza import toys as plaza_toys
 from app.providers import tbank
 from app.ratelimit import enforce
 from app.settings import get_settings
@@ -59,6 +62,7 @@ class CatalogOut(BaseModel):
     free_animals: int = 1
     packs: list[PackOut]
     worlds: list[WorldOut] = []
+    plaza_toys: list[PackOut] = []
 
 
 def _paid_return_url(request: Request, settings) -> str:
@@ -97,6 +101,7 @@ class CheckoutOut(BaseModel):
     payment_url: str
     amount_rub: int
     animals: int
+    granted: bool = False
 
 
 def _pack_out(pack: Pack) -> PackOut:
@@ -137,11 +142,51 @@ def _quoted(pack: Pack, promo_code: str) -> QuoteOut:
     )
 
 
+def _dev_settle(
+    *,
+    request: Request,
+    parent: ParentAccount,
+    pack: Pack,
+    quoted: QuoteOut,
+    in_place: bool,
+) -> CheckoutOut:
+    """Local ENVIRONMENT=development: credit the ledger without T-Bank."""
+    payment = commerce.create_payment(
+        parent.id,
+        pack,
+        amount_rub=quoted.amount_rub,
+        promo_code=quoted.promo_code,
+        discount_rub=quoted.discount_rub,
+    )
+    commerce.settle_confirmed(payment.id)
+    write_log(
+        "tbank.dev_grant",
+        f"dev grant {pack.id}",
+        payment_id=payment.id,
+        parent_id=parent.id,
+        payload={"pack_id": pack.id, "in_place": in_place},
+    )
+    record_action(
+        "shop.paid",
+        parent_id=parent.id,
+        payload={"pack_id": pack.id, "amount_rub": quoted.amount_rub, "via": "dev"},
+    )
+    settings = get_settings()
+    return CheckoutOut(
+        payment_id=payment.id,
+        payment_url="" if in_place else _paid_return_url(request, settings),
+        amount_rub=quoted.amount_rub,
+        animals=pack.animals,
+        granted=in_place,
+    )
+
+
 @router.get("/catalog", response_model=CatalogOut)
 async def catalog() -> CatalogOut:
     return CatalogOut(
         packs=[_pack_out(pack) for pack in commerce.list_packs()],
         worlds=[_world_out(item) for item in commerce.list_worlds()],
+        plaza_toys=[_pack_out(pack) for pack in commerce.list_plaza_toys()],
     )
 
 
@@ -150,49 +195,74 @@ async def quote(body: QuoteIn, request: Request) -> QuoteOut:
     enforce(request, "commerce.quote", limit=40, window_s=60)
     pack = commerce.get_pack(body.pack_id)
     if pack is None:
+        record_action("shop.quote_fail", payload={"reason": "unknown_pack", "pack_id": body.pack_id})
         raise HTTPException(status_code=404, detail="unknown_pack")
     if not pack.buyable:
+        record_action("shop.quote_fail", payload={"reason": "pack_unpriced", "pack_id": body.pack_id})
         raise HTTPException(status_code=400, detail="pack_unpriced")
-    return _quoted(pack, body.promo_code)
+    try:
+        quoted = _quoted(pack, body.promo_code)
+    except HTTPException as exc:
+        record_action(
+            "shop.quote_fail",
+            payload={"reason": str(exc.detail), "pack_id": body.pack_id, "has_promo": bool(body.promo_code)},
+        )
+        raise
+    return quoted
 
 
 @router.post("/checkout", response_model=CheckoutOut)
 async def checkout(
     body: CheckoutIn,
     request: Request,
+    background: BackgroundTasks,
     pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
 ) -> CheckoutOut:
     parent, _child = pair
     pack = commerce.get_pack(body.pack_id)
     if pack is None:
+        record_action("shop.checkout_fail", parent_id=parent.id, payload={"reason": "unknown_pack"})
         raise HTTPException(status_code=404, detail="unknown_pack")
     if not pack.buyable:
+        record_action(
+            "shop.checkout_fail",
+            parent_id=parent.id,
+            payload={"reason": "pack_unpriced", "pack_id": body.pack_id},
+        )
         raise HTTPException(status_code=400, detail="pack_unpriced")
+    if is_plaza_toy_sku(pack.id):
+        blocked = plaza_toys.checkout_blocked(parent.id)
+        if blocked:
+            record_action(
+                "shop.checkout_fail",
+                parent_id=parent.id,
+                payload={"reason": blocked, "pack_id": pack.id},
+            )
+            raise HTTPException(status_code=409, detail=blocked)
     quoted = _quoted(pack, body.promo_code)
     settings = get_settings()
+    if settings.environment == "development" and is_plaza_toy_sku(pack.id):
+        return _dev_settle(
+            request=request,
+            parent=parent,
+            pack=pack,
+            quoted=quoted,
+            in_place=True,
+        )
     if not tbank.configured(settings):
         if is_world_sku(pack.id) and settings.environment == "development":
-            payment = commerce.create_payment(
-                parent.id,
-                pack,
-                amount_rub=quoted.amount_rub,
-                promo_code=quoted.promo_code,
-                discount_rub=quoted.discount_rub,
+            return _dev_settle(
+                request=request,
+                parent=parent,
+                pack=pack,
+                quoted=quoted,
+                in_place=False,
             )
-            commerce.settle_confirmed(payment.id)
-            write_log(
-                "tbank.dev_world",
-                f"dev grant {pack.id}",
-                payment_id=payment.id,
-                parent_id=parent.id,
-                payload={"pack_id": pack.id},
-            )
-            return CheckoutOut(
-                payment_id=payment.id,
-                payment_url=_paid_return_url(request, settings),
-                amount_rub=quoted.amount_rub,
-                animals=pack.animals,
-            )
+        record_action(
+            "shop.checkout_fail",
+            parent_id=parent.id,
+            payload={"reason": "payment_unconfigured", "pack_id": pack.id},
+        )
         raise HTTPException(status_code=503, detail="payment_unconfigured")
 
     reusable = commerce.find_reusable_checkout(
@@ -209,6 +279,16 @@ async def checkout(
             payment_id=reusable.id,
             parent_id=parent.id,
             payload={"pack_id": pack.id, "order_id": reusable.id},
+        )
+        record_action(
+            "shop.checkout",
+            parent_id=parent.id,
+            payload={
+                "pack_id": pack.id,
+                "amount_rub": reusable.amount_rub,
+                "animals": reusable.animals,
+                "reused": True,
+            },
         )
         return CheckoutOut(
             payment_id=reusable.id,
@@ -266,6 +346,11 @@ async def checkout(
             parent_id=parent.id,
             payload=err,
         )
+        record_action(
+            "shop.checkout_fail",
+            parent_id=parent.id,
+            payload={"reason": "tbank_init_failed", "pack_id": pack.id, "amount_rub": quoted.amount_rub},
+        )
         raise HTTPException(status_code=502, detail="tbank_init_failed") from exc
 
     url = str(payload.get("PaymentURL") or "")
@@ -280,14 +365,33 @@ async def checkout(
             parent_id=parent.id,
             payload=payload,
         )
+        record_action(
+            "shop.checkout_fail",
+            parent_id=parent.id,
+            payload={"reason": "no_url", "pack_id": pack.id, "amount_rub": quoted.amount_rub},
+        )
         raise HTTPException(status_code=502, detail="tbank_init_failed")
     commerce.attach_tbank(payment.id, tbank_id, url)
-    write_log(
+    background.add_task(
+        write_log,
         "tbank.init_ok",
         f"PaymentId={tbank_id}",
         payment_id=payment.id,
         parent_id=parent.id,
         payload={"PaymentId": tbank_id, "PaymentURL": url, "Status": payload.get("Status")},
+    )
+    background.add_task(
+        record_action,
+        "shop.checkout",
+        parent_id=parent.id,
+        payload={
+            "pack_id": pack.id,
+            "amount_rub": quoted.amount_rub,
+            "animals": pack.animals,
+            "discount_rub": quoted.discount_rub,
+            "has_promo": bool(quoted.promo_code),
+            "reused": False,
+        },
     )
     return CheckoutOut(
         payment_id=payment.id,
@@ -358,6 +462,10 @@ class ReconcileOut(BaseModel):
     credited: int
     pending: int
     remaining: int
+    still_remaining: int = 0
+    still_quota: int = 0
+    plaza_toy_remaining: int = 0
+    plaza_toy_quota: int = 0
     owned_worlds: list[str] = []
     worlds: list[WorldInfoOut] = []
 
@@ -383,6 +491,12 @@ async def reconcile(
         credited=credited,
         pending=pending,
         remaining=fresh.remaining if fresh else parent.remaining,
+        still_remaining=fresh.still_remaining if fresh else parent.still_remaining,
+        still_quota=fresh.still_quota if fresh else parent.still_quota,
+        plaza_toy_remaining=(
+            fresh.plaza_toy_remaining if fresh else parent.plaza_toy_remaining
+        ),
+        plaza_toy_quota=fresh.plaza_toy_quota if fresh else parent.plaza_toy_quota,
         owned_worlds=(fresh.owned_worlds if fresh else parent.owned_worlds),
         worlds=[
             WorldInfoOut(id=item.id, title=item.title, sku=item.sku)

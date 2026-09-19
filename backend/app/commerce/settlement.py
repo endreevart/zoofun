@@ -15,7 +15,9 @@ from typing import Any
 
 import httpx
 
+from app.analytics.actions import record_action
 from app.commerce.store import commerce
+from app.commerce.skus import is_plaza_toy_sku
 from app.worlds import is_world_sku
 from app.ops.log import write_log
 from app.providers import tbank
@@ -65,11 +67,12 @@ def apply_state(payment: Payment, payload: dict[str, Any], *, source: str) -> st
     if status == "CONFIRMED" and success:
         commerce.settle_confirmed(payment.id)
         if not was_confirmed:
-            note = (
-                f"world {payment.pack_id} via {source}"
-                if is_world_sku(payment.pack_id)
-                else f"+{payment.animals} credits via {source}"
-            )
+            if is_plaza_toy_sku(payment.pack_id):
+                note = f"plaza toy {payment.pack_id} via {source}"
+            elif is_world_sku(payment.pack_id):
+                note = f"world {payment.pack_id} via {source}"
+            else:
+                note = f"+{payment.animals} credits via {source}"
             write_log(
                 "payment.confirmed",
                 note,
@@ -83,6 +86,18 @@ def apply_state(payment: Payment, payload: dict[str, Any], *, source: str) -> st
                 },
             )
             logger.info("payment %s confirmed via %s %s", payment.id, source, note)
+            record_action(
+                "shop.paid",
+                parent_id=payment.parent_id,
+                payload={
+                    "pack_id": payment.pack_id,
+                    "animals": payment.animals,
+                    "amount_rub": payment.amount_rub,
+                    "via": source,
+                    "world": is_world_sku(payment.pack_id),
+                    "plaza_toy": is_plaza_toy_sku(payment.pack_id),
+                },
+            )
         return "confirmed"
 
     if status in FAILED_STATUSES:
@@ -100,6 +115,11 @@ def apply_state(payment: Payment, payload: dict[str, Any], *, source: str) -> st
             payment_id=payment.id,
             parent_id=payment.parent_id,
             payload=payload,
+        )
+        record_action(
+            "shop.pay_fail",
+            parent_id=payment.parent_id,
+            payload={"pack_id": payment.pack_id, "status": status, "via": source},
         )
         return "failed"
 

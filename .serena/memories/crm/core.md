@@ -1,11 +1,10 @@
-# CRM
+CRM Vue SPA at crm.zooo.fun, operator login, same Postgres. SQLAdmin /staff writes credits/prices. CRM may CRUD promocodes and send consented mail.
 
-`crm/` Vue SPA. Prod `crm.zooo.fun` → `/opt/zoofun-crm/dist`, `/v1/*` proxied to API.
+Surfaces: dashboard (incl. return % 1/7/30), funnels (generation packs only for «купил пакет», D-024), return funnel (`return`, days 1–90), growth speed, traffic, usage, parents, creatures, packs, promos, payments, mail, ops.
 
-Same Postgres as the API. Operator login (`POST /v1/crm/login`). SQLAdmin `/staff` stays the write console for credits and list prices. CRM may CRUD promocodes and send consented mail. No second ledger.
+Return: first island calendar day → came back → came back within N days. % uses families whose N days already passed. Island sessions, not site pageviews.
 
-Surfaces: dashboard, funnels (generation packs only for “купил пакет”, D-024), traffic, usage, parents, creatures, packs, promos, payments, mail, ops (stuck meshes, abandoned checkout, family timeline).
+Growth speed: parent registrations now / hour / today / week, rate vs previous window, peak day, children and creatures today.
 
-Mail: cooldown rules, 48h effect without open-pixels. Unsubscribe `GET /v1/public/unsubscribe`.
-
+Mail: cooldown rules, 48h effect without open-pixels. Unsubscribe GET /v1/public/unsubscribe.
 First-touch UTM lives on the parent until payment.

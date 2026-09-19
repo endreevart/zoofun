@@ -19,12 +19,13 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.accounts.store import ChildProfile, ParentAccount, store
-from app.api.deps import optional_session
+from app.api.deps import optional_session, require_session
 from app.generation.jobs import (
     MAX_UPLOAD_BYTES,
     create_job,
     get_job,
     postcard_path,
+    request_mesh,
     run_job,
     sniff_image,
 )
@@ -63,17 +64,39 @@ class JobOut(BaseModel):
     postcard_url: str | None = None
     postcard_status: str = "pending"
     remaining: int | None = None
+    still_remaining: int | None = None
+    still_quota: int | None = None
+    still_used: int | None = None
 
 
-def _remaining(parent_id: str | None) -> int | None:
+def _quota_fields(parent_id: str | None) -> dict[str, int | None]:
+    empty = {
+        "remaining": None,
+        "still_remaining": None,
+        "still_quota": None,
+        "still_used": None,
+    }
     if not parent_id:
-        return None
+        return empty
     parent = store.get(parent_id)
-    return parent.remaining if parent else None
+    if parent is None:
+        return empty
+    return {
+        "remaining": parent.remaining,
+        "still_remaining": parent.still_remaining,
+        "still_quota": parent.still_quota,
+        "still_used": parent.still_used,
+    }
 
 
 def _to_out(job, *, reveal_still: bool = True) -> JobOut:
     has_image = bool(job.image_base64) and job.status != "failed" and reveal_still
+    quota = _quota_fields(job.parent_id) if reveal_still else {
+        "remaining": None,
+        "still_remaining": None,
+        "still_quota": None,
+        "still_used": None,
+    }
     return JobOut(
         job_id=job.id,
         status=job.status,
@@ -86,7 +109,7 @@ def _to_out(job, *, reveal_still: bool = True) -> JobOut:
         mesh_status=job.mesh_status,
         postcard_url=job.postcard_url if job.postcard_url else None,
         postcard_status=job.postcard_status,
-        remaining=_remaining(job.parent_id) if reveal_still else None,
+        **quota,
     )
 
 
@@ -126,16 +149,27 @@ async def start_stylize(
             return _to_out(existing)
 
     reserved = False
+    still_reserved = False
+    mesh_deferred = False
     parent_id = None
     if pair is not None:
         parent, _child = pair
+        fresh = store.get(parent.id)
+        if fresh is not None:
+            parent = fresh
         try:
-            store.reserve_generation(parent.id)
+            if parent.generation_used == 0:
+                store.reserve_generation(parent.id)
+                reserved = True
+            else:
+                store.reserve_still(parent.id)
+                still_reserved = True
+                mesh_deferred = True
         except ValueError as exc:
-            if str(exc) == "no_credits":
-                raise HTTPException(status_code=402, detail="no_credits") from exc
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        reserved = True
+            detail = str(exc)
+            if detail in {"no_credits", "no_stills"}:
+                raise HTTPException(status_code=402, detail=detail) from exc
+            raise HTTPException(status_code=400, detail=detail) from exc
         parent_id = parent.id
     try:
         job = await create_job(
@@ -143,16 +177,56 @@ async def start_stylize(
             job_id=idempotency_key,
             parent_id=parent_id,
             reserved=reserved,
+            still_reserved=still_reserved,
+            mesh_deferred=mesh_deferred,
             source_kind=verdict.source,
         )
     except ValueError as exc:
         if reserved and parent_id:
             store.refund_generation(parent_id)
+        if still_reserved and parent_id:
+            store.refund_still(parent_id)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if job.status == "queued":
         _dispatch(background, job.id)
     elif reserved and parent_id and job.parent_id != parent_id:
         store.refund_generation(parent_id)
+    elif still_reserved and parent_id and job.parent_id != parent_id:
+        store.refund_still(parent_id)
+    return _to_out(job)
+
+
+@router.post("/stylize/{job_id}/mesh", status_code=202, response_model=JobOut)
+async def start_mesh(
+    job_id: str,
+    background: BackgroundTasks,
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
+) -> JobOut:
+    parent, _child = pair
+    existing = await get_job(job_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="job_not_found")
+    if existing.parent_id and existing.parent_id != parent.id:
+        raise HTTPException(status_code=404, detail="job_not_found")
+    if existing.purpose == "plaza_toy":
+        raise HTTPException(status_code=400, detail="not_a_creature")
+    if existing.model_url and existing.mesh_status == "ready":
+        return _to_out(existing)
+    if existing.mesh_status == "pending" and existing.reserved:
+        _dispatch(background, existing.id)
+        return _to_out(existing)
+    try:
+        job = await request_mesh(job_id, parent_id=parent.id)
+    except ValueError as exc:
+        detail = str(exc)
+        if detail == "no_credits":
+            raise HTTPException(status_code=402, detail="no_credits") from exc
+        if detail == "job_not_found":
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
+    if job.mesh_status == "pending":
+        _dispatch(background, job.id)
+    write_log("stylize.mesh", "revive", parent_id=parent.id, payload={"job_id": job.id})
     return _to_out(job)
 
 

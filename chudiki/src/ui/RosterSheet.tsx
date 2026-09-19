@@ -10,6 +10,8 @@ import {
   photosInView,
   rosterEntry,
   ROSTER_ALL,
+  ROSTER_DOWNLOAD_GLB,
+  ROSTER_GO_GARDEN,
   ROSTER_TITLE,
   type RosterEntry,
 } from './rosterView';
@@ -19,9 +21,11 @@ export type RosterSheetProps = {
   thumbs: Record<string, string>;
   onClose(): void;
   onSelect(spec: ChudikSpec): void;
+  onGarden?(spec: ChudikSpec): void;
+  onDownloadGlb?(spec: ChudikSpec): void;
 };
 
-export function RosterSheet({ specs, thumbs, onClose, onSelect }: RosterSheetProps) {
+export function RosterSheet({ specs, thumbs, onClose, onSelect, onGarden, onDownloadGlb }: RosterSheetProps) {
   const entries = useMemo(
     () =>
       ownRoster(specs).map((spec) =>
@@ -221,22 +225,43 @@ export function RosterSheet({ specs, thumbs, onClose, onSelect }: RosterSheetPro
                       {index === 0 ? <span className="roster-open-pill">Открыть</span> : null}
                     </button>
                     <span className="roster-photo-name">{entry.name}</span>
-                    <button
-                      className="roster-expand"
-                      type="button"
-                      aria-label={`Посмотреть фото ${entry.name}`}
-                      onClick={() => setPeek(entry)}
-                    >
-                      <ExpandMark />
-                    </button>
-                    <button
-                      className="roster-dl"
-                      type="button"
-                      aria-label={`Скачать фото ${entry.name}`}
-                      onClick={() => void saveOne(entry)}
-                    >
-                      <DownloadMark />
-                    </button>
+                    <div className="roster-photo-tools">
+                      <button
+                        className="roster-expand"
+                        type="button"
+                        aria-label={`Посмотреть фото ${entry.name}`}
+                        onClick={() => setPeek(entry)}
+                      >
+                        <ExpandMark />
+                      </button>
+                      <button
+                        className="roster-dl"
+                        type="button"
+                        aria-label={`Скачать фото ${entry.name}`}
+                        onClick={() => void saveOne(entry)}
+                      >
+                        <DownloadMark />
+                      </button>
+                      {byId.get(entry.id)?.drawing?.modelUrl ? (
+                        <button
+                          className="roster-chip"
+                          type="button"
+                          aria-label={`${ROSTER_DOWNLOAD_GLB} ${entry.name}`}
+                          onClick={() => void onDownloadGlb?.(byId.get(entry.id)!)}
+                        >
+                          {ROSTER_DOWNLOAD_GLB}
+                        </button>
+                      ) : (
+                        <button
+                          className="roster-chip"
+                          type="button"
+                          aria-label={`${ROSTER_GO_GARDEN} ${entry.name}`}
+                          onClick={() => (onGarden ?? onSelect)(byId.get(entry.id)!)}
+                        >
+                          {ROSTER_GO_GARDEN}
+                        </button>
+                      )}
+                    </div>
                   </article>
                 ))}
               </div>

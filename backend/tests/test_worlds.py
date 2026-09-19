@@ -13,6 +13,7 @@ from app.worlds import (
     WORLD_DIY_GROVE,
     WORLD_DIY_MEADOW,
     checkout_description,
+    lawn_cover,
     lawn_title,
     pack_label,
     world_title,
@@ -36,8 +37,13 @@ def test_checkout_description_for_the_diy_island() -> None:
     assert checkout_description(WORLD_DIY_GARDEN, 0) == "Zooofun: остров «Собери сам»"
     assert checkout_description(WORLD_DIY_MEADOW, 0) == "Zooofun: луг «Собери луг»"
     assert checkout_description(WORLD_DIY_GROVE, 0) == "Zooofun: куболесье «Собери куболесье»"
+    assert checkout_description("plaza_toy_1", 0) == "Zooofun: штука для поляны"
+    assert pack_label("plaza_toy_1") == "Штука для поляны"
     assert checkout_description("pack_1", 1) == "Zooofun: 1 животное"
     assert checkout_description("pack_5", 5) == "Zooofun: 5 животных"
+    assert lawn_cover(WORLD_AUTHORED) == "/ui/magic-island.jpg"
+    assert lawn_cover(WORLD_AUTHORED_MEADOW) == "/ui/magic-meadow.jpg"
+    assert lawn_cover(WORLD_DIY_GROVE) == "/ui/diy-grove.jpg"
     assert lawn_title(WORLD_AUTHORED) == "Волшебный остров"
     assert lawn_title(WORLD_AUTHORED_MEADOW) == "Висячий луг"
     assert lawn_title(WORLD_DIY_GROVE) == "Собери куболесье"
@@ -155,6 +161,23 @@ def test_paying_for_grove_grants_the_grove_not_credits() -> None:
     assert fresh.owned_worlds == [WORLD_DIY_GROVE]
     assert fresh.worlds[0].title == "Куболесье 1"
     assert fresh.worlds[0].sku == WORLD_DIY_GROVE
+
+
+@pytest.mark.asyncio
+async def test_me_grants_free_arcade_garden() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post(
+            "/v1/auth/register",
+            json={"email": "arcade-free@example.com", "password": "secret1"},
+        )
+        token = created.json()["token"]
+        assert created.json()["owned_worlds"] == []
+        me = await client.get("/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["owned_worlds"] == [WORLD_DIY_GARDEN]
+    assert me.json()["worlds"] == [
+        {"id": WORLD_DIY_GARDEN, "title": "Сад 1", "sku": WORLD_DIY_GARDEN}
+    ]
 
 
 @pytest.mark.asyncio

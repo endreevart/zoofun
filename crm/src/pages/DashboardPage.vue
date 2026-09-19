@@ -20,6 +20,15 @@
       <StatCard icon="pi pi-chart-bar" label="DAU" :value="data.dau" :hint="delta(data.dau_delta_pct)" help="Сколько разных семей заходили за последние сутки окна. Не число устройств." :delay="160" />
       <StatCard icon="pi pi-chart-line" label="WAU" :value="data.wau" help="Сколько разных семей заходили за последние 7 дней окна." :delay="200" />
       <StatCard icon="pi pi-calendar" label="MAU" :value="data.mau" help="Сколько разных семей заходили за последние 30 дней окна." :delay="240" />
+      <StatCard
+        icon="pi pi-replay"
+        label="Возврат 1 / 7 / 30"
+        :value="retentionLabel"
+        help="Доля семей, которые снова зашли в сад за 1, 7 и 30 дней после первого захода. Считаем тех, у кого эти дни уже прошли."
+        :delay="260"
+        clickable
+        @click="goFunnelReturn"
+      />
       <StatCard icon="pi pi-globe" label="Визиты сайта" :value="data.site_sessions" help="Заходы на маркетинговый сайт. Сад и страница «играть» Метрику не грузят." :delay="280" clickable @click="go('traffic')" />
       <StatCard icon="pi pi-eye" label="Просмотры" :value="data.pageviews" help="Сколько страниц открыли. Одна сессия может дать несколько просмотров." :delay="320" />
       <StatCard icon="pi pi-map" label="Сессии острова" :value="data.island_sessions" help="Заходы в сад. Это не кнопка «играть» на сайте." :delay="360" clickable @click="go('usage')" />
@@ -40,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "primevue/button";
 import CrmBusy from "@/components/crm/CrmBusy.vue";
@@ -56,6 +65,14 @@ const period = usePeriodStore();
 const loading = ref(false);
 const data = ref<Overview | null>(null);
 
+const retentionLabel = computed(() => {
+  const retention = data.value?.retention;
+  if (!retention) return "—";
+  return [retention.d1, retention.d7, retention.d30]
+    .map((value) => (value != null ? `${value}%` : "—"))
+    .join(" / ");
+});
+
 function delta(value: number | null) {
   if (value == null) return "";
   const sign = value > 0 ? "+" : "";
@@ -64,6 +81,10 @@ function delta(value: number | null) {
 
 function go(name: string) {
   void router.push({ name });
+}
+
+function goFunnelReturn() {
+  void router.push({ name: "funnel-detail", params: { key: "return" } });
 }
 
 async function load() {

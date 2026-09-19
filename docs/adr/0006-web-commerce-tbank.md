@@ -33,7 +33,7 @@ Accounts, zoos, packs, and payments now live in PostgreSQL. SQLAdmin at `/staff`
 
 - Backend stores `quota_total`, `generation_used`, pack catalog, and a payment ledger in PostgreSQL.
 - SQLAdmin at `/staff` is the full operator console. CRM is a later metrics layer, not a second source of writes.
-- Stylize reserves a credit when a signed-in parent starts a job; refunds on technical failure before the model runs; does not refund aesthetic dislike.
+- Stylize reserves a 3D credit on the first signed-in job, or a still credit on later jobs (D-031). Revive (`POST .../stylize/{id}/mesh`) reserves 3D. Refunds on technical failure before the model runs; does not refund aesthetic dislike. Still quota is derived: `10 + 10 * max(0, quota_total - 1)`.
 - Existing parent zoos migrate: `quota_total = 1`, `generation_used =` current non-resident creature count. Test families may need operator-granted credits.
 - Cursor rules and product docs no longer forbid T-Bank commerce.
 - Credits are granted through one code path (`app/commerce/settlement.apply_state`) shared by the notification and the reconciliation, so the two can never diverge. Granting stays idempotent through the locked `settle_confirmed`.

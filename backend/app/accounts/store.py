@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.accounts.creatures import (
     apply_creature_flags,
     attach_job_result,
+    claimed_job_id,
     creature_id,
     hatch_job_id,
     is_seeded_resident,
@@ -22,6 +23,7 @@ from app.accounts.creatures import (
     without_residents,
 )
 from app.accounts.passwords import hash_password, verify_password
+from app.accounts.stills import still_quota, still_remaining
 from app.accounts.worlds import GardenWorld, worlds_of_parent
 from app.ops.log import write_log
 from app.persistence.db import session
@@ -30,9 +32,11 @@ from app.persistence.models import (
     CreatureRow,
     ParentRow,
     ParentSessionRow,
+    PlazaMetaRow,
     StylizeJobRow,
     WorldRow,
 )
+from app.plaza.tickets import TICKETS_PER_DAY, plaza_day
 
 _CHILDREN = selectinload(ParentRow.children)
 
@@ -52,6 +56,19 @@ def _creature_row(child_id: str, spec_id: str, name: object, payload: dict) -> C
     return row
 
 
+def _foreign_generation(db, parent_id: str | None, record: dict) -> bool:
+    """True when this row's mesh belongs to another family's stylize job."""
+    if not parent_id:
+        return False
+    job_id = claimed_job_id(record)
+    if not job_id:
+        return False
+    job = db.get(StylizeJobRow, job_id)
+    if job is None or not job.parent_id:
+        return False
+    return job.parent_id != parent_id
+
+
 @dataclass
 class ChildProfile:
     id: str
@@ -66,6 +83,9 @@ class ParentAccount:
     children: list[ChildProfile]
     quota_total: int = 1
     generation_used: int = 0
+    still_used: int = 0
+    plaza_toy_quota: int = 0
+    plaza_toy_used: int = 0
     yandex_id: str | None = None
     owned_worlds: list[str] = field(default_factory=list)
     worlds: list[GardenWorld] = field(default_factory=list)
@@ -74,6 +94,20 @@ class ParentAccount:
     def remaining(self) -> int:
         return max(0, self.quota_total - self.generation_used)
 
+    @property
+    def still_quota(self) -> int:
+        return still_quota(self.quota_total)
+
+    @property
+    def still_remaining(self) -> int:
+        return still_remaining(self.quota_total, self.still_used)
+
+    @property
+    def plaza_toy_remaining(self) -> int:
+        from app.commerce.skus import PLAZA_TOY_CAP
+
+        return max(0, min(PLAZA_TOY_CAP, self.plaza_toy_quota) - self.plaza_toy_used)
+
 
 @dataclass
 class Session:
@@ -81,6 +115,10 @@ class Session:
     parent_id: str
     child_id: str
     expires_at: float
+
+
+DEV_PARENT_EMAIL = "dev@zoofun.local"
+DEV_PARENT_PASSWORD = "zoofun-dev"
 
 
 def _nickname_from_email(email: str) -> str:
@@ -99,6 +137,9 @@ def _parent_from_row(row: ParentRow) -> ParentAccount:
         children=children,
         quota_total=row.quota_total,
         generation_used=row.generation_used,
+        still_used=int(getattr(row, "still_used", 0) or 0),
+        plaza_toy_quota=int(getattr(row, "plaza_toy_quota", 0) or 0),
+        plaza_toy_used=int(getattr(row, "plaza_toy_used", 0) or 0),
         yandex_id=row.yandex_id,
         owned_worlds=[item.id for item in worlds],
         worlds=worlds,
@@ -120,6 +161,17 @@ class AccountStore:
         with session() as db:
             row = db.get(ParentRow, parent_id, options=[_CHILDREN])
             return _parent_from_row(row) if row else None
+
+    def ensure_arcade_garden(self, parent_id: str) -> ParentAccount | None:
+        from app.accounts.worlds import ensure_arcade_garden
+
+        with session() as db:
+            row = db.get(ParentRow, parent_id, options=[_CHILDREN])
+            if row is None:
+                return None
+            ensure_arcade_garden(row)
+            db.flush()
+            return _parent_from_row(row)
 
     def reset(self, path=None) -> None:  # noqa: ARG002
         with session() as db:
@@ -169,6 +221,16 @@ class AccountStore:
             )
             return opened
         return self.login(email, password)
+
+    def ensure_dev_parent(self) -> Session:
+        """Stable local family for island pipeline tests. Development only."""
+        existing = self.find_by_email(DEV_PARENT_EMAIL)
+        if existing is None:
+            return self.register(DEV_PARENT_EMAIL, DEV_PARENT_PASSWORD)
+        try:
+            return self.login(DEV_PARENT_EMAIL, DEV_PARENT_PASSWORD)
+        except ValueError:
+            return self.replace_password(DEV_PARENT_EMAIL, DEV_PARENT_PASSWORD)
 
     def email_registered(self, email: str) -> bool:
         return self.find_by_email(email) is not None
@@ -500,10 +562,22 @@ class AccountStore:
     def replace_zoo(self, child_id: str, creatures: list[dict]) -> None:
         kept = without_residents(creatures)
         with session() as db:
+            child = db.get(ChildRow, child_id)
+            parent_id = child.parent_id if child is not None else None
             db.execute(delete(CreatureRow).where(CreatureRow.child_id == child_id))
             for record in kept:
                 spec_id = creature_id(record)
                 if not spec_id:
+                    continue
+                if _foreign_generation(db, parent_id, record):
+                    write_log(
+                        "creature.rejected",
+                        spec_id,
+                        level="warning",
+                        parent_id=parent_id,
+                        child_id=child_id,
+                        payload={"spec_id": spec_id, "reason": "not_own_creature"},
+                    )
                     continue
                 spec = record.get("spec") if isinstance(record, dict) else {}
                 name = spec.get("name") if isinstance(spec, dict) else ""
@@ -519,8 +593,20 @@ class AccountStore:
         name = spec.get("name") if isinstance(spec, dict) else ""
         created = False
         with session() as db:
+            child = db.get(ChildRow, child_id)
+            parent_id = child.parent_id if child is not None else None
             row = db.get(CreatureRow, {"child_id": child_id, "spec_id": spec_id})
             if row is None:
+                if _foreign_generation(db, parent_id, record):
+                    write_log(
+                        "creature.rejected",
+                        spec_id,
+                        level="warning",
+                        parent_id=parent_id,
+                        child_id=child_id,
+                        payload={"spec_id": spec_id, "reason": "not_own_creature"},
+                    )
+                    raise ValueError("not_own_creature")
                 count = db.scalar(
                     select(func.count())
                     .select_from(CreatureRow)
@@ -531,9 +617,20 @@ class AccountStore:
                 db.add(_creature_row(child_id, spec_id, name, record))
                 created = True
             else:
-                row.name = str(name or "")[:80]
                 current = row.payload if isinstance(row.payload, dict) else {}
-                row.payload = merge_creature_payload(current, record)
+                merged = merge_creature_payload(current, record)
+                if _foreign_generation(db, parent_id, merged):
+                    write_log(
+                        "creature.rejected",
+                        spec_id,
+                        level="warning",
+                        parent_id=parent_id,
+                        child_id=child_id,
+                        payload={"spec_id": spec_id, "reason": "not_own_creature"},
+                    )
+                    raise ValueError("not_own_creature")
+                row.name = str(name or "")[:80]
+                row.payload = merged
                 persist_inline_stills(row)
                 apply_creature_flags(row)
                 row.updated_at = time.time()
@@ -578,6 +675,45 @@ class AccountStore:
             parent.updated_at = time.time()
         write_log("credit.reserve", "generation reserved", parent_id=parent_id)
 
+    def reserve_still(self, parent_id: str) -> None:
+        with session() as db:
+            parent = db.get(ParentRow, parent_id, with_for_update=True)
+            if parent is None:
+                raise ValueError("missing_parent")
+            used = int(getattr(parent, "still_used", 0) or 0)
+            left = still_remaining(parent.quota_total, used)
+            if left <= 0:
+                write_log(
+                    "credit.denied",
+                    "no_stills",
+                    level="warning",
+                    parent_id=parent_id,
+                    payload={
+                        "quota_total": parent.quota_total,
+                        "still_used": used,
+                        "still_quota": still_quota(parent.quota_total),
+                    },
+                )
+                raise ValueError("no_stills")
+            parent.still_used = used + 1
+            parent.updated_at = time.time()
+        write_log("credit.reserve_still", "still reserved", parent_id=parent_id)
+
+    def refund_still(self, parent_id: str) -> None:
+        refunded = False
+        with session() as db:
+            parent = db.get(ParentRow, parent_id, with_for_update=True)
+            if parent is None:
+                return
+            used = int(getattr(parent, "still_used", 0) or 0)
+            if used <= 0:
+                return
+            parent.still_used = used - 1
+            parent.updated_at = time.time()
+            refunded = True
+        if refunded:
+            write_log("credit.refund_still", "still refunded", parent_id=parent_id)
+
     def refund_generation(self, parent_id: str) -> None:
         refunded = False
         with session() as db:
@@ -606,6 +742,49 @@ class AccountStore:
             f"+{animals}",
             parent_id=parent_id,
             payload={"animals": animals, "quota_total": account.quota_total},
+        )
+        return account
+
+    def plaza_tickets_left(self) -> int:
+        day = plaza_day()
+        with session() as db:
+            meta = db.get(PlazaMetaRow, 1)
+            if meta is None or (meta.ticket_day or "") != day:
+                return TICKETS_PER_DAY
+            return max(0, TICKETS_PER_DAY - int(meta.ticket_used or 0))
+
+    def claim_plaza_credit(self, parent_id: str) -> ParentAccount | None:
+        day = plaza_day()
+        with session() as db:
+            meta = db.get(PlazaMetaRow, 1, with_for_update=True)
+            if meta is None:
+                meta = PlazaMetaRow(id=1, rev=0, ticket_day=day, ticket_used=0)
+                db.add(meta)
+                db.flush()
+            if (meta.ticket_day or "") != day:
+                meta.ticket_day = day
+                meta.ticket_used = 0
+            if int(meta.ticket_used or 0) >= TICKETS_PER_DAY:
+                return None
+            parent = db.get(ParentRow, parent_id, with_for_update=True, options=[_CHILDREN])
+            if parent is None:
+                raise ValueError("missing_parent")
+            meta.ticket_used = int(meta.ticket_used or 0) + 1
+            parent.plaza_credit_at = time.time()
+            parent.quota_total += 1
+            parent.updated_at = time.time()
+            db.flush()
+            account = _parent_from_row(parent)
+        write_log(
+            "credit.grant",
+            "+1 plaza",
+            parent_id=parent_id,
+            payload={
+                "animals": 1,
+                "quota_total": account.quota_total,
+                "source": "plaza",
+                "day": day,
+            },
         )
         return account
 

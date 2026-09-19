@@ -11,6 +11,7 @@ import { claimCueOnce } from '../game/audio/mix';
 type Props = {
   game: Game;
   building: boolean;
+  arcade?: boolean;
   onSetBuild(on: boolean): void;
   onPicking?(on: boolean): void;
   onSave(): Promise<boolean>;
@@ -37,7 +38,7 @@ function usePhoneHud() {
   return phone;
 }
 
-export function DiyHud({ game, building, onSetBuild, onPicking, onSave, onSpeak }: Props) {
+export function DiyHud({ game, building, arcade = false, onSetBuild, onPicking, onSave, onSpeak }: Props) {
   const studio = game.layoutStudio;
   const phone = usePhoneHud();
   const trayOpen = building;
@@ -142,6 +143,8 @@ export function DiyHud({ game, building, onSetBuild, onPicking, onSave, onSpeak 
     if (phone) pickGroup(null);
   };
 
+  if (arcade) return null;
+
   const catalog = group ? (
     <div className={`diy-catalog${phone ? ' is-sheet' : ''}`} role="listbox" aria-label={groupLabel}>
       {phone ? (
@@ -245,17 +248,19 @@ export function DiyHud({ game, building, onSetBuild, onPicking, onSave, onSpeak 
               >
                 +
               </button>
-              <button
-                className="diy-icon diy-trash"
-                type="button"
-                aria-label="Убрать"
-                onClick={() => {
-                  onSpeak('trash');
-                  studio.deleteSelected();
-                }}
-              >
-                🗑️
-              </button>
+              {arcade ? null : (
+                <button
+                  className="diy-icon diy-trash"
+                  type="button"
+                  aria-label="Убрать"
+                  onClick={() => {
+                    onSpeak('trash');
+                    studio.deleteSelected();
+                  }}
+                >
+                  🗑️
+                </button>
+              )}
             </div>,
             document.querySelector('.app') ?? document.body,
           )
@@ -263,6 +268,7 @@ export function DiyHud({ game, building, onSetBuild, onPicking, onSave, onSpeak 
 
       <div className="diy-side">
         <div className="diy-rail">
+          {arcade ? null : (
           <button
             className={`diy-icon${trayOpen ? ' diy-close' : ''}`}
             type="button"
@@ -275,7 +281,8 @@ export function DiyHud({ game, building, onSetBuild, onPicking, onSave, onSpeak 
           >
             {trayOpen ? '✕' : <HudIcon name="build" />}
           </button>
-          {trayOpen
+          )}
+          {trayOpen && !arcade
             ? GROUPS.map((item) => (
                 <button
                   key={item.id}
@@ -289,13 +296,13 @@ export function DiyHud({ game, building, onSetBuild, onPicking, onSave, onSpeak 
                 </button>
               ))
             : null}
-          {trayOpen ? (
+          {trayOpen && !arcade ? (
             <span className="diy-fill" aria-hidden="true">
               <span className="diy-fill-bar" style={{ width: `${Math.round(fill * 100)}%` }} />
             </span>
           ) : null}
         </div>
-        {trayOpen ? (
+        {trayOpen && !arcade ? (
           <button
             className={`diy-save${saveState === 'done' ? ' is-saved' : ''}`}
             type="button"

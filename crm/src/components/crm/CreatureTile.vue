@@ -6,9 +6,20 @@
     :class="{ 'is-compact': compact, 'is-preview': preview }"
     @click="preview ? undefined : $emit('open')"
   >
-    <div class="creature-card-image" :class="{ 'is-large': large }">
-      <img v-if="ok" :src="src" :alt="row.name" loading="lazy" decoding="async" @error="$emit('broken')" />
-      <span v-else class="creature-card-empty">Нет картинки</span>
+    <div class="creature-pair" :class="{ 'is-stack': preview || !showPostcard }">
+      <figure class="creature-photo">
+        <div class="creature-card-image" :class="{ 'is-large': large }">
+          <img v-if="ok" :src="src" :alt="row.name" loading="lazy" decoding="async" @error="$emit('broken')" />
+          <span v-else class="creature-card-empty">Нет картинки</span>
+        </div>
+        <figcaption v-if="preview && ok">Игрушка</figcaption>
+      </figure>
+      <figure v-if="showPostcard" class="creature-photo">
+        <div class="creature-card-image" :class="{ 'is-large': large }">
+          <img :src="postcardSrc" alt="" loading="lazy" decoding="async" @error="postcardBroken = true" />
+        </div>
+        <figcaption>Открытка</figcaption>
+      </figure>
     </div>
     <template v-if="!preview">
       <div class="flex items-start justify-between gap-2">
@@ -18,15 +29,15 @@
       </div>
       <p class="crm-tile-meta">{{ row.lawn_title || row.parent_email }}</p>
       <p v-if="!compact" class="crm-tile-meta">{{ row.parent_email }}</p>
-      <p class="crm-tile-meta">{{ formatWhen(row.created_at) }}</p>
+      <p class="crm-tile-meta">{{ formatWhen(row.created_at, true) }}</p>
     </template>
   </component>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { CreatureRow } from "@/lib/api";
-import { creatureImageUrl } from "@/lib/creatureImage";
+import { creatureImageUrl, creaturePostcardSrc } from "@/lib/creatureImage";
 import { formatWhen } from "@/lib/when";
 
 const props = defineProps<{
@@ -40,6 +51,13 @@ const props = defineProps<{
 defineEmits<{ open: []; broken: [] }>();
 
 const src = computed(() => creatureImageUrl(props.row));
+const postcardSrc = computed(() => creaturePostcardSrc(props.row));
+const postcardBroken = ref(false);
+const showPostcard = computed(
+  () =>
+    !postcardBroken.value &&
+    (props.preview || Boolean(props.row.has_postcard || props.row.postcard_url)),
+);
 </script>
 
 <style scoped>
@@ -58,6 +76,26 @@ const src = computed(() => creatureImageUrl(props.row));
 
 .creature-card.is-compact {
   padding: 0.75rem;
+}
+
+.creature-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.creature-pair.is-stack {
+  grid-template-columns: 1fr;
+}
+
+.creature-photo {
+  margin: 0;
+}
+
+.creature-photo figcaption {
+  margin-top: 0.35rem;
+  color: var(--crm-muted);
+  font-size: 0.75rem;
 }
 
 .creature-card-image {

@@ -195,11 +195,50 @@ def normalize_source_kind(value: object) -> str:
     return SOURCE_DRAWING
 
 
+PLAZA_TOY_PROMPT = (
+    "This is a child's drawing of one lawn object for a toy zoo: a tree, house, "
+    "bush, flower, rock, bench, lamp, pond, fence, mushroom, or similar prop. "
+    "Paint a studio product photo of THAT object as a glossy polymer-clay sculpture, "
+    "the same look as a high-end children's storybook figurine: smooth rounded clay, "
+    "carved painted-wood grain, stacked gumdrop masses, juicy saturated color, "
+    "soft wrap-around studio light with bright clay highlights. "
+    "The drawing is a clue, not a logo and not a tracing sheet. "
+    "Keep the child's colors, extra parts, and odd features. "
+    "A curly trunk stays curly. A lopsided canopy stays lopsided. "
+    "Do not copy the original sketch. Do not keep the drawing's camera. "
+    "Do not invent a different object. "
+    "If it is a tree, the canopy is separate plump clay globes stacked in space, "
+    "each globe a bumpy gumdrop you can walk around, not one flat leaf. "
+    "The trunk is a thick clay sausage with carved swirl grain and a fat root foot. "
+    "Hanging bits become teardrop clay leaves or round fruit balls, not painted dots. "
+    "Tiny clay grass tufts and pebbles may sit on the figurine's own foot, "
+    "as part of the sculpture, not a meadow. "
+    "If it is a house, show plump clay walls, a thick rounded roof, and one full side. "
+    "A thick outline in the drawing is paint on clay, not a sticker border. "
+    "Camera is three-quarter, about forty degrees off the front, slightly above. "
+    "You must see the front, one full flank, and the far side wrapping around. "
+    "The object has a belly and a back. "
+    "Not a living creature, not a person, not a photograph of a real plant. "
+    "Not a paper cutout, not a side-on stamp, not a sticker, not a cookie, "
+    "not gingerbread, not a plaque, not a relief, not an extruded silhouette, "
+    "not a flat card, not a die-cut. "
+    "No leftover pencil, marker hatching, paper, white halo, sticker outline, "
+    "or flat unshaded fill. "
+    "No background scenery, no sky, no text, no name, no watermark. "
+    "No drop shadow, no cast shadow. "
+    "One object, full piece, centered, standing, transparent background."
+)
+
+
 def stylize_prompt_for(source_kind: str) -> str | None:
     """None lets the adapter use CONTOUR_PROMPT (drawing jobs)."""
     if normalize_source_kind(source_kind) == SOURCE_PET:
         return PET_SILLY_PROMPT
     return None
+
+
+def plaza_toy_prompt() -> str:
+    return PLAZA_TOY_PROMPT
 
 
 def postcard_prompt_for(source_kind: str) -> str:

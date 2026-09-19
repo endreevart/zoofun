@@ -103,6 +103,22 @@ export function childCatalogForShell(shell: string): readonly string[] {
   return catalogForShell(shell).filter((name) => !GRASS_MODELS.has(name));
 }
 
+/** Shared lawn: every child stamp from garden, meadow, and grove. No grass cards. */
+export function plazaChildCatalog(): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const name of [
+    ...childCatalogForShell('garden'),
+    ...childCatalogForShell('meadow'),
+    ...childCatalogForShell('grove'),
+  ]) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
+}
+
 export const CHILD_CATALOG_MODELS = childCatalogForShell('garden');
 
 export const DIY_PROP_CAP = 258;

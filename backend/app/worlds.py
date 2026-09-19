@@ -124,6 +124,23 @@ def home_world_id(world_id: str | None) -> str:
     return value or WORLD_AUTHORED
 
 
+def lawn_cover(world_id: str, sku: str | None = None) -> str:
+    """Island still for the vitrine card. Not a Zufik portrait."""
+    home = home_world_id(world_id)
+    kind = kind_for_world_id(home, sku)
+    if is_diy_instance(home):
+        if kind.id == "meadow":
+            return "/ui/diy-meadow.jpg"
+        if kind.id == "grove":
+            return "/ui/diy-grove.jpg"
+        return "/ui/diy-island.jpg"
+    if kind.id == "meadow":
+        return "/ui/magic-meadow.jpg"
+    if kind.id == "grove":
+        return "/ui/magic-grove.jpg"
+    return "/ui/magic-island.jpg"
+
+
 def lawn_title(world_id: str, sku: str | None = None) -> str:
     """Authored lawn or construction copy caption for CRM tiles."""
     home = home_world_id(world_id)
@@ -138,6 +155,10 @@ def world_title(pack_id: str) -> str:
 
 
 def pack_label(pack_id: str, animals: int = 0) -> str:
+    from app.commerce.skus import is_plaza_toy_sku
+
+    if is_plaza_toy_sku(pack_id):
+        return "Штука для поляны"
     if is_construction_sku(pack_id):
         return kind_for_sku(pack_id).construction_title
     if is_world_sku(pack_id):
@@ -168,6 +189,10 @@ def mint_instance_id(sku: str, owned_ids: set[str]) -> str:
 
 
 def checkout_description(pack_id: str, animals: int) -> str:
+    from app.commerce.skus import is_plaza_toy_sku
+
+    if is_plaza_toy_sku(pack_id):
+        return "Zooofun: штука для поляны"
     if is_construction_sku(pack_id) or is_diy_instance(pack_id):
         kind = kind_for_world_id(pack_id, pack_id if is_construction_sku(pack_id) else None)
         return f"Zooofun: {kind.checkout_label}"

@@ -275,3 +275,71 @@ async def test_upsert_keeps_stills_when_island_sends_a_slim_row() -> None:
         assert drawing["portraitUrl"] == "/v1/zoo/creatures/drawn-keep/portrait"
         assert drawing["modelUrl"] == "https://s3.example/meshes/keep.glb"
         assert drawing.get("textureUrl") in ("", None)
+
+
+@pytest.mark.asyncio
+async def test_zoo_rejects_another_family_mesh() -> None:
+    import time
+
+    from app.accounts.store import store
+    from app.persistence.db import session
+    from app.persistence.models import StylizeJobRow
+
+    job_id = "aa11bb22cc33dd44ee55ff6677889900"
+    mesh = f"https://s3.example/meshes/{job_id}.glb"
+    copied = {
+        "spec": {
+            "id": "ch_copied",
+            "name": "Бублик",
+            "origin": "drawing",
+            "drawing": {"modelUrl": mesh},
+        }
+    }
+    own_egg = {"spec": {"id": "ch_own", "name": "Пятнышко", "origin": "drawing"}}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        host = (
+            await client.post(
+                "/v1/auth/register",
+                json={"email": "host-zoo@example.com", "password": "pilot1"},
+            )
+        ).json()
+        visitor = (
+            await client.post(
+                "/v1/auth/register",
+                json={"email": "visitor-zoo@example.com", "password": "pilot1"},
+            )
+        ).json()
+        host_parent, _host_child = store.session(host["token"])
+        assert host_parent is not None
+        with session() as db:
+            db.add(
+                StylizeJobRow(
+                    id=job_id,
+                    status="ready",
+                    model_url=mesh,
+                    mesh_status="ready",
+                    parent_id=host_parent.id,
+                    reserved=True,
+                    created_at=time.time(),
+                    updated_at=time.time(),
+                )
+            )
+        headers = {"Authorization": f"Bearer {visitor['token']}"}
+        denied = await client.put(
+            "/v1/zoo/creatures/ch_copied",
+            headers=headers,
+            json=copied,
+        )
+        assert denied.status_code == 400
+        assert denied.json()["detail"] == "not_own_creature"
+        empty = await client.get("/v1/zoo", headers=headers)
+        assert empty.json()["creatures"] == []
+
+        mixed = await client.put(
+            "/v1/zoo",
+            headers=headers,
+            json={"creatures": [copied, own_egg]},
+        )
+        assert mixed.status_code == 200
+        ids = [row["spec"]["id"] for row in mixed.json()["creatures"]]
+        assert ids == ["ch_own"]

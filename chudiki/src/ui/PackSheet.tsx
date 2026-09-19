@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { fetchPacks, formatRub, quotePack, startCheckout, type Pack, type Quote } from '../game/commerce';
-import { track } from '../analytics';
+import { createCheckoutPrefetch, fetchPacks, formatRub, quoteMany, type Pack, type Quote } from '../game/commerce';
+import { track, trackAction } from '../analytics';
 import { siteAuthUrl } from '../parentSession';
 import { CreditEggs } from './CreditEggs';
 import {
@@ -18,6 +18,8 @@ type PackSheetProps = {
   remaining: number;
   onClose: () => void;
   onError: (message: string) => void;
+  friendPreview?: string | null;
+  forRevive?: boolean;
 };
 
 const CATALOG_PREVIEW: Pack[] = [
@@ -33,10 +35,12 @@ const FAIL_TEXT = {
   unavailable: 'Оплата сейчас не открывается. Попробуй чуть позже.',
   failed: 'Банк не ответил. Попробуй ещё раз.',
   owned: 'Этот остров уже открыт.',
+  full: 'Этот остров уже открыт.',
   promo: 'Промокод не подошёл.',
 } as const;
 
-export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
+export function PackSheet({ remaining, onClose, onError, friendPreview, forRevive = false }: PackSheetProps) {
+  const forFriend = Boolean(friendPreview) || forRevive;
   const [packs, setPacks] = useState<Pack[]>(CATALOG_PREVIEW);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, setPending] = useState<Pack | null>(null);
@@ -45,8 +49,10 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [promoError, setPromoError] = useState('');
+  const [quoting, setQuoting] = useState(false);
   const [expanded, setExpanded] = useState(remaining > 0);
   const paying = useRef(false);
+  const checkout = useRef(createCheckoutPrefetch());
 
   useEffect(() => {
     void fetchPacks().then((next) => {
@@ -62,12 +68,20 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
   const shown = packsForShop(packs, remaining, expanded);
   const showMore = remaining <= 0 && view.more.length > 0 && !expanded;
 
+  const promoForPay = () => quote?.promo_code || promo.trim() || undefined;
+
   const closePay = () => {
     if (paying.current) return;
+    checkout.current.reset();
     setPending(null);
     setAdult(false);
     setPromoError('');
   };
+
+  useEffect(() => {
+    if (!pending) return;
+    void checkout.current.warm(pending.id, promoForPay());
+  }, [pending, quote?.promo_code, promo]);
 
   const applyPromo = async (packId?: string) => {
     const code = promo.trim();
@@ -78,33 +92,35 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
       return;
     }
     const ids = packId ? [packId] : packs.filter((item) => item.buyable).map((item) => item.id);
-    const next: Record<string, Quote> = {};
-    let anyOk = false;
-    let anyFail = false;
-    for (const id of ids) {
-      const result = await quotePack(id, code);
-      if ('ok' in result) {
-        anyFail = true;
-        continue;
-      }
-      anyOk = true;
-      next[id] = result;
+    setQuotes({});
+    setQuote(null);
+    setQuoting(true);
+    try {
+      const { quotes: next, failed } = await quoteMany(ids, code, (id, quoted) => {
+        setQuotes((current) => ({ ...current, [id]: quoted }));
+        if (packId === id || pending?.id === id) setQuote(quoted);
+      });
+      setQuotes(next);
+      const picked = packId ? next[packId] : pending ? next[pending.id] : null;
+      setQuote(picked ?? null);
+      if (!Object.keys(next).length && failed) setPromoError(FAIL_TEXT.promo);
+      else if (Object.keys(next).length) trackAction('shop.quote', { count: Object.keys(next).length });
+    } finally {
+      setQuoting(false);
     }
-    setQuotes(next);
-    const picked = packId ? next[packId] : pending ? next[pending.id] : null;
-    setQuote(picked ?? null);
-    if (!anyOk && anyFail) setPromoError(FAIL_TEXT.promo);
   };
 
   const pay = async (pack: Pack) => {
     if (paying.current) return;
     paying.current = true;
     setBusy(pack.id);
-    const result = await startCheckout(pack.id, quote?.promo_code || promo.trim() || undefined);
+    const result = await checkout.current.warm(pack.id, promoForPay());
     if (result.ok) {
+      trackAction('shop.pay', { pack: pack.id, animals: pack.animals });
       window.location.href = result.url;
       return;
     }
+    trackAction('shop.checkout_fail', { reason: result.reason, pack: pack.id });
     paying.current = false;
     setBusy(null);
     closePay();
@@ -128,7 +144,7 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
           </button>
           <div className="pack-shop-titles">
             <h2 id="pack-shop-title" className="pack-shop-title">
-              {packShopTitle(remaining)}
+              {packShopTitle(remaining, forFriend)}
             </h2>
             {remaining > 0 ? (
               <p className="pack-shop-remain">
@@ -138,8 +154,19 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
             ) : null}
           </div>
         </header>
-        <p className="pack-shop-lead">{packShopLead(remaining)}</p>
-        <PromoField value={promo} error={promoError} onChange={setPromo} onApply={() => void applyPromo()} />
+        <p className="pack-shop-lead">{packShopLead(remaining, forFriend)}</p>
+        {friendPreview ? (
+          <div className="pack-shop-friend">
+            <img className="pack-shop-friend-art" src={friendPreview} alt="" draggable={false} />
+          </div>
+        ) : null}
+        <PromoField
+          value={promo}
+          error={promoError}
+          busy={quoting}
+          onChange={setPromo}
+          onApply={() => void applyPromo()}
+        />
         <div className={`pack-tiles${shown.length === 1 ? ' is-starter' : ''}`}>
           {shown.map((pack) => {
             const badge = packTileBadge(pack, remaining);
@@ -153,6 +180,7 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
                 type="button"
                 disabled={!pack.buyable || busy === pack.id}
                 onClick={() => {
+                  track('shop.pick', { pack: pack.id, animals: pack.animals });
                   setAdult(false);
                   setPending(pack);
                   setQuote(quotes[pack.id] ?? null);
@@ -185,8 +213,14 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
       {pending && !adult ? (
         <ParentGate
           question="Оплату делает взрослый. После неё в саду появится новый зуфик."
-          onCancel={closePay}
-          onPass={() => setAdult(true)}
+          onCancel={() => {
+            track('parent.gate_cancel', { reason: 'shop' });
+            closePay();
+          }}
+          onPass={() => {
+            trackAction('parent.gate', { reason: 'shop' });
+            setAdult(true);
+          }}
         />
       ) : null}
       {pending && adult ? (
@@ -202,6 +236,7 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
             <PromoField
               value={promo}
               error={promoError}
+              busy={quoting}
               onChange={setPromo}
               onApply={() => void applyPromo(pending.id)}
             />
@@ -215,7 +250,7 @@ export function PackSheet({ remaining, onClose, onError }: PackSheetProps) {
                 disabled={busy === pending.id}
                 onClick={() => void pay(pending)}
               >
-                Оплатить
+                {busy === pending.id ? 'Открываю банк…' : 'Оплатить'}
               </button>
             </div>
           </div>

@@ -89,6 +89,7 @@ async def test_crm_overview_and_funnels(monkeypatch: pytest.MonkeyPatch) -> None
             "island",
             "commerce",
             "repeat",
+            "return",
             "death",
         }
         product = await client.get("/v1/crm/analytics/funnels/product?period=0", headers=headers)
@@ -254,6 +255,83 @@ async def test_crm_creature_image_prefers_portrait(
         )
         assert picture.status_code == 200
         assert picture.content == portrait
+
+
+@pytest.mark.asyncio
+async def test_crm_creature_image_uses_owner_still_for_guest_copy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.settings import get_settings
+    from app.storage import write_creature_still
+
+    settings = Settings(operator_login="admin", operator_password="garden-secret")
+    monkeypatch.setattr("app.api.operator.get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.deps.get_settings", lambda: settings)
+    owner = store.register("still-owner@example.com", "secret1")
+    guest = store.register("still-guest@example.com", "secret1")
+    still = _png_bytes(32)
+    write_creature_still(get_settings(), owner.child_id, "ch_copy01", still)
+    store.upsert_creature(
+        owner.child_id,
+        {
+            "spec": {
+                "id": "ch_copy01",
+                "name": "Исходный",
+                "origin": "drawing",
+                "drawing": {
+                    "portraitUrl": "/v1/zoo/creatures/ch_copy01/portrait",
+                    "painted": True,
+                },
+            }
+        },
+    )
+    store.upsert_creature(
+        guest.child_id,
+        {
+            "spec": {
+                "id": "ch_copy01",
+                "name": "Копия",
+                "origin": "drawing",
+                "drawing": {
+                    "portraitUrl": "/v1/public/zoos/Share01/creatures/ch_copy01/portrait",
+                    "painted": True,
+                },
+            }
+        },
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        login = await client.post(
+            "/v1/crm/login",
+            json={"login": "admin", "password": "garden-secret"},
+        )
+        token = login.json()["token"]
+        copied = await client.get(
+            f"/v1/crm/creatures/{guest.child_id}/ch_copy01/image",
+            params={"access_token": token},
+        )
+        assert copied.status_code == 200
+        assert copied.content == still
+        lonely = store.register("still-lonely@example.com", "secret1")
+        store.upsert_creature(
+            lonely.child_id,
+            {
+                "spec": {
+                    "id": "ch_orphan",
+                    "name": "Сирота",
+                    "origin": "drawing",
+                    "drawing": {
+                        "portraitUrl": "/v1/public/zoos/Nope/creatures/ch_orphan/portrait",
+                        "painted": True,
+                    },
+                }
+            },
+        )
+        missing = await client.get(
+            f"/v1/crm/creatures/{lonely.child_id}/ch_orphan/image",
+            params={"access_token": token},
+        )
+        assert missing.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -538,7 +616,7 @@ async def test_crm_islands_packs_geo_and_payment_time(monkeypatch: pytest.Monkey
 
         summary = await client.get("/v1/crm/analytics/funnels/summary?period=0", headers=headers)
         assert summary.status_code == 200
-        assert summary.json()["cards"]["total_funnels"] == 8
+        assert summary.json()["cards"]["total_funnels"] == 9
 
     with db_session() as db:
         kazakh = db.get(AnalyticsSessionRow, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
@@ -693,4 +771,66 @@ async def test_crm_parent_search_and_glb_proxy(monkeypatch: pytest.MonkeyPatch) 
             params={"access_token": login.json()["token"]},
         )
         assert remote.status_code == 404
+
+        by_mail = await client.get(
+            "/v1/crm/creatures?period=0&q=finder",
+            headers=headers,
+        )
+        assert by_mail.status_code == 200
+        assert {item["spec_id"] for item in by_mail.json()["items"]} == {"ch_glb"}
+        assert all(item["parent_email"] == "finder@example.com" for item in by_mail.json()["items"])
+
+        now = time.time()
+        with session() as db:
+            db.add(
+                StylizeJobRow(
+                    id="job-glb01",
+                    parent_id=opened.parent_id,
+                    status="ready",
+                    mesh_status="ready",
+                    postcard_status="ready",
+                    postcard_url="https://s3.twcstorage.ru/zoooofun/postcards/job-glb01.png",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        cards = Path(get_settings().storage_local_root) / "postcards"
+        cards.mkdir(parents=True, exist_ok=True)
+        (cards / "job-glb01.png").write_bytes(_png_bytes())
+        gallery = await client.get("/v1/crm/creatures?period=0&q=finder", headers=headers)
+        assert gallery.json()["items"][0]["has_postcard"] is True
+        assert (
+            gallery.json()["items"][0]["postcard_url"]
+            == "https://s3.twcstorage.ru/zoooofun/postcards/job-glb01.png"
+        )
+        postcard = await client.get(
+            f"/v1/crm/creatures/{opened.child_id}/ch_glb/postcard",
+            params={"access_token": login.json()["token"]},
+        )
+        assert postcard.status_code == 200
+        assert postcard.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+        s3_parent = store.register("bucket@example.com", "secret1")
+        store.upsert_creature(
+            s3_parent.child_id,
+            {
+                "spec": {
+                    "id": "ch_s3",
+                    "name": "Ведро",
+                    "origin": "drawing",
+                    "hatchJobId": "job-s3mesh",
+                    "drawing": {"modelUrl": "https://s3.example/meshes/job-s3mesh.glb"},
+                }
+            },
+        )
+        monkeypatch.setattr(
+            "app.storage.read_asset",
+            lambda _settings, key: b"glTF-s3" if key == "meshes/job-s3mesh.glb" else None,
+        )
+        from_bucket = await client.get(
+            f"/v1/crm/creatures/{s3_parent.child_id}/ch_s3/model",
+            params={"access_token": login.json()["token"]},
+        )
+        assert from_bucket.status_code == 200
+        assert from_bucket.content == b"glTF-s3"
 

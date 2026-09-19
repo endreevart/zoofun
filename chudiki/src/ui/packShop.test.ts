@@ -22,7 +22,10 @@ const catalog: Pack[] = [
 
 assert.equal(packShopTitle(3), 'Пополнить сад');
 assert.equal(packShopTitle(0), 'Ваш первый Зуфик ожил!');
-assert.match(packShopLead(0), /друг/);
+assert.equal(packShopTitle(0, true), 'Оживите этого друга');
+assert.match(packShopLead(3), /10 картинок/);
+assert.match(packShopLead(0), /10 картинок/);
+assert.match(packShopLead(0, true), /ждёт/);
 assert.equal(packAnimalLabel(1), '1 зверь');
 assert.equal(packAnimalLabel(5), '5 зверей');
 

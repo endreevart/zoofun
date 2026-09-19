@@ -9,6 +9,6 @@ alwaysApply: true
 - Existing cached animals must remain usable offline.
 - Compilation, a green editor, or a passing lint run is not a finished result. Review logs, generated assets, Game view, and device/runtime behavior.
 - Do not add friends, chat, leagues, subscriptions, StoreKit, or automatic full-3D generation.
-- Original drawings and original pet photos stay private. Anonymized garden postcards may appear on the marketing site (D-022). Do not add a social gallery, friends, or account discovery.
-- Web commerce follows D-016 / ADR-0006, D-020, and D-021. Garden, meadow, and grove (Куболесье) are in the shop. Do not add a later biome or foreign acquiring without a new decision and assets.
+- Original drawings and original pet photos stay private. Anonymized garden postcards may appear on the marketing site (D-022). Guest walks and the heart vitrine are D-028: snapshot + hearts, no account discovery and no chat. The shared lawn is D-029: a chosen living Zufik, rooms of 8, emoji only, one global catalog lawn everyone sees and builds. Personal drawing-toys on that lawn are D-032: owner-only 3D after 59 ₽, originals stay hidden.
+- Web commerce follows D-016 / ADR-0006, D-020, D-021, D-027, D-031, and D-032. The first garden is free; extra garden copies, meadow, and grove (Куболесье) stay in the shop. After the first bundled 3D, drawings go postcard-first; leftover 3D starts Tripo on hatch «В сад!» or Revive. `plaza_toy_1` is 59 ₽ and must not grant a creature 3D credit. Do not add a later biome or foreign acquiring without a new decision and assets.
 - If code and `docs/` disagree, stop and surface the mismatch. Do not silently redefine the product.

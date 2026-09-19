@@ -85,6 +85,8 @@ export class Lighting {
   apply(values: TuningValues) {
     this.sun.intensity = values.sunIntensity;
     this.sun.color.copy(SUN_WHITE).lerp(SUN_WARM, values.sunWarmth);
+    this.sky.color.copy(SKY_AMBIENT);
+    this.bounce.color.copy(BOUNCE_COLOR);
     this.sun.shadow.radius = Math.max(0.001, values.shadowSoftness);
 
     const azimuth = THREE.MathUtils.degToRad(values.sunAzimuth);
@@ -103,5 +105,17 @@ export class Lighting {
     this.sky.intensity = values.skyIntensity * scale.sky;
     this.fill.intensity = values.fillIntensity * scale.fill;
     this.bounce.intensity = values.bounceIntensity * scale.bounce;
+  }
+
+  /** Extra warmth and a lower sun as the garden gathers hearts. */
+  applyJoy(amount: number) {
+    const t = Math.max(0, Math.min(1, amount));
+    if (t <= 0) return;
+    this.sun.color.lerp(new THREE.Color(1, 0.48, 0.18), t * 0.55);
+    this.sun.position.y *= 1 - t * 0.42;
+    this.sun.intensity *= t > 0.75 ? 0.92 : 1 + t * 0.12;
+    this.sky.color.lerp(new THREE.Color(1, 0.7, 0.42), t * 0.48);
+    this.sky.intensity *= 1 + t * 0.08;
+    this.bounce.color.lerp(new THREE.Color(1, 0.7, 0.4), t * 0.4);
   }
 }

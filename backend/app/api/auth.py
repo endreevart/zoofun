@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field, field_validator
 from app.accounts import otp
 from app.accounts.emailaddr import canonical_email
 from app.accounts.oauth import decode_pending, decode_state, encode_pending, encode_state, safe_next
+from app.analytics.actions import record_action
 from app.accounts.store import ChildProfile, ParentAccount, store
+from app.commerce.skus import PLAZA_TOY_CAP
 from app.api.deps import bearer_token, require_session
 from app.mailer import MailError, send_login_code
 from app.providers import yandex
@@ -87,6 +89,13 @@ class SessionOut(BaseModel):
     quota_total: int
     generation_used: int
     remaining: int
+    still_used: int = 0
+    still_quota: int = 10
+    still_remaining: int = 10
+    plaza_toy_quota: int = 0
+    plaza_toy_used: int = 0
+    plaza_toy_remaining: int = 0
+    plaza_toy_cap: int = 10
     owned_worlds: list[str] = []
     worlds: list[WorldInfoOut] = []
 
@@ -108,6 +117,13 @@ def _to_out(token: str, parent: ParentAccount, child: ChildProfile) -> SessionOu
         quota_total=parent.quota_total,
         generation_used=parent.generation_used,
         remaining=parent.remaining,
+        still_used=parent.still_used,
+        still_quota=parent.still_quota,
+        still_remaining=parent.still_remaining,
+        plaza_toy_quota=parent.plaza_toy_quota,
+        plaza_toy_used=parent.plaza_toy_used,
+        plaza_toy_remaining=parent.plaza_toy_remaining,
+        plaza_toy_cap=PLAZA_TOY_CAP,
         owned_worlds=parent.owned_worlds,
         worlds=[
             WorldInfoOut(id=item.id, title=item.title, sku=item.sku) for item in parent.worlds
@@ -149,8 +165,11 @@ async def email_start(body: EmailIn, request: Request) -> EmailStartOut:
     try:
         send_login_code(mailbox, code)
     except MailError as exc:
+        record_action("auth.otp_fail", payload={"reason": "mail_unconfigured"})
         raise HTTPException(status_code=503, detail="mail_unconfigured") from exc
-    return EmailStartOut(sent=True, registered=store.email_registered(mailbox))
+    known = store.email_registered(mailbox)
+    record_action("auth.otp_sent", payload={"registered": known})
+    return EmailStartOut(sent=True, registered=known)
 
 
 @router.post("/email/verify", response_model=SessionOut)
@@ -160,19 +179,34 @@ async def email_verify(body: EmailVerifyIn, request: Request) -> SessionOut:
     try:
         otp.verify(mailbox, body.code)
     except ValueError as exc:
+        record_action("auth.otp_fail", payload={"reason": "bad_code"})
         raise HTTPException(status_code=401, detail="bad_code") from exc
     existing = store.find_by_email(mailbox)
     if existing is not None:
         session = store.open_session_for(existing.id, via="email_code")
+        kind = "login"
     else:
         session = store.register_from_email(
             mailbox,
             marketing_consent=body.marketing_consent,
         )
+        kind = "register"
     parent, child = store.session(session.token) or (None, None)
     if parent is None or child is None:
         raise HTTPException(status_code=500, detail="session_missing")
     _keep_utm(parent.id, body)
+    record_action(
+        "auth.otp_ok",
+        parent_id=parent.id,
+        child_id=child.id,
+        payload={"kind": kind},
+    )
+    record_action(
+        f"auth.{kind}",
+        parent_id=parent.id,
+        child_id=child.id,
+        payload={"via": "email_code"},
+    )
     return _to_out(session.token, parent, child)
 
 
@@ -198,6 +232,7 @@ async def register(body: RegisterIn, request: Request) -> SessionOut:
     if parent is None or child is None:
         raise HTTPException(status_code=500, detail="session_missing")
     _keep_utm(parent.id, body)
+    record_action("auth.register", parent_id=parent.id, child_id=child.id, payload={"via": "password"})
     return _to_out(session.token, parent, child)
 
 
@@ -208,11 +243,13 @@ async def login(body: AuthIn, request: Request) -> SessionOut:
     try:
         session = store.login(str(body.email), body.password)
     except ValueError as exc:
+        record_action("auth.login_fail", payload={"reason": "bad_credentials"})
         raise HTTPException(status_code=401, detail="bad_credentials") from exc
     parent, child = store.session(session.token) or (None, None)
     if parent is None or child is None:
         raise HTTPException(status_code=500, detail="session_missing")
     _keep_utm(parent.id, body)
+    record_action("auth.login", parent_id=parent.id, child_id=child.id, payload={"via": "password"})
     return _to_out(session.token, parent, child)
 
 
@@ -222,13 +259,30 @@ async def me(
     authorization: Annotated[str | None, Header()] = None,
 ) -> SessionOut:
     parent, child = pair
-    return _to_out(bearer_token(authorization), parent, child)
+    fresh = store.ensure_arcade_garden(parent.id) or parent
+    return _to_out(bearer_token(authorization), fresh, child)
 
 
 @router.post("/logout")
 async def logout(authorization: Annotated[str | None, Header()] = None) -> dict[str, str]:
-    store.logout(bearer_token(authorization))
+    token = bearer_token(authorization)
+    pair = store.session(token)
+    if pair is not None:
+        record_action("auth.logout", parent_id=pair[0].id, child_id=pair[1].id)
+    store.logout(token)
     return {"status": "ok"}
+
+
+@router.post("/dev-session", response_model=SessionOut)
+async def dev_session(request: Request) -> SessionOut:
+    if get_settings().environment != "development":
+        raise HTTPException(status_code=404, detail="not_found")
+    enforce(request, "auth", limit=20)
+    opened = store.ensure_dev_parent()
+    parent, child = store.session(opened.token) or (None, None)
+    if parent is None or child is None:
+        raise HTTPException(status_code=500, detail="session_missing")
+    return _to_out(opened.token, parent, child)
 
 
 class YandexCompleteIn(BaseModel):

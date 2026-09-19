@@ -6,7 +6,7 @@ import { assetUrl } from '../../assetUrl';
 import { quality } from '../render/quality';
 import { stylize, trackRoughness } from '../render/stylized';
 import { dressLotusWater } from '../world/cartoonWater';
-import { isPackedFoliage } from './packFoliage';
+import { isPackedFoliage, usePackedExtra } from './packFoliage';
 import { flattenPackedScene, GLB_LOAD_BATCH, type PackedPrimitive } from './packModel';
 import { disposeObjectResources, materialTextures, TextureDisposer } from './resourceDisposal';
 
@@ -515,7 +515,7 @@ const MEADOW_MOBILE_MODELS = new Set([
 
 /** Mobile files keep the same texture and silhouette with phone-sized geometry. */
 function extraModelPath(extra: ExtraModel): string {
-  if (quality().tier !== 'low') return extra.path;
+  if (!usePackedExtra(extra.name, quality().tier)) return extra.path;
   let mobilePath = 'mobilePath' in extra ? extra.mobilePath : undefined;
   if (!mobilePath && extra.name === 'floating-island') {
     mobilePath = `${assetUrl('models/props/floating-island-gpu.glb')}?v=gpu1`;

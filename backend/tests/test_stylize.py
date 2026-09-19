@@ -97,6 +97,25 @@ def test_stylize_prompt_asks_for_named_living_toy() -> None:
     assert "potato" in text
 
 
+def test_plaza_toy_prompt_asks_for_volumetric_magic_prop() -> None:
+    from app.providers.openrouter import PLAZA_TOY_PROMPT
+
+    text = PLAZA_TOY_PROMPT.lower()
+    assert "polymer-clay" in text
+    assert "gumdrop" in text
+    assert "clue" in text
+    assert "do not copy the original sketch" in text
+    assert "do not keep the drawing's camera" in text
+    assert "three-quarter" in text
+    assert "cookie" in text
+    assert "extruded" in text
+    assert "living creature" in text
+    assert "transparent background" in text
+    assert "exact silhouette" not in text
+    assert PLAZA_TOY_PROMPT != STYLIZE_PROMPT
+    assert PLAZA_TOY_PROMPT != CONTOUR_PROMPT
+
+
 def test_parse_image_response() -> None:
     raw = base64.b64encode(TINY_PNG).decode("ascii")
     styled = parse_image_response(

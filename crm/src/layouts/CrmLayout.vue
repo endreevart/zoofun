@@ -96,6 +96,7 @@ const viewKey = ref(0);
 
 const primaryNav = [
   { key: "funnels", label: "Воронки", icon: "pi pi-filter", routes: ["funnels", "funnel-detail"] },
+  { key: "growth", label: "Рост", icon: "pi pi-bolt", routes: ["growth"] },
   { key: "traffic", label: "Посещаемость", icon: "pi pi-globe", routes: ["traffic"] },
   { key: "usage", label: "Острова", icon: "pi pi-chart-bar", routes: ["usage", "usage-copies", "usage-buyers", "usage-events"] },
   { key: "parents", label: "Родители", icon: "pi pi-users", routes: ["parents"] },

@@ -58,6 +58,24 @@ async def test_s3_failure_falls_back_to_local_disk(monkeypatch, tmp_path) -> Non
     assert (tmp_path / "meshy" / "j3.glb").read_bytes() == b"glTF"
 
 
+def test_read_asset_local_then_s3(monkeypatch, tmp_path) -> None:
+    settings = Settings(storage_local_root=str(tmp_path), **S3_ENV)
+    (tmp_path / "meshes").mkdir()
+    (tmp_path / "meshes" / "job-local.glb").write_bytes(b"disk")
+    assert storage.read_asset(settings, "meshes/job-local.glb") == b"disk"
+    assert storage.read_asset(settings, "../secret") is None
+
+    class FakeClient:
+        def get_object(self, **kwargs):
+            if kwargs["Key"] == "meshes/job-s3.glb":
+                return {"Body": type("Body", (), {"read": staticmethod(lambda: b"bucket")})()}
+            raise RuntimeError("missing")
+
+    monkeypatch.setattr(storage, "_client", lambda _s: FakeClient())
+    assert storage.read_asset(settings, "meshes/job-s3.glb") == b"bucket"
+    assert storage.read_asset(settings, "meshes/nope.glb") is None
+
+
 def test_public_base_override() -> None:
     settings = Settings(**S3_ENV, s3_public_base="https://cdn.zooo.fun")
     assert storage.public_url(settings, "meshy/x.glb") == "https://cdn.zooo.fun/meshy/x.glb"

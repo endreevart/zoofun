@@ -148,6 +148,9 @@ async def grant_credits(parent_id: str, body: CreditIn) -> dict:
         "quota_total": parent.quota_total,
         "generation_used": parent.generation_used,
         "remaining": parent.remaining,
+        "still_used": parent.still_used,
+        "still_quota": parent.still_quota,
+        "still_remaining": parent.still_remaining,
     }
 
 

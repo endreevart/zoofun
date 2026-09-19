@@ -24,7 +24,7 @@ python3 docs/legal/build_pages.py
 | `consent-parent.html` | `/consent-parent` |
 | `consent-drawing.html` | `/consent-drawing` |
 
-На все публичные HTML подключить `styles.css`. Скрипт `cookie-consent.js` и баннер на сайте показываются сразу. Аналитические cookie включают первую аналитику посещений и Яндекс.Метрику (`METRIKA_ID = 112277307`). На `/play`, `/zoo` и `/island` баннер и счётчик сайта не показываются.
+На все публичные HTML подключить `styles.css`. Скрипт `cookie-consent.js` и баннер на сайте показываются сразу. Аналитические cookie включают первую аналитику посещений и Яндекс.Метрику (`METRIKA_ID = 112277307`, вебвизор). На `/play`, `/zoo` и `/island` баннер не показывается. Игровой `/island` сам грузит тот же счётчик с вебвизором, если родитель не выбрал «Только необходимые».
 
 Копии для сайта лежат в `zoofun-web/public/legal/`. После правки `.txt` выполните `python3 docs/legal/build_pages.py` и скопируйте HTML/CSS/JS туда.
 

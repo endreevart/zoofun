@@ -26,6 +26,9 @@ async def test_new_parent_has_one_free_generation() -> None:
     assert body["quota_total"] == 1
     assert body["generation_used"] == 0
     assert body["remaining"] == 1
+    assert body["still_quota"] == 10
+    assert body["still_used"] == 0
+    assert body["still_remaining"] == 10
 
 
 @pytest.mark.asyncio
@@ -65,7 +68,7 @@ async def test_legacy_zoo_counts_as_used(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_stylize_without_credits_is_402(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_stylize_without_stills_is_402(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.api.stylize.get_settings",
         lambda: Settings(openrouter_api_key="test-key", environment="production"),
@@ -78,13 +81,15 @@ async def test_stylize_without_credits_is_402(monkeypatch: pytest.MonkeyPatch) -
         token = created.json()["token"]
         parent = next(iter(store.parents.values()))
         store.reserve_generation(parent.id)
+        for _ in range(10):
+            store.reserve_still(parent.id)
         blocked = await client.post(
             "/v1/generation/stylize",
             files={"file": ("draw.png", TINY_PNG, "image/png")},
             headers={"Authorization": f"Bearer {token}"},
         )
     assert blocked.status_code == 402
-    assert blocked.json()["detail"] == "no_credits"
+    assert blocked.json()["detail"] == "no_stills"
 
 
 @pytest.mark.asyncio
@@ -111,8 +116,10 @@ async def test_stylize_start_spends_the_free_credit(monkeypatch: pytest.MonkeyPa
         me = await client.get("/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert started.status_code == 202
     assert started.json()["remaining"] == 0
+    assert started.json()["still_remaining"] == 10
     assert me.status_code == 200
     assert me.json()["remaining"] == 0
+    assert me.json()["still_used"] == 0
     second = None
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         second = await client.post(
@@ -120,7 +127,9 @@ async def test_stylize_start_spends_the_free_credit(monkeypatch: pytest.MonkeyPa
             files={"file": ("draw.png", TINY_PNG, "image/png")},
             headers={"Authorization": f"Bearer {token}"},
         )
-    assert second.status_code == 402
+    assert second.status_code == 202
+    assert second.json()["mesh_status"] == "deferred"
+    assert second.json()["still_remaining"] == 9
 
 
 @pytest.mark.asyncio
@@ -133,6 +142,17 @@ async def test_catalog_lists_generation_packs() -> None:
     assert [item["price_rub"] for item in packs] == [99, 399, 3490, 4690, 5790]
     assert all(item["list_price_rub"] == 0 for item in packs)
     assert all(item["buyable"] is True for item in packs)
+    toys = response.json()["plaza_toys"]
+    assert toys == [
+        {
+            "id": "plaza_toy_1",
+            "animals": 0,
+            "price_rub": 59,
+            "list_price_rub": 0,
+            "featured": False,
+            "buyable": True,
+        }
+    ]
     worlds = response.json()["worlds"]
     assert worlds == [
         {
@@ -347,6 +367,10 @@ async def test_reconcile_credits_a_lost_notification(monkeypatch: pytest.MonkeyP
         "credited": 5,
         "pending": 0,
         "remaining": 6,
+        "still_remaining": 60,
+        "still_quota": 60,
+        "plaza_toy_remaining": 0,
+        "plaza_toy_quota": 0,
         "owned_worlds": [],
         "worlds": [],
     }
@@ -355,6 +379,10 @@ async def test_reconcile_credits_a_lost_notification(monkeypatch: pytest.MonkeyP
         "credited": 0,
         "pending": 0,
         "remaining": 6,
+        "still_remaining": 60,
+        "still_quota": 60,
+        "plaza_toy_remaining": 0,
+        "plaza_toy_quota": 0,
         "owned_worlds": [],
         "worlds": [],
     }
@@ -379,6 +407,10 @@ async def test_reconcile_keeps_waiting_while_the_bank_says_new(
         "credited": 0,
         "pending": 1,
         "remaining": 1,
+        "still_remaining": 10,
+        "still_quota": 10,
+        "plaza_toy_remaining": 0,
+        "plaza_toy_quota": 0,
         "owned_worlds": [],
         "worlds": [],
     }
@@ -402,6 +434,10 @@ async def test_reconcile_marks_a_rejected_payment_failed(
         "credited": 0,
         "pending": 0,
         "remaining": 1,
+        "still_remaining": 10,
+        "still_quota": 10,
+        "plaza_toy_remaining": 0,
+        "plaza_toy_quota": 0,
         "owned_worlds": [],
         "worlds": [],
     }

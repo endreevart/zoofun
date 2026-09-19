@@ -126,6 +126,8 @@ async def test_password_routes_closed_in_production(monkeypatch: pytest.MonkeyPa
             json={"email": "parent@example.com", "password": "newpass"},
         )
         assert replaced.status_code == 400
+        local = await client.post("/v1/auth/dev-session")
+        assert local.status_code == 404
 
 
 @pytest.mark.asyncio

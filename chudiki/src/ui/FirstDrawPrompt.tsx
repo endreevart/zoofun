@@ -1,17 +1,26 @@
 import { CreatureMenuIcon } from './CreatureMenuIcon';
 import { HudIcon } from './HudIcon';
-import { firstDrawCopy } from './firstDraw';
+import { firstDrawCopy, plazaNeedCopy } from './firstDraw';
 
 type Props = {
   again?: boolean;
+  settle?: boolean;
+  plaza?: boolean;
   onDraw(): void;
   onPhoto(): void;
   onClose(): void;
 };
 
 /** Huge draw/photo paths: first visit of the garden, or after the last credit. */
-export function FirstDrawPrompt({ again = false, onDraw, onPhoto, onClose }: Props) {
-  const copy = firstDrawCopy(again);
+export function FirstDrawPrompt({
+  again = false,
+  settle = false,
+  plaza = false,
+  onDraw,
+  onPhoto,
+  onClose,
+}: Props) {
+  const copy = plaza ? plazaNeedCopy() : firstDrawCopy(again, settle);
   return (
     <div className="first-draw" role="dialog" aria-label={copy.label}>
       <button className="first-draw-close" type="button" aria-label="Закрыть" onClick={onClose}>

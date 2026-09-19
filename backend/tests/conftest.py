@@ -28,18 +28,24 @@ def _allow_drawings(monkeypatch: pytest.MonkeyPatch) -> None:
         return ModerationVerdict(allow=True, reason="ok")
 
     monkeypatch.setattr("app.api.stylize.moderate_drawing", _allow)
+    monkeypatch.setattr("app.api.plaza_toys.moderate_drawing", _allow)
 
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limits() -> None:
     """The in-process limiter must not bleed between tests."""
+    from app import ratelimit
     from app.accounts import otp
     from app.mailer import reset_outbox
-    from app import ratelimit
+    from app.plaza.rooms import reset_plaza
 
     ratelimit._local.clear()
     otp.reset()
     reset_outbox()
+    reset_plaza()
+    from app.plaza.digs import reset_digs
+
+    reset_digs()
 
 
 @pytest.fixture(autouse=True)

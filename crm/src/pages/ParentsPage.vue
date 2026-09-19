@@ -4,7 +4,7 @@
       title="Родители"
       subtitle="Семьи: почта, кредиты, звери, письма и вход."
       :count="total"
-      help="Список за дни сверху. Нажмите строку — карточка семьи. Письма отсюда не уходят."
+      help="Список за дни сверху. Нажмите строку — карточка семьи. Письма отсюда не уходят. Кредиты: 3D / картинки."
     >
       <template #actions>
         <button v-if="filtersOn" type="button" class="crm-nav-pill-item" @click="clearFilters">Сбросить</button>
@@ -14,7 +14,7 @@
     <CrmPanel
       v-else-if="items.length || filtersOn"
       title="Семьи"
-      help="Кредиты — сколько зверей ещё можно нарисовать. Письма — можно ли писать на почту. Цвет входа — как давно заходили."
+      help="Кредиты — 3D-оживления / гармонизации-открытки. Письма — можно ли писать на почту. Цвет входа — как давно заходили."
     >
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -108,7 +108,7 @@
               @keydown.enter.prevent="openParent(row)"
             >
               <td class="py-2">{{ row.email }}</td>
-              <td>{{ row.remaining }}</td>
+              <td>{{ row.remaining }} / {{ row.still_remaining ?? "—" }}</td>
               <td>{{ row.creatures }}</td>
               <td>{{ row.marketing_consent ? "да" : "нет" }}</td>
               <td>
@@ -134,9 +134,9 @@
         <p class="m-0">
           <span class="parent-field-label">
             Кредиты
-            <CrmHelp text="Сколько зверей семья ещё может нарисовать. Удаление зверя кредит не возвращает. Первый — бесплатный." />
+            <CrmHelp text="3D — сколько оживлений осталось. Картинки — гармонизации. Удаление зверя ничего не возвращает. Первый 3D бесплатный, с ним 10 картинок." />
           </span>
-          <br />{{ card.parent.remaining }}
+          <br />{{ card.parent.remaining }} 3D · {{ card.parent.still_remaining ?? "—" }} картинок
         </p>
         <p class="m-0">
           <span class="parent-field-label">
@@ -527,5 +527,6 @@ watch(creatureOffset, () => {
 .parent-field-label {
   color: var(--crm-text-muted, #667085);
 }
+
 
 </style>

@@ -56,6 +56,8 @@ export type DrawingData = {
   modelUrl?: string;
   /** Backend-hosted garden postcard: a quiet second OpenRouter generation. */
   postcardUrl?: string;
+  /** Postcard-first creature; 3D starts only on Revive (D-031). */
+  meshDeferred?: boolean;
   /** Clay egg used only while the real creature is still being made. */
   placeholder?: boolean;
 };

@@ -109,6 +109,13 @@ def grant_world(parent: ParentRow, world_id: str) -> str:
     return mint_diy_world(parent, sku=world_id if is_world_sku(world_id) else WORLD_DIY_GARDEN)
 
 
+def ensure_arcade_garden(parent: ParentRow) -> str | None:
+    """First garden construction copy is free (D-027). Extra copies stay paid."""
+    if any(item.sku == WORLD_DIY_GARDEN for item in worlds_of_parent(parent)):
+        return None
+    return mint_diy_world(parent, WORLD_DIY_GARDEN)
+
+
 def mint_diy_world(parent: ParentRow, sku: str = WORLD_DIY_GARDEN) -> str:
     gardens = worlds_of_parent(parent)
     titles = {item.title for item in gardens}

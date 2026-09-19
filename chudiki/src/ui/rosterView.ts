@@ -1,5 +1,7 @@
 export const ROSTER_TITLE = 'Мои Зуфики';
 export const ROSTER_ALL = 'all';
+export const ROSTER_DOWNLOAD_GLB = 'Скачать 3D';
+export const ROSTER_GO_GARDEN = 'В сад';
 
 export type RosterEntry = {
   id: string;

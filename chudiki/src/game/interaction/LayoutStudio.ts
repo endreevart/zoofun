@@ -99,6 +99,8 @@ export class LayoutStudio {
   private marker: THREE.Mesh;
   private brush: THREE.Mesh;
   private listeners = new Set<() => void>();
+  private placedListeners = new Set<(model: string) => void>();
+  private missedListeners = new Set<() => void>();
   private nextId = 1;
   private nextPathId = 1;
   private nextSpawnId = 1;
@@ -173,6 +175,24 @@ export class LayoutStudio {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  onPlaced(listener: (model: string) => void) {
+    this.placedListeners.add(listener);
+    return () => {
+      this.placedListeners.delete(listener);
+    };
+  }
+
+  onMissed(listener: () => void) {
+    this.missedListeners.add(listener);
+    return () => {
+      this.missedListeners.delete(listener);
+    };
+  }
+
+  private notifyMissed() {
+    for (const listener of this.missedListeners) listener();
   }
 
   private catalogNames(): string[] {
@@ -321,6 +341,21 @@ export class LayoutStudio {
     }
     this.activeModel = model;
     this.setTool('place');
+  }
+
+  /** Arcade / guided hold: always keep this model in hand. */
+  forceHold(model: string) {
+    if (this.kind === 'child' && GRASS_MODELS.has(model)) return;
+    this.holdingModel = model;
+    this.activeModel = model;
+    this.selectedId = null;
+    this.moveArmed = false;
+    this.pendingPlace = null;
+    this.setTool('place');
+    this.syncMarker();
+    const y = this.world.groundAt(0, 2);
+    this.showDropGhost(new THREE.Vector3(0, y, 2));
+    this.emit();
   }
 
   /** Hold the move button, then drag: the toy follows the finger. */
@@ -744,7 +779,8 @@ export class LayoutStudio {
       const dy = event.clientY - place.startY;
       if (dx * dx + dy * dy <= CHILD_TAP_SLOP * CHILD_TAP_SLOP) {
         const point = this.groundPoint(event.clientX, event.clientY);
-        this.stamp(point?.x ?? place.x, point?.z ?? place.z, point?.y);
+        if (!point) this.notifyMissed();
+        else this.stamp(point.x, point.z, point.y);
       }
     }
     this.emit();
@@ -886,13 +922,25 @@ export class LayoutStudio {
 
   private stamp(x: number, z: number, y?: number) {
     const model = this.kind === 'child' ? this.holdingModel : this.activeModel;
-    if (!model) return;
+    if (!model) {
+      this.notifyMissed();
+      return;
+    }
     if (this.kind === 'child') {
-      if (GRASS_MODELS.has(model)) return;
-      if (this.world.authoredProps.length >= this.propCap) return;
+      if (GRASS_MODELS.has(model)) {
+        this.notifyMissed();
+        return;
+      }
+      if (this.world.authoredProps.length >= this.propCap) {
+        this.notifyMissed();
+        return;
+      }
     }
     const extras = defaultStamp(model);
-    if (!this.world.library.has(model)) return;
+    if (!this.world.library.has(model)) {
+      this.notifyMissed();
+      return;
+    }
     const prop: AuthoredProp = {
       id: `edit-${this.nextId++}`,
       model,
@@ -909,6 +957,7 @@ export class LayoutStudio {
     this.markDirty();
     this.syncMarker();
     this.emit();
+    for (const listener of this.placedListeners) listener(model);
   }
 
   private showDropGhost(point: THREE.Vector3) {

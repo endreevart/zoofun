@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { downloadPortrait, portraitFileName } from '../game/drawing/portrait';
 import { composePostcard, postcardFileName } from '../game/drawing/postcard';
-import { hatchPreviewMode, hatchPreviewSrc } from './hatchView';
+import { HudIcon } from './HudIcon';
+import {
+  HATCH_DRAW_ANOTHER,
+  HATCH_GO_GARDEN,
+  HATCH_MESH_WAIT,
+  hatchPreviewMode,
+  hatchPreviewSrc,
+} from './hatchView';
 
 /**
  * After submit the child only goes forward. The still is the studio toy.
@@ -15,6 +22,9 @@ export function HatchPreview({
   postcardSrc,
   postcardDone = false,
   name,
+  canDrawAnother = true,
+  meshCooking = false,
+  onDrawAnother,
   onForward,
   onPuzzle,
 }: {
@@ -22,6 +32,9 @@ export function HatchPreview({
   postcardSrc?: string | null;
   postcardDone?: boolean;
   name?: string;
+  canDrawAnother?: boolean;
+  meshCooking?: boolean;
+  onDrawAnother: () => void;
   onForward: () => void;
   onPuzzle?: () => void;
 }) {
@@ -96,22 +109,32 @@ export function HatchPreview({
             </button>
           </div>
           <div className="hatch-preview-actions">
-            {onPuzzle ? (
-              <button className="big-button hatch-preview-go" type="button" onClick={onPuzzle}>
-                <span className="icon">🧩</span>
-                <span>Собрать пазл</span>
-              </button>
-            ) : null}
+            <button
+              className="big-button go hatch-preview-go"
+              type="button"
+              disabled={!canDrawAnother}
+              aria-label={HATCH_DRAW_ANOTHER}
+              onClick={onDrawAnother}
+            >
+              <HudIcon name="draw" />
+              <span>{HATCH_DRAW_ANOTHER}</span>
+            </button>
             <button
               className="big-button primary hatch-preview-go"
               type="button"
               onClick={onForward}
             >
               <span className="icon">🌿</span>
-              <span>В сад!</span>
+              <span>{HATCH_GO_GARDEN}</span>
             </button>
+            {onPuzzle ? (
+              <button className="big-button hatch-preview-go" type="button" onClick={onPuzzle}>
+                <span className="icon">🧩</span>
+                <span>Собрать пазл</span>
+              </button>
+            ) : null}
           </div>
-          <p className="hatch-preview-wait">Объём ещё лепится — можно не ждать</p>
+          {meshCooking ? <p className="hatch-preview-wait">{HATCH_MESH_WAIT}</p> : null}
         </>
       ) : (
         <>

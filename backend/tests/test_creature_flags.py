@@ -74,3 +74,37 @@ def test_apply_creature_flags_sets_row() -> None:
     assert row.world_id == WORLD_AUTHORED_MEADOW
     assert row.painted is False
     assert row.has_still is False
+
+
+def test_claimed_job_id_from_hatch_and_mesh_url() -> None:
+    from app.accounts.creatures import claimed_job_id
+
+    hatch = {
+        "spec": {
+            "hatchJobId": "job-own-1",
+            "drawing": {"modelUrl": "https://s3.example/meshes/otherjobxx.glb"},
+        }
+    }
+    assert claimed_job_id(hatch) == "job-own-1"
+    mesh = {
+        "spec": {
+            "drawing": {
+                "modelUrl": (
+                    "https://s3.example/meshes/aa11bb22cc33dd44ee55ff6677889900.glb"
+                )
+            }
+        }
+    }
+    assert claimed_job_id(mesh) == "aa11bb22cc33dd44ee55ff6677889900"
+    stylize = {
+        "spec": {
+            "drawing": {
+                "modelUrl": (
+                    "/v1/generation/stylize/113a341c7c9f4d5e9d345a840f6f7f73/model.glb"
+                )
+            }
+        }
+    }
+    assert claimed_job_id(stylize) == "113a341c7c9f4d5e9d345a840f6f7f73"
+    short = {"spec": {"drawing": {"modelUrl": "https://s3.example/meshes/x.glb"}}}
+    assert claimed_job_id(short) == ""

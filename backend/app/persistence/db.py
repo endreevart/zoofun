@@ -27,6 +27,7 @@ DEFAULT_PACKS = (
     ("pack_15", 15, 4690, False),
     ("pack_20", 20, 5790, False),
 )
+DEFAULT_PLAZA_TOYS = (("plaza_toy_1", 0, 59, False),)
 
 
 def sync_database_url(url: str | None = None) -> str:
@@ -92,7 +93,7 @@ def session() -> Iterator[Session]:
 
 def seed_packs(db: Session) -> None:
     rows = {row.id: row for row in db.scalars(select(PackRow)).all()}
-    for pack_id, animals, price, featured in (*DEFAULT_PACKS, *DEFAULT_WORLDS):
+    for pack_id, animals, price, featured in (*DEFAULT_PACKS, *DEFAULT_WORLDS, *DEFAULT_PLAZA_TOYS):
         row = rows.get(pack_id)
         if row is None:
             db.add(
@@ -107,6 +108,8 @@ def seed_packs(db: Session) -> None:
             continue
         if is_world_sku(pack_id) and row.list_price_rub == 0 and row.price_rub == price:
             row.list_price_rub = price
+        if pack_id == "plaza_toy_1" and row.price_rub == 79:
+            row.price_rub = price
 
 
 def apply_migrations() -> None:

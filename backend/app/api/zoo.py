@@ -11,8 +11,10 @@ from pydantic import BaseModel, Field, field_validator
 from app.accounts.creatures import slim_for_wire
 from app.accounts.store import MAX_CREATURES, ChildProfile, ParentAccount, store
 from app.accounts.worlds import read_diy_layout, write_diy_layout
+from app.analytics.actions import record_action
 from app.api.deps import require_session, require_session_image
-from app.crm.queries import creature_image
+from app.crm.queries import creature_image, creature_model_bytes
+from app.crm.queries import creature_postcard as postcard_bytes
 from app.worlds import WORLD_DIY_GARDEN
 
 router = APIRouter(prefix="/v1/zoo", tags=["zoo"])
@@ -96,10 +98,16 @@ async def upsert_creature(
 ) -> ZooOut:
     if body.spec["id"] != creature_id:
         raise HTTPException(status_code=400, detail="id_mismatch")
-    _parent, child = pair
+    parent, child = pair
     try:
         store.upsert_creature(child.id, _as_record(body))
     except ValueError as exc:
+        record_action(
+            "creature.save_fail",
+            parent_id=parent.id,
+            child_id=child.id,
+            payload={"reason": str(exc)[:40]},
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _zoo_out(child.id)
 
@@ -147,11 +155,81 @@ async def creature_portrait(
     return Response(content=raw, media_type=media, headers={"Cache-Control": "private, max-age=300"})
 
 
+@router.get("/creatures/{creature_id}/postcard")
+async def read_creature_postcard(
+    creature_id: str,
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session_image)],
+) -> Response:
+    _parent, child = pair
+    image = postcard_bytes(child.id, creature_id) or creature_image(child.id, creature_id)
+    if image is None:
+        raise HTTPException(status_code=404, detail="no_image")
+    raw, media = image
+    return Response(
+        content=raw,
+        media_type=media,
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+@router.get("/creatures/{creature_id}/model")
+async def read_creature_model(
+    creature_id: str,
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
+) -> Response:
+    _parent, child = pair
+    raw = creature_model_bytes(child.id, creature_id)
+    if raw is None:
+        raise HTTPException(status_code=404, detail="no_model")
+    safe = "".join(ch for ch in creature_id if ch.isalnum() or ch in "-_") or "creature"
+    return Response(
+        content=raw,
+        media_type="model/gltf-binary",
+        headers={
+            "Cache-Control": "private, max-age=60",
+            "Content-Disposition": f'attachment; filename="{safe}.glb"',
+        },
+    )
+
+
 @router.delete("/creatures/{creature_id}", response_model=ZooOut)
 async def remove_creature(
     creature_id: str,
     pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
 ) -> ZooOut:
-    _parent, child = pair
+    parent, child = pair
     store.delete_creature(child.id, creature_id)
+    record_action("creature.remove", parent_id=parent.id, child_id=child.id)
     return _zoo_out(child.id)
+
+@router.get("/share")
+async def read_zoo_share(
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
+    world_id: str = WORLD_DIY_GARDEN,
+) -> dict:
+    parent, _child = pair
+    from app.visits.zoos import share_for_owner
+
+    try:
+        shared = share_for_owner(parent.id, world_id)
+        record_action("visit.share", parent_id=parent.id, payload={"world_id": world_id})
+        return shared
+    except ValueError as exc:
+        detail = str(exc)
+        if detail == "world_locked":
+            raise HTTPException(status_code=403, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
+
+
+@router.get("/hearts")
+async def read_zoo_hearts(
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
+    world_id: str = WORLD_DIY_GARDEN,
+) -> dict:
+    parent, _child = pair
+    from app.visits.zoos import owner_hearts
+
+    try:
+        return owner_hearts(parent.id, world_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

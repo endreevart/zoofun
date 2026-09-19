@@ -7,7 +7,7 @@
 
 ## Context
 
-ADR-0010 sold repeatable empty twins of the current garden. The next island is not “another Сад N”. It is a new **kind**: its own authored lawn (terrain, light, layout, park animals) and a construction SKU that stamps **that** island’s plants, houses, and objects.
+ADR-0010 sold repeatable empty twins of the current garden. The next island is not “another Сад N”. It is a new **kind**: its own authored lawn (terrain, light, layout) and a construction SKU that stamps **that** island’s plants, houses, and objects.
 
 ## Decision
 

@@ -61,6 +61,38 @@ export function bootstrapParentSession(): ParentSession {
   };
 }
 
+/** Vite island without a site token: mint the local `dev@zoofun.local` parent. */
+export async function ensureLocalParentSession(options?: {
+  dev?: boolean;
+  request?: typeof fetch;
+}): Promise<string | null> {
+  const dev = options?.dev ?? Boolean(import.meta.env?.DEV);
+  const request = options?.request ?? fetch;
+  const current = parentToken();
+  if (current) {
+    try {
+      const me = await request(`${API_BASE}/v1/auth/me`, {
+        headers: { Authorization: `Bearer ${current}` },
+      });
+      if (me.ok) return current;
+    } catch {
+      /* stale or API down */
+    }
+    forgetParentToken();
+  }
+  if (!dev) return null;
+  try {
+    const response = await request(`${API_BASE}/v1/auth/dev-session`, { method: 'POST' });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { token?: unknown };
+    if (typeof body.token !== 'string' || !body.token) return null;
+    rememberParentToken(body.token);
+    return body.token;
+  } catch {
+    return null;
+  }
+}
+
 export function siteHomeUrl(): string {
   const configured = (import.meta.env.VITE_SITE_URL as string | undefined)?.trim();
   if (configured) return configured;
@@ -91,7 +123,9 @@ export function shouldSendToAuth(
     const query = search.startsWith('?') ? search.slice(1) : search;
     const params = new URLSearchParams(query);
     if (params.has('tv')) return false;
+    if (params.has('visit')) return false;
     if (dev && params.has('studio')) return false;
+    if (dev && params.has('arcade')) return false;
   } catch {
     /* ignore */
   }

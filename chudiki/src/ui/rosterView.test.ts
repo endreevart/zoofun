@@ -6,10 +6,14 @@ import {
   photosInView,
   rosterEntry,
   ROSTER_ALL,
+  ROSTER_DOWNLOAD_GLB,
+  ROSTER_GO_GARDEN,
   ROSTER_TITLE,
 } from './rosterView.ts';
 
 assert.equal(ROSTER_TITLE, 'Мои Зуфики');
+assert.equal(ROSTER_DOWNLOAD_GLB, 'Скачать 3D');
+assert.equal(ROSTER_GO_GARDEN, 'В сад');
 
 const child = { id: 'ch_one', name: 'Бубуся', origin: 'drawing' as const };
 const park = { id: 'resident_cypa', name: 'Цыпа', origin: 'resident' as const };

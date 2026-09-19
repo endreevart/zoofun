@@ -11,7 +11,7 @@ import { resolveModelUrl as resolveAgainstApi } from './modelUrl';
 const POLL_MS = 1500;
 const MAX_WAIT_MS = 360_000;
 
-export type MeshStatus = 'pending' | 'ready' | 'skipped' | 'failed';
+export type MeshStatus = 'pending' | 'ready' | 'skipped' | 'failed' | 'deferred';
 
 type JobResponse = {
   job_id: string;
@@ -26,6 +26,7 @@ type JobResponse = {
   postcard_url?: string | null;
   postcard_status?: string | null;
   remaining?: number | null;
+  still_remaining?: number | null;
 };
 
 export type StylizeResult =
@@ -39,13 +40,15 @@ export type StylizeResult =
       postcardUrl?: string;
       mesh: MeshStatus;
       remaining?: number;
+      stillRemaining?: number;
     }
   | {
       ok: false;
-      reason: 'unavailable' | 'failed' | 'timeout' | 'no_credits' | 'not_signed_in' | 'not_allowed';
+      reason: 'unavailable' | 'failed' | 'timeout' | 'no_credits' | 'no_stills' | 'not_signed_in' | 'not_allowed';
       name?: string;
       kindId?: string;
       remaining?: number;
+      stillRemaining?: number;
     };
 
 export function resolveModelUrl(path: string): string {
@@ -121,7 +124,12 @@ async function readJobRetry(jobId: string): Promise<JobResponse> {
 }
 
 function meshFromJob(job: JobResponse): MeshStatus {
-  if (job.mesh_status === 'ready' || job.mesh_status === 'skipped' || job.mesh_status === 'failed') {
+  if (
+    job.mesh_status === 'ready' ||
+    job.mesh_status === 'skipped' ||
+    job.mesh_status === 'failed' ||
+    job.mesh_status === 'deferred'
+  ) {
     return job.mesh_status;
   }
   return 'pending';
@@ -129,6 +137,10 @@ function meshFromJob(job: JobResponse): MeshStatus {
 
 function remainingFromJob(job: JobResponse): number | undefined {
   return typeof job.remaining === 'number' ? job.remaining : undefined;
+}
+
+function stillRemainingFromJob(job: JobResponse): number | undefined {
+  return typeof job.still_remaining === 'number' ? job.still_remaining : undefined;
 }
 
 /** Garden postcard is a second OpenRouter still, not a client composite. */
@@ -150,6 +162,7 @@ function resultFromJob(job: JobResponse, image: HTMLImageElement): Extract<Styli
     postcardUrl: postcardUrlFromJob(job),
     mesh: meshFromJob(job),
     remaining: remainingFromJob(job),
+    stillRemaining: stillRemainingFromJob(job),
     ...profileFromJob(job),
   };
 }
@@ -175,7 +188,7 @@ export async function waitForMesh(
       delay = Math.min(delay * 1.2, 8000);
       continue;
     }
-    if (job.model_url || job.mesh_status === 'skipped') {
+    if (job.model_url || job.mesh_status === 'skipped' || job.mesh_status === 'deferred') {
       let image: HTMLImageElement | undefined;
       if (job.image_png_base64) {
         const media = job.media_type && job.media_type.startsWith('image/') ? job.media_type : 'image/png';
@@ -220,6 +233,15 @@ export async function waitForPostcard(jobId: string): Promise<string | undefined
   }
 }
 
+async function readFailDetail(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    return typeof body.detail === 'string' ? body.detail : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Returns a stylized still of the drawing, or a reason if the backend cannot help.
  * `onImage` fires as soon as OpenRouter paints, while Meshy may still be running.
@@ -228,7 +250,11 @@ export async function stylizeDrawing(
   source: HTMLCanvasElement | HTMLImageElement,
   options?: {
     onImage?: (result: Extract<StylizeResult, { ok: true }>) => void | Promise<void>;
-    onAccepted?: (info: { remaining?: number; jobId: string }) => void | Promise<void>;
+    onAccepted?: (info: {
+      remaining?: number;
+      stillRemaining?: number;
+      jobId: string;
+    }) => void | Promise<void>;
   },
 ): Promise<StylizeResult> {
   try {
@@ -243,7 +269,10 @@ export async function stylizeDrawing(
       body,
     });
     if (started.status === 503) return { ok: false, reason: 'unavailable' };
-    if (started.status === 402) return { ok: false, reason: 'no_credits' };
+    if (started.status === 402) {
+      const detail = await readFailDetail(started);
+      return { ok: false, reason: detail === 'no_stills' ? 'no_stills' : 'no_credits' };
+    }
     if (started.status === 401) return { ok: false, reason: 'not_signed_in' };
     if (started.status === 422) return { ok: false, reason: 'not_allowed' };
     if (!started.ok) return { ok: false, reason: 'failed' };
@@ -251,6 +280,7 @@ export async function stylizeDrawing(
     const created = (await started.json()) as JobResponse;
     await options?.onAccepted?.({
       remaining: remainingFromJob(created),
+      stillRemaining: stillRemainingFromJob(created),
       jobId: created.job_id,
     });
     const deadline = performance.now() + MAX_WAIT_MS;
@@ -293,4 +323,56 @@ export async function stylizeDrawing(
   } catch {
     return { ok: false, reason: 'failed' };
   }
+}
+
+export async function startMesh(jobId: string): Promise<
+  | {
+      ok: true;
+      jobId: string;
+      remaining?: number;
+      stillRemaining?: number;
+      mesh: MeshStatus;
+      modelUrl?: string;
+    }
+  | { ok: false; reason: 'no_credits' | 'failed' | 'not_signed_in' | 'unavailable' }
+> {
+  try {
+    const started = await fetch(`${API_BASE}/v1/generation/stylize/${jobId}/mesh`, {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    if (started.status === 503) return { ok: false, reason: 'unavailable' };
+    if (started.status === 401) return { ok: false, reason: 'not_signed_in' };
+    if (started.status === 402) return { ok: false, reason: 'no_credits' };
+    if (!started.ok) return { ok: false, reason: 'failed' };
+    const job = (await started.json()) as JobResponse;
+    return {
+      ok: true,
+      jobId: job.job_id,
+      remaining: remainingFromJob(job),
+      stillRemaining: stillRemainingFromJob(job),
+      mesh: meshFromJob(job),
+      modelUrl: job.model_url ? resolveModelUrl(job.model_url) : undefined,
+    };
+  } catch {
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export async function downloadCreatureGlb(creatureId: string, name: string): Promise<boolean> {
+  const response = await fetch(`${API_BASE}/v1/zoo/creatures/${encodeURIComponent(creatureId)}/model`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) return false;
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const safe = name.replace(/[^\wа-яё-]+/gi, '_').replace(/^_+|_+$/g, '') || 'zufik';
+  link.href = url;
+  link.download = `${safe}.glb`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return true;
 }

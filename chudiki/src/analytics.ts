@@ -126,6 +126,12 @@ export function track(event: string, payload?: Record<string, unknown>) {
   });
 }
 
+/** Shop, visit, logout — flush now, not on the 10s timer. */
+export function trackAction(event: string, payload?: Record<string, unknown>) {
+  track(event, payload);
+  flush();
+}
+
 export function initAnalytics(src: 'island' | 'site' = 'island') {
   if (sid) return; // already initialized
   sid = generateSid();

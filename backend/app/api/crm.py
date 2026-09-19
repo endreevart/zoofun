@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.api.deps import require_operator, require_operator_image
 from app.api.operator import LoginIn, LoginOut, login as operator_login
 from app.commerce import promo as promo_codes
 from app.commerce.promo import PromoError
-from app.crm import audience, funnels, ops, queries
+from app.crm import audience, funnels, growth, ops, queries
 from app.crm import mail as crm_mail
 from app.crm.audience import AudienceError
 from app.crm.mail import MailCampaignError
@@ -134,10 +134,19 @@ async def funnel_summary(window: TimeWindow = Depends(crm_window)) -> dict:
     return funnels.summary(window)
 
 
+@guarded.get("/analytics/growth-speed")
+async def growth_speed(window: TimeWindow = Depends(crm_window)) -> dict:
+    return growth.speed(window)
+
+
 @guarded.get("/analytics/funnels/{key}")
-async def funnel_detail(key: str, window: TimeWindow = Depends(crm_window)) -> dict:
+async def funnel_detail(
+    key: str,
+    window: TimeWindow = Depends(crm_window),
+    days: int = Query(default=7, ge=1, le=90),
+) -> dict:
     try:
-        return funnels.build(key, window)
+        return funnels.build(key, window, days)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="unknown_funnel") from exc
 
@@ -218,9 +227,10 @@ async def creatures(
     offset: int = Query(default=0, ge=0),
     parent_id: str | None = Query(default=None),
     kind: str = Query(default="all"),
+    q: str | None = Query(default=None),
     window: TimeWindow = Depends(crm_window),
 ) -> dict:
-    return queries.creatures_gallery(limit, window, offset, parent_id, kind)
+    return queries.creatures_gallery(limit, window, offset, parent_id, kind, q)
 
 
 @router.get("/creatures/{child_id}/{spec_id}/image")
@@ -236,21 +246,36 @@ async def creature_image(
     return Response(content=raw, media_type=media, headers={"Cache-Control": "private, max-age=300"})
 
 
+@router.get("/creatures/{child_id}/{spec_id}/postcard")
+async def creature_postcard(
+    child_id: str,
+    spec_id: str,
+    _token: str = Depends(require_operator_image),
+) -> Response:
+    image = queries.creature_postcard(child_id, spec_id)
+    if image is None:
+        raise HTTPException(status_code=404, detail="no_postcard")
+    raw, media = image
+    return Response(content=raw, media_type=media, headers={"Cache-Control": "private, max-age=300"})
+
+
 @router.get("/creatures/{child_id}/{spec_id}/model")
 async def creature_model(
     child_id: str,
     spec_id: str,
     _token: str = Depends(require_operator_image),
-) -> FileResponse:
-    path = queries.creature_model_path(child_id, spec_id)
-    if path is None:
+) -> Response:
+    raw = queries.creature_model_bytes(child_id, spec_id)
+    if raw is None:
         raise HTTPException(status_code=404, detail="no_model")
     safe = "".join(ch for ch in spec_id if ch.isalnum() or ch in "-_") or "creature"
-    return FileResponse(
-        path,
+    return Response(
+        content=raw,
         media_type="model/gltf-binary",
-        filename=f"{safe}.glb",
-        headers={"Cache-Control": "private, max-age=60"},
+        headers={
+            "Cache-Control": "private, max-age=60",
+            "Content-Disposition": f'attachment; filename="{safe}.glb"',
+        },
     )
 
 

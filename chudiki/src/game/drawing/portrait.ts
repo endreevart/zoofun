@@ -34,7 +34,11 @@ export function displayStillUrl(url: string | null): string | null {
   const resolved = resolveStillPath(url);
   const token = readParentToken();
   if (!token) return resolved;
-  if (!/\/v1\/zoo\/creatures\/[^/?#]+\/portrait(?:\?|$)/.test(resolved)) return resolved;
+  const needsToken =
+    /\/v1\/zoo\/creatures\/[^/?#]+\/(?:portrait|postcard)(?:\?|$)/.test(resolved) ||
+    /\/v1\/plaza\/portraits\/[^/?#]+(?:\?|$)/.test(resolved) ||
+    /\/v1\/plaza\/toys\/[^/?#]+\/still(?:\?|$)/.test(resolved);
+  if (!needsToken) return resolved;
   const sep = resolved.includes('?') ? '&' : '?';
   return `${resolved}${sep}access_token=${encodeURIComponent(token)}`;
 }

@@ -68,7 +68,7 @@
   root.innerHTML =
     '<div class="cookie-consent__inner">' +
     '<p class="cookie-consent__text">' +
-    "На сайте используются cookie, своя аналитика посещений и Яндекс.Метрика. На детском экране игры счётчик не загружается. Подробнее в " +
+    "На сайте используются cookie, своя аналитика посещений и Яндекс.Метрика, в том числе вебвизор на зоопарке. Отказ «Только необходимые» отключает счётчик. Подробнее в " +
     '<a class="cookie-consent__link" href="/privacy">Политике конфиденциальности</a>.</p>' +
     '<div class="cookie-consent__actions">' +
     '<button type="button" class="cookie-consent__accept" data-choice="analytics">Принять аналитические</button>' +

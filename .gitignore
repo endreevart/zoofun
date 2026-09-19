@@ -98,3 +98,6 @@ chudiki/public/models/props/meadow/whimsy-isle.glb
 
 # Grove Meshy isle is the raw ~114 MB dump (thin lawn cannot be collapsed).
 chudiki/public/models/props/grove/floating-grassland.glb
+
+# Isolated Tripo retopo experiment. Never treat these as shipped meadow files.
+chudiki/public/models/props/meadow/_tripo-test/

@@ -22,13 +22,14 @@ from sqlalchemy import select
 from app.accounts.store import store
 from app.ops.log import write_log
 from app.persistence.db import session
-from app.persistence.models import StylizeJobRow
+from app.persistence.models import ParentRow, StylizeJobRow
 from app.providers.meshy import JOB_ID_RE
 from app.providers.meshy import image_to_glb as meshy_image_to_glb
 from app.providers.openrouter import (
     CreatureProfile,
     ProviderError,
     normalize_source_kind,
+    plaza_toy_prompt,
     postcard_prompt_for,
     profile_drawing,
     profile_prompt_for,
@@ -41,7 +42,7 @@ from app.storage import save_asset
 logger = logging.getLogger(__name__)
 
 Status = Literal["queued", "running", "ready", "failed"]
-MeshStatus = Literal["pending", "ready", "skipped", "failed"]
+MeshStatus = Literal["pending", "ready", "skipped", "failed", "deferred"]
 
 MAX_UPLOAD_BYTES = 3_000_000
 # A generation older than this in "running" is an orphan of a dead process.
@@ -120,7 +121,10 @@ class StylizeJob:
     postcard_status: MeshStatus = "pending"
     parent_id: str | None = None
     reserved: bool = False
+    still_reserved: bool = False
+    toy_reserved: bool = False
     source_kind: str = "drawing"
+    purpose: str = "creature"
 
 
 def _snapshot(row: StylizeJobRow) -> StylizeJob:
@@ -138,8 +142,11 @@ def _snapshot(row: StylizeJobRow) -> StylizeJob:
         postcard_url=row.postcard_url,
         postcard_status=row.postcard_status,  # type: ignore[arg-type]
         parent_id=row.parent_id,
-        reserved=row.reserved,
+        reserved=bool(row.reserved),
+        still_reserved=bool(getattr(row, "still_reserved", False)),
+        toy_reserved=bool(getattr(row, "toy_reserved", False)),
         source_kind=normalize_source_kind(row.source_kind),
+        purpose=str(getattr(row, "purpose", None) or "creature"),
     )
 
 
@@ -151,6 +158,23 @@ def _update(job_id: str, **fields: object) -> None:
         for key, value in fields.items():
             setattr(row, key, value)
         row.updated_at = time.time()
+
+
+def set_toy_reserved(job_id: str, reserved: bool) -> None:
+    """Spend (or undo) a plaza-toy slot after a free paint preview."""
+    _update(job_id, toy_reserved=reserved)
+
+
+def arm_toy_mesh(job_id: str) -> None:
+    """Start Tripo for a paid plaza toy without spending a creature credit."""
+    with session() as db:
+        row = db.get(StylizeJobRow, job_id)
+        if row is None:
+            return
+        row.mesh_status = "pending"
+        row.postcard_status = "skipped"
+        # Backdate so a just-committed job is not treated as a live worker.
+        row.updated_at = time.time() - RECLAIM_RUNNING_SECONDS
 
 
 def sniff_image(data: bytes) -> str | None:
@@ -169,7 +193,11 @@ async def create_job(
     job_id: str | None = None,
     parent_id: str | None = None,
     reserved: bool = False,
+    still_reserved: bool = False,
+    mesh_deferred: bool = False,
     source_kind: str = "drawing",
+    purpose: str = "creature",
+    toy_reserved: bool = False,
 ) -> StylizeJob:
     if len(image) > MAX_UPLOAD_BYTES:
         raise ValueError("drawing is too large")
@@ -189,6 +217,19 @@ async def create_job(
             source_kind=normalize_source_kind(source_kind),
             parent_id=parent_id,
             reserved=reserved,
+            still_reserved=still_reserved,
+            toy_reserved=toy_reserved,
+            purpose=purpose if purpose == "plaza_toy" else "creature",
+            mesh_status=(
+                "skipped"
+                if purpose == "plaza_toy" and not toy_reserved
+                else (
+                    "pending"
+                    if purpose == "plaza_toy"
+                    else ("deferred" if mesh_deferred else "pending")
+                )
+            ),
+            postcard_status="skipped" if purpose == "plaza_toy" else "pending",
         )
         db.add(row)
         db.flush()
@@ -199,6 +240,43 @@ async def get_job(job_id: str) -> StylizeJob | None:
     with session() as db:
         row = db.get(StylizeJobRow, job_id)
         return _snapshot(row) if row else None
+
+
+async def request_mesh(job_id: str, *, parent_id: str) -> StylizeJob:
+    """Grow a GLB from a stored still. Reserves the 3D credit in the same lock."""
+    charged = False
+    with session() as db:
+        row = db.get(StylizeJobRow, job_id, with_for_update=True)
+        if row is None:
+            raise ValueError("job_not_found")
+        if row.parent_id and row.parent_id != parent_id:
+            raise ValueError("not_owner")
+        if str(getattr(row, "purpose", None) or "creature") == "plaza_toy":
+            raise ValueError("not_a_creature")
+        if row.status != "ready" or not row.image_base64:
+            raise ValueError("not_ready")
+        if row.model_url and row.mesh_status == "ready":
+            return _snapshot(row)
+        if row.mesh_status == "pending" and row.reserved:
+            return _snapshot(row)
+        parent = db.get(ParentRow, parent_id, with_for_update=True)
+        if parent is None:
+            raise ValueError("missing_parent")
+        if max(0, parent.quota_total - parent.generation_used) <= 0:
+            raise ValueError("no_credits")
+        parent.generation_used += 1
+        parent.updated_at = time.time()
+        row.mesh_status = "pending"
+        row.reserved = True
+        row.still_reserved = False
+        # Finish-mode claim waits for the reclaim window; backdate so revive
+        # starts now instead of ninety seconds later.
+        row.updated_at = time.time() - RECLAIM_RUNNING_SECONDS
+        charged = True
+        snapshot = _snapshot(row)
+    if charged:
+        write_log("credit.reserve", "generation reserved", parent_id=parent_id)
+    return snapshot
 
 
 # A "running" job younger than this may still be cooking in a live worker;
@@ -243,6 +321,12 @@ async def _finish_media(job: StylizeJob, cfg: Settings) -> None:
     a second OpenRouter stylize. Used when redelivery resumes a killed job."""
     styled_png = base64.b64decode(job.image_base64 or "")
     media = job.media_type or "image/png"
+    if job.purpose == "plaza_toy":
+        if job.toy_reserved and job.parent_id and styled_png:
+            await _grow_toy_mesh(job, cfg, styled_png, media)
+        else:
+            _update(job.id, mesh_status="skipped", postcard_status="skipped")
+        return
     tasks = []
     if job.mesh_status in {"pending", "failed"}:
         tasks.append(_maybe_meshy(job, cfg, styled_png, media))
@@ -265,25 +349,33 @@ async def run_job(job_id: str, settings: Settings | None = None) -> str:
         await _finish_media(job, cfg)
         return "done"
     assert job is not None and source is not None and source_type is not None
-    logger.info("stylize job %s running source=%s", job_id, job.source_kind)
+    logger.info("stylize job %s running source=%s purpose=%s", job_id, job.source_kind, job.purpose)
     painted_at = time.monotonic()
-    paint_prompt = stylize_prompt_for(job.source_kind)
-    stylize_call = (
-        stylize_drawing(cfg, source, source_type, prompt=paint_prompt)
-        if paint_prompt
-        else stylize_drawing(cfg, source, source_type)
-    )
-    profile_prompt = profile_prompt_for(job.source_kind)
-    profile_call = (
-        profile_drawing(cfg, source, source_type, prompt=profile_prompt)
-        if job.source_kind == "pet"
-        else profile_drawing(cfg, source, source_type)
-    )
-    styled_result, profile_result = await asyncio.gather(
-        stylize_call,
-        profile_call,
-        return_exceptions=True,
-    )
+    if job.purpose == "plaza_toy":
+        paint_prompt = plaza_toy_prompt()
+        profile_result: object = None
+        try:
+            styled_result = await stylize_drawing(cfg, source, source_type, prompt=paint_prompt)
+        except Exception as exc:  # noqa: BLE001 — gathered path uses return_exceptions
+            styled_result = exc
+    else:
+        paint_prompt = stylize_prompt_for(job.source_kind)
+        stylize_call = (
+            stylize_drawing(cfg, source, source_type, prompt=paint_prompt)
+            if paint_prompt
+            else stylize_drawing(cfg, source, source_type)
+        )
+        profile_prompt = profile_prompt_for(job.source_kind)
+        profile_call = (
+            profile_drawing(cfg, source, source_type, prompt=profile_prompt)
+            if job.source_kind == "pet"
+            else profile_drawing(cfg, source, source_type)
+        )
+        styled_result, profile_result = await asyncio.gather(
+            stylize_call,
+            profile_call,
+            return_exceptions=True,
+        )
     openrouter_s = round(time.monotonic() - painted_at, 2)
     profile_fields: dict[str, object] = {}
     if isinstance(profile_result, CreatureProfile):
@@ -341,10 +433,46 @@ async def run_job(job_id: str, settings: Settings | None = None) -> str:
     # do not depend on each other; run them side by side.
     styled_png = base64.b64decode(styled_result.png_base64)
     media = styled_result.media_type or "image/png"
-    mesh_status, _ = await asyncio.gather(
-        _maybe_meshy(job, cfg, styled_png, media),
-        _maybe_postcard(job, cfg, styled_png, media),
-    )
+    if job.purpose == "plaza_toy":
+        if job.toy_reserved:
+            try:
+                await _grow_toy_mesh(job, cfg, styled_png, media)
+            except Exception:
+                logger.exception("stylize job %s plaza toy persist failed", job_id)
+                _refund_if_needed(job)
+                _update(job_id, status="failed", error="stylize_failed")
+                return "done"
+            write_log(
+                "plaza.toy_ready",
+                job.id,
+                parent_id=job.parent_id,
+                payload={"job_id": job.id},
+            )
+        else:
+            write_log(
+                "plaza.toy_preview",
+                job.id,
+                parent_id=job.parent_id,
+                payload={"job_id": job.id},
+            )
+            _update(job_id, mesh_status="skipped", postcard_status="skipped")
+        logger.info(
+            "stylize job %s plaza toy ready reserved=%s openrouter_s=%.1f",
+            job_id,
+            job.toy_reserved,
+            openrouter_s,
+        )
+        return "done"
+    if job.mesh_status == "deferred":
+        mesh_status, _ = await asyncio.gather(
+            _keep_deferred(job),
+            _maybe_postcard(job, cfg, styled_png, media),
+        )
+    else:
+        mesh_status, _ = await asyncio.gather(
+            _maybe_meshy(job, cfg, styled_png, media),
+            _maybe_postcard(job, cfg, styled_png, media),
+        )
     meshy_s = round(time.monotonic() - meshed_at, 2)
     logger.info(
         "stylize job %s ready model=%s mesh=%s openrouter_s=%.1f meshy_s=%.1f",
@@ -386,7 +514,7 @@ def recover_stale_jobs() -> int:
       mid-Meshy — re-enqueue to regrow media from the stored still.
     """
     now = time.time()
-    orphans: list[tuple[str, str | None, bool]] = []
+    orphans: list[tuple[str, str | None, bool, bool, bool]] = []
     requeue: list[str] = []
     with session() as db:
         rows = db.query(StylizeJobRow).filter(
@@ -397,7 +525,15 @@ def recover_stale_jobs() -> int:
             row.status = "failed"
             row.error = "stylize_failed"
             row.updated_at = time.time()
-            orphans.append((row.id, row.parent_id, row.reserved))
+            orphans.append(
+                (
+                    row.id,
+                    row.parent_id,
+                    bool(row.reserved),
+                    bool(getattr(row, "still_reserved", False)),
+                    bool(getattr(row, "toy_reserved", False)),
+                )
+            )
         reclaimable = db.query(StylizeJobRow.id).filter(
             StylizeJobRow.status == "running",
             StylizeJobRow.updated_at <= now - RECLAIM_RUNNING_SECONDS,
@@ -424,10 +560,18 @@ def recover_stale_jobs() -> int:
             for query in (reclaimable, lost_queued, interrupted_media)
             for (row_id,) in query
         ]
-    for job_id, parent_id, reserved in orphans:
+    for job_id, parent_id, reserved, still_reserved, toy_reserved in orphans:
         if reserved and parent_id:
             store.refund_generation(parent_id)
             _update(job_id, reserved=False)
+        if still_reserved and parent_id:
+            store.refund_still(parent_id)
+            _update(job_id, still_reserved=False)
+        if toy_reserved and parent_id:
+            from app.plaza import toys as plaza_toys
+
+            plaza_toys.refund(parent_id)
+            _update(job_id, toy_reserved=False)
         write_log("stylize.recovered", "stale running job failed", parent_id=parent_id)
         logger.warning("stylize job %s recovered as failed (stale running)", job_id)
     if requeue and get_settings().use_celery:
@@ -440,10 +584,23 @@ def recover_stale_jobs() -> int:
 
 
 def _refund_if_needed(job: StylizeJob) -> None:
-    if not job.reserved or not job.parent_id:
-        return
-    store.refund_generation(job.parent_id)
-    _update(job.id, reserved=False)
+    if job.still_reserved and job.parent_id:
+        store.refund_still(job.parent_id)
+        _update(job.id, still_reserved=False)
+    if job.reserved and job.parent_id:
+        store.refund_generation(job.parent_id)
+        _update(job.id, reserved=False)
+    if job.toy_reserved and job.parent_id:
+        from app.plaza import toys as plaza_toys
+
+        plaza_toys.refund(job.parent_id)
+        _update(job.id, toy_reserved=False)
+
+
+async def _keep_deferred(job: StylizeJob) -> str:
+    """Postcard-first jobs do not start Tripo until Revive."""
+    _update(job.id, mesh_status="deferred")
+    return "deferred"
 
 
 def _mesh_failed(job: StylizeJob, reason: str) -> None:
@@ -554,6 +711,21 @@ async def _run_mesh_provider(
         except FalError:
             raise
     return await meshy_image_to_glb(settings, png, media, stats=stats)
+
+
+async def _grow_toy_mesh(job: StylizeJob, settings: Settings, png: bytes, media: str) -> None:
+    """Store the standee, then grow a GLB. Does not spend quota_total."""
+    from app.plaza import toys as plaza_toys
+
+    if job.parent_id and png:
+        await plaza_toys.persist_from_still(job_id=job.id, parent_id=job.parent_id, png=png)
+    mesh = await _maybe_meshy(job, settings, png, media)
+    fresh = await get_job(job.id)
+    if fresh is not None and fresh.mesh_status == "ready" and (fresh.model_url or "").strip():
+        plaza_toys.attach_mesh(job.id, fresh.model_url or "")
+        return
+    if mesh == "skipped":
+        plaza_toys.mark_mesh(job.id, "skipped")
 
 
 async def _maybe_meshy(job: StylizeJob, settings: Settings, png: bytes, media: str) -> str:

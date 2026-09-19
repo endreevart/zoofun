@@ -29,6 +29,9 @@ class ParentRow(Base):
     __table_args__ = (
         CheckConstraint("quota_total >= 0", name="parents_quota_total_nonneg"),
         CheckConstraint("generation_used >= 0", name="parents_generation_used_nonneg"),
+        CheckConstraint("still_used >= 0", name="parents_still_used_nonneg"),
+        CheckConstraint("plaza_toy_quota >= 0", name="parents_plaza_toy_quota_nonneg"),
+        CheckConstraint("plaza_toy_used >= 0", name="parents_plaza_toy_used_nonneg"),
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
@@ -37,6 +40,9 @@ class ParentRow(Base):
     yandex_id: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
     quota_total: Mapped[int] = mapped_column(Integer, default=1)
     generation_used: Mapped[int] = mapped_column(Integer, default=0)
+    still_used: Mapped[int] = mapped_column(Integer, default=0)
+    plaza_toy_quota: Mapped[int] = mapped_column(Integer, default=0)
+    plaza_toy_used: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time)
     last_login_at: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -52,6 +58,7 @@ class ParentRow(Base):
         JSON().with_variant(SQLITE_JSON(), "sqlite"),
         nullable=True,
     )
+    plaza_credit_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     children: Mapped[list[ChildRow]] = relationship(
         back_populates="parent", cascade="all, delete-orphan"
@@ -231,6 +238,9 @@ class StylizeJobRow(Base):
     postcard_status: Mapped[str] = mapped_column(String(16), default="pending")
     parent_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     reserved: Mapped[bool] = mapped_column(Boolean, default=False)
+    still_reserved: Mapped[bool] = mapped_column(Boolean, default=False)
+    purpose: Mapped[str] = mapped_column(String(16), default="creature")
+    toy_reserved: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
@@ -400,3 +410,79 @@ class MailDeliveryRow(Base):
     status: Mapped[str] = mapped_column(String(16), default="skipped")
     reason: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class ZooShareRow(Base):
+    """Stable public address of one family's lawn. Not revocable (D-028)."""
+
+    __tablename__ = "zoo_shares"
+    __table_args__ = (Index("ux_zoo_shares_parent_world", "parent_id", "world_id", unique=True),)
+
+    id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    parent_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("parents.id", ondelete="CASCADE"), index=True
+    )
+    world_id: Mapped[str] = mapped_column(String(64), index=True)
+    code: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class ZooHeartRow(Base):
+    __tablename__ = "zoo_hearts"
+    __table_args__ = (
+        Index("ix_zoo_hearts_share", "share_id"),
+        Index(
+            "ux_zoo_hearts_visitor",
+            "share_id",
+            "visitor_id",
+            "target",
+            "creature_id",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    share_id: Mapped[str] = mapped_column(
+        String(24), ForeignKey("zoo_shares.id", ondelete="CASCADE")
+    )
+    visitor_id: Mapped[str] = mapped_column(String(80))
+    target: Mapped[str] = mapped_column(String(16), default="zoo")
+    creature_id: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class PlazaStampRow(Base):
+    __tablename__ = "plaza_stamps"
+
+    id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    model: Mapped[str] = mapped_column(String(64), index=True)
+    x: Mapped[float] = mapped_column(Float)
+    z: Mapped[float] = mapped_column(Float)
+    height: Mapped[float] = mapped_column(Float)
+    rotation_y: Mapped[float] = mapped_column(Float, default=0)
+    parent_id: Mapped[str] = mapped_column(String(32), default="")
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+class PlazaToyRow(Base):
+    __tablename__ = "plaza_toys"
+
+    id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    parent_id: Mapped[str] = mapped_column(String(32), index=True)
+    job_id: Mapped[str] = mapped_column(String(64), unique=True)
+    still_path: Mapped[str] = mapped_column(String(200), default="")
+    still_url: Mapped[str] = mapped_column(String(400), default="")
+    mesh_status: Mapped[str] = mapped_column(String(16), default="pending")
+    model_url: Mapped[str] = mapped_column(String(400), default="")
+    height: Mapped[float] = mapped_column(Float, default=2.0)
+    placed_stamp_id: Mapped[str | None] = mapped_column(String(24), unique=True, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class PlazaMetaRow(Base):
+    __tablename__ = "plaza_meta"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rev: Mapped[int] = mapped_column(Integer, default=0)
+    ticket_day: Mapped[str] = mapped_column(String(16), default="")
+    ticket_used: Mapped[int] = mapped_column(Integer, default=0)

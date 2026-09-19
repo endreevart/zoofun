@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import re
 
 from app.worlds import home_world_id
 
@@ -33,6 +34,29 @@ def hatch_job_id(spec: object) -> str:
         return ""
     job_id = spec.get("hatchJobId")
     return job_id if isinstance(job_id, str) and job_id.strip() else ""
+
+
+_MESH_JOB = re.compile(r"/meshes/([A-Za-z0-9_-]{8,80})\.glb", re.I)
+_STYLIZE_JOB = re.compile(r"/stylize/([A-Za-z0-9_-]{8,80})(?:/|$)", re.I)
+
+
+def claimed_job_id(record: object) -> str:
+    """Job this zoo row claims, from hatchJobId or a hosted mesh URL."""
+    if not isinstance(record, dict):
+        return ""
+    spec = record.get("spec")
+    hid = hatch_job_id(spec)
+    if hid:
+        return hid.strip()
+    drawing = spec.get("drawing") if isinstance(spec, dict) else {}
+    url = drawing.get("modelUrl") if isinstance(drawing, dict) else ""
+    if not isinstance(url, str) or not url.strip():
+        return ""
+    mesh = _MESH_JOB.search(url)
+    if mesh:
+        return mesh.group(1)
+    stylize = _STYLIZE_JOB.search(url)
+    return stylize.group(1) if stylize else ""
 
 
 def usable_still(url: object) -> bool:
@@ -229,6 +253,22 @@ def flags_from_payload(payload: object) -> dict:
         "last_x": last_x,
         "last_z": last_z,
     }
+
+
+def is_plaza_ready(payload: object) -> bool:
+    """Living toy: stylized still or mesh. Eggs and park residents stay home."""
+    if not isinstance(payload, dict) or is_seeded_resident(payload):
+        return False
+    spec = payload.get("spec")
+    if not isinstance(spec, dict):
+        return False
+    drawing = spec.get("drawing") if isinstance(spec.get("drawing"), dict) else {}
+    if drawing.get("placeholder") is True:
+        return False
+    if spec.get("hatching") is True:
+        return False
+    flags = flags_from_payload(payload)
+    return bool(flags["has_still"] or flags["has_model"])
 
 
 def apply_creature_flags(row: object) -> None:

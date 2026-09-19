@@ -1,16 +1,15 @@
 import * as THREE from 'three';
 import { World } from './world/World';
 import { Chudik } from './creatures/Chudik';
-import { assetUrl } from '../assetUrl';
 import {
-  generateSpec,
   kindById,
   type ChudikSpec,
   type DrawingData,
 } from './creatures/ChudikSpec';
-import { isParkResidentId, PARK_RESIDENTS } from './creatures/residents';
+import { isParkResidentId } from './creatures/residents';
 import { resolveModelUrl } from './drawing/stylizeDrawing';
 import { hasPersistedStill } from './drawing/portrait';
+import { hatchMayOpen } from './creatures/hatch';
 import { CameraRig } from './interaction/CameraRig';
 import { TapController } from './interaction/TapController';
 import { LayoutStudio, type LayoutKind } from './interaction/LayoutStudio';
@@ -40,6 +39,9 @@ import {
 import { FeedingDirector } from './care/FeedingDirector';
 import { feedSpots } from './care/feedingPlan';
 import { track, setAnalyticsWorld } from '../analytics';
+import { JoyAir } from './visits/joyAir';
+import { joyFromHearts } from './visits/joy';
+import { mayWriteFamilyZoo } from './visits/guestPersist';
 
 export type CareState = {
   joy: number;
@@ -66,6 +68,8 @@ export type GameStartOptions = {
   onDiyPersist?: (props: AuthoredProp[]) => void;
   /** Child DIY stamps, including local meadow studio. */
   layoutKind?: LayoutKind;
+  /** Guest walk: these records instead of the family zoo. */
+  guestRecords?: StoredCreature[];
 };
 
 /**
@@ -73,7 +77,9 @@ export type GameStartOptions = {
  * surface the React layer talks to.
  */
 export class Game {
-  readonly audio = getIslandAudio();
+  get audio() {
+    return getIslandAudio();
+  }
 
   private container: HTMLElement;
   private callbacks: GameCallbacks;
@@ -95,6 +101,8 @@ export class Game {
   private lastJoy = -1;
   private lastFeeding = false;
   private drivenId: string | null = null;
+  /** Guest walk: never persist this lawn into the signed-in family's zoo. */
+  private guestVisit = false;
 
   private creatures = new Map<string, Chudik>();
   private recordings = new Map<string, { bytes: ArrayBuffer; mimeType: string }>();
@@ -113,6 +121,8 @@ export class Game {
 
   private nameplate: HTMLDivElement;
   private nameplateTarget: Chudik | null = null;
+  private joyAir: JoyAir | null = null;
+  private creatureHearts = new Map<string, number>();
   private nameplateTimer = 0;
   private projected = new THREE.Vector3();
   private raycaster = new THREE.Raycaster();
@@ -245,8 +255,9 @@ export class Game {
     const onProgress = options.onProgress;
     this.currentWorldId = options.worldId ?? WORLD_AUTHORED;
     setAnalyticsWorld(this.currentWorldId);
+    this.guestVisit = Boolean(options.guestRecords);
     const mode = options.world ?? (isDiyWorld(this.currentWorldId) ? 'diy' : 'authored');
-    const storedPromise = hydrateZoo();
+    const storedPromise = this.guestVisit ? Promise.resolve([] as StoredCreature[]) : hydrateZoo();
     let world: World;
     try {
       world = await World.create(
@@ -270,6 +281,8 @@ export class Game {
       return;
     }
     this.world = world;
+    this.joyAir = new JoyAir();
+    this.world.root.add(this.joyAir.group);
     this.scene.add(this.world.root);
     this.scene.fog = this.world.root.userData.fog as THREE.FogExp2;
     this.planetCore = this.world.root.getObjectByName('planet-core') ?? null;
@@ -318,14 +331,15 @@ export class Game {
     });
     this.resize();
 
-    const stored = (await storedPromise).filter((record) =>
-      creatureVisibleOnWorld(record.spec.worldId, this.currentWorldId),
-    );
+    const stored = options.guestRecords
+      ? options.guestRecords
+      : (await storedPromise).filter((record) =>
+          creatureVisibleOnWorld(record.spec.worldId, this.currentWorldId),
+        );
     if (this.disposed) return;
     onProgress?.(0.97);
 
     this.spawnStored(stored, false);
-    if (!isHangingShell(this.world.shell)) this.seedParkResidents();
     if (this.creatures.size > 0) {
       await this.loadRecordings([...this.creatures.keys()]);
     }
@@ -336,10 +350,19 @@ export class Game {
       this.renderer.shadowMap.needsUpdate = true;
       this.renderer.render(this.scene, this.camera);
     }
-    try {
-      await this.renderer.compileAsync(this.scene, this.camera);
-    } catch {
-      /* First frame still draws; compile is only to skip the hitch. */
+    // compileAsync can never return on hanging isles and on some phones after
+    // a heavy vitrine. First frame still draws without it.
+    if (!isHangingShell(this.world.shell) && quality().tier !== 'low') {
+      try {
+        await Promise.race([
+          this.renderer.compileAsync(this.scene, this.camera),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(() => reject(new Error('compile-timeout')), 1800);
+          }),
+        ]);
+      } catch {
+        /* First frame still draws; compile is only to skip the hitch. */
+      }
     }
     if (this.disposed) return;
 
@@ -359,6 +382,7 @@ export class Game {
   private spawnStored(records: StoredCreature[], arrival: boolean) {
     const rng = mulberry32(4242);
     for (const record of records) {
+      if (isParkResidentId(record.spec.id) || record.spec.origin === 'resident') continue;
       let spot = record.lastPosition
         ? new THREE.Vector3(record.lastPosition.x, 0, record.lastPosition.z)
         : this.world.findSpawnSpot(rng);
@@ -387,15 +411,25 @@ export class Game {
     return chudik;
   }
 
+  private persistFamily(record: StoredCreature): Promise<void> {
+    if (!mayWriteFamilyZoo({ guestVisit: this.guestVisit })) return Promise.resolve();
+    return saveCreature(record);
+  }
+
+  private forgetFamily(id: string): Promise<void> {
+    if (!mayWriteFamilyZoo({ guestVisit: this.guestVisit })) return Promise.resolve();
+    return deleteCreature(id);
+  }
+
   /** Adds a brand new creature, saves it, and makes an entrance out of it. */
   async addCreature(spec: ChudikSpec): Promise<void> {
     const home = { ...spec, worldId: spec.worldId ?? this.currentWorldId };
     const spot = this.world.findSpawnSpot(Math.random);
     const chudik = this.instantiate(home, spot, true);
 
-    await saveCreature({ spec: home, lastPosition: { x: spot.x, z: spot.z } });
+    await this.persistFamily({ spec: home, lastPosition: { x: spot.x, z: spot.z } });
     this.emitRoster();
-    track('creature.add', { id: spec.id, name: spec.name, kind: spec.kindId });
+    track('creature.add', { id: spec.id, kind: spec.kindId });
 
     const burstPoint = chudik.position.clone();
     burstPoint.y += chudik.height * 0.5;
@@ -450,43 +484,6 @@ export class Game {
     window.setTimeout(() => this.playVoice(id), 400);
   }
 
-  /** Park animals live in every garden. They are not saved and cannot leave. */
-  private seedParkResidents() {
-    for (const resident of PARK_RESIDENTS) {
-      if (this.creatures.has(resident.id)) continue;
-      const spec = generateSpec({
-        id: resident.id,
-        name: resident.name,
-        seed: resident.seed,
-        kindId: resident.kindId,
-        origin: 'resident',
-        drawing: {
-          contour: [
-            [-0.22, -0.42],
-            [0.22, -0.42],
-            [0.22, 0.42],
-            [-0.22, 0.42],
-          ],
-          textureUrl:
-            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
-          aspect: 1,
-          eyeAnchor: [0, 0.12],
-          eyeSpacing: 0.18,
-          eyeRadius: 0.07,
-          sideColor: resident.sideColor,
-          accentColor: resident.accentColor,
-          painted: true,
-          modelUrl: assetUrl(resident.model),
-        },
-      });
-      const near = new THREE.Vector3(resident.x, 0, resident.z);
-      const spot = this.world.isWalkable(resident.x, resident.z)
-        ? new THREE.Vector3(resident.x, this.world.heightAt(resident.x, resident.z), resident.z)
-        : this.world.findOpenSpot(() => 0.5, near);
-      this.instantiate(spec, spot, false);
-    }
-  }
-
   async removeCreature(id: string): Promise<void> {
     if (isParkResidentId(id)) return;
     if (this.drivenId === id) this.releaseControl();
@@ -498,7 +495,7 @@ export class Game {
     }
     this.recordings.delete(id);
     this.audio.forgetRecording(id);
-    await deleteCreature(id);
+    await this.forgetFamily(id);
     this.emitRoster();
     track('creature.remove', { id });
   }
@@ -521,7 +518,7 @@ export class Game {
     if (isParkResidentId(spec.id)) return;
     const home = { ...spec, worldId: spec.worldId ?? this.currentWorldId };
     if (!this.running) {
-      await saveCreature({ spec: home });
+      await this.persistFamily({ spec: home });
       return;
     }
     this.unloadCreature(spec.id);
@@ -530,7 +527,7 @@ export class Game {
       spot = this.world.findOpenSpot(Math.random, spot);
     }
     this.instantiate(home, spot, true);
-    await saveCreature({ spec: home, lastPosition: { x: spot.x, z: spot.z } });
+    await this.persistFamily({ spec: home, lastPosition: { x: spot.x, z: spot.z } });
     this.emitRoster();
   }
 
@@ -547,6 +544,7 @@ export class Game {
       const jobId = chudik.spec.hatchJobId;
       const drawing = chudik.spec.drawing;
       if (!jobId || !drawing || drawing.modelUrl) continue;
+      if (!chudik.isHatching) continue;
       waiting.push({ id: chudik.id, jobId, drawing });
     }
     return waiting;
@@ -585,7 +583,7 @@ export class Game {
       }
       if (hasPersistedStill(drawing)) {
         chudik.spec.drawing = next;
-        void saveCreature({
+        void this.persistFamily({
           spec: chudik.spec,
           lastPosition: { x: chudik.position.x, z: chudik.position.z },
         });
@@ -596,10 +594,14 @@ export class Game {
     chudik.spec.drawing = drawing;
     if (open) {
       chudik.prepareHatch(drawing);
+      if (hatchMayOpen(drawing) && !drawing.modelUrl) {
+        void this.finishHatch(id);
+        return;
+      }
     } else {
       chudik.noteHatchPainted();
     }
-    void saveCreature({
+    void this.persistFamily({
       spec: chudik.spec,
       lastPosition: { x: chudik.position.x, z: chudik.position.z },
     });
@@ -611,7 +613,7 @@ export class Game {
     const chudik = this.creatures.get(id);
     if (!chudik?.spec.drawing) return;
     chudik.spec.drawing = { ...chudik.spec.drawing, postcardUrl };
-    void saveCreature({
+    void this.persistFamily({
       spec: chudik.spec,
       lastPosition: { x: chudik.position.x, z: chudik.position.z },
     });
@@ -622,7 +624,7 @@ export class Game {
     const chudik = this.creatures.get(id);
     if (!chudik?.isHatching) return;
     const drawing = chudik.takeHatch() ?? chudik.spec.drawing;
-    if (!drawing?.modelUrl) return;
+    if (!hatchMayOpen(drawing)) return;
     await this.upgradeCreature(id, { drawing, name: chudik.spec.name, kindId: chudik.spec.kindId });
   }
 
@@ -649,7 +651,7 @@ export class Game {
       );
       this.audio.playUiSound('appear');
     }
-    await saveCreature({
+    await this.persistFamily({
       spec: chudik.spec,
       lastPosition: { x: chudik.position.x, z: chudik.position.z },
     });
@@ -665,7 +667,7 @@ export class Game {
     const chudik = this.creatures.get(spec.id);
     if (!chudik) return;
     Object.assign(chudik.spec, spec);
-    await saveCreature({
+    await this.persistFamily({
       spec: chudik.spec,
       lastPosition: { x: chudik.position.x, z: chudik.position.z },
     });
@@ -675,6 +677,7 @@ export class Game {
   getSpecs(): ChudikSpec[] {
     return [...this.creatures.values()]
       .map((c) => c.spec)
+      .filter((spec) => !isParkResidentId(spec.id) && spec.origin !== 'resident')
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
@@ -726,6 +729,16 @@ export class Game {
   showWholeZoo(): void {
     this.releaseControl();
     this.rig.showWholeZoo();
+  }
+
+  setGardenHearts(hearts: number) {
+    this.world?.setGardenJoy(joyFromHearts(hearts));
+    this.joyAir?.setHearts(hearts);
+  }
+
+  setCreatureHearts(counts: Record<string, number>) {
+    this.creatureHearts = new Map(Object.entries(counts));
+    if (this.nameplateTarget) this.showNameplate(this.nameplateTarget, 2.4);
   }
 
   /** Third-person: camera sits behind this chudik, pad and WASD walk it. */
@@ -834,7 +847,7 @@ export class Game {
     }
     chudik.react();
     this.playVoice(id);
-    track('creature.view', { id, name: chudik.spec.name });
+    track('creature.view', { id, kind: chudik.spec.kindId });
     this.sparkles.burst(
       chudik.position.clone().setY(chudik.position.y + chudik.height * 0.7),
       [chudik.spec.accentColor, '#ffffff', '#ffe066'],
@@ -941,9 +954,11 @@ export class Game {
       ? '<span class="nameplate-birth" aria-hidden="true"><span class="nameplate-birth-spin"></span></span>'
       : '';
     this.nameplate.classList.toggle('nameplate--hatching', hatching);
+    const hearts = this.creatureHearts.get(chudik.spec.id) ?? 0;
+    const tail = hearts > 0 ? `<span class="nameplate-heart">♥ ${hearts}</span>` : '';
     this.nameplate.innerHTML = `${birth}<span class="nameplate-row"><span class="nameplate-emoji">${emoji}</span><span class="nameplate-text"><strong>${escapeHtml(
       chudik.spec.name,
-    )}</strong><em>${escapeHtml(label)}</em></span></span>`;
+    )}</strong><em>${escapeHtml(label)}</em>${tail}</span></span>`;
     this.nameplateTarget = chudik;
     this.nameplateTimer = hatching ? Number.POSITIVE_INFINITY : seconds;
     this.nameplate.style.opacity = '1';
@@ -1002,6 +1017,7 @@ export class Game {
     this.rig.update(dt);
     this.world.update(this.elapsed);
     this.sparkles.update(dt);
+    this.joyAir?.update(dt);
 
     // The stylized shading and the light shafts both need the key light
     // expressed relative to this frame's camera.
@@ -1102,7 +1118,7 @@ export class Game {
       this.rig?.releaseGesture();
       // Remember where everyone was standing, so the zoo feels continuous.
       for (const chudik of this.creatures.values()) {
-        void saveCreature({
+        void this.persistFamily({
           spec: chudik.spec,
           lastPosition: { x: chudik.position.x, z: chudik.position.z },
         });
@@ -1236,6 +1252,7 @@ export class Game {
     for (const chudik of this.creatures.values()) chudik.dispose();
     this.creatures.clear();
     this.sparkles.dispose();
+    this.joyAir?.dispose();
     this.world?.dispose();
     this.stopTvFeed();
     this.audio.setGardenPaused(true);

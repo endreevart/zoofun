@@ -3,6 +3,7 @@ import { MOBILE_STICK_GAIN, clampStickTravel, stickWalk } from '../game/interact
 
 type Props = {
   onWalk: (forward: number, right: number) => void;
+  className?: string;
 };
 
 const HELD = new Set<string>();
@@ -34,12 +35,16 @@ function useCompactWalk(): boolean {
  * Phone and tablet get a thumb stick. Desktop keeps the four arrows.
  * No words — a 4-year-old can drag the knob.
  */
-export function WalkPad({ onWalk }: Props) {
+export function WalkPad({ onWalk, className }: Props) {
   const compact = useCompactWalk();
-  return compact ? <WalkStick onWalk={onWalk} /> : <WalkArrows onWalk={onWalk} />;
+  return compact ? (
+    <WalkStick onWalk={onWalk} className={className} />
+  ) : (
+    <WalkArrows onWalk={onWalk} className={className} />
+  );
 }
 
-function WalkStick({ onWalk }: Props) {
+function WalkStick({ onWalk, className }: Props) {
   const baseRef = useRef<HTMLDivElement | null>(null);
   const knobRef = useRef<HTMLDivElement | null>(null);
   const dragId = useRef<number | null>(null);
@@ -110,7 +115,7 @@ function WalkStick({ onWalk }: Props) {
   return (
     <div
       ref={baseRef}
-      className="walk-pad walk-stick"
+      className={`walk-pad walk-stick${className ? ` ${className}` : ''}`}
       role="slider"
       aria-label="Ходить по зоопарку"
       aria-valuemin={-1}
@@ -129,7 +134,7 @@ function WalkStick({ onWalk }: Props) {
   );
 }
 
-function WalkArrows({ onWalk }: Props) {
+function WalkArrows({ onWalk, className }: Props) {
   useEffect(
     () => () => {
       HELD.clear();
@@ -148,7 +153,7 @@ function WalkArrows({ onWalk }: Props) {
   };
 
   return (
-    <div className="walk-pad" aria-label="Ходить по зоопарку">
+    <div className={`walk-pad${className ? ` ${className}` : ''}`} aria-label="Ходить по зоопарку">
       <PadButton className="walk-up" dir="up" label="Вперёд" onPress={press} onRelease={release}>
         ▲
       </PadButton>

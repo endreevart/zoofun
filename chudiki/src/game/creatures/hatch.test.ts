@@ -6,6 +6,7 @@ import {
   hatchFill,
   hatchFromTap,
   hatchFromWait,
+  hatchMayOpen,
   warmEgg,
 } from './hatch.ts';
 
@@ -32,3 +33,11 @@ assert.equal(eggCanOpen('ready', 'https://zooo.fun/model.glb'), true);
 assert.equal(eggCanOpen('failed'), false);
 assert.equal(eggCanOpen('skipped'), false);
 assert.equal(eggCanOpen('failed', 'https://zooo.fun/model.glb'), true);
+assert.equal(eggCanOpen('deferred'), true);
+assert.equal(eggCanOpen('deferred', 'https://zooo.fun/model.glb'), true);
+
+assert.equal(hatchMayOpen({ modelUrl: 'https://zooo.fun/model.glb' }), true);
+assert.equal(hatchMayOpen({ meshDeferred: true }), true);
+assert.equal(hatchMayOpen({ meshDeferred: false }), false);
+assert.equal(hatchMayOpen({}), false);
+assert.equal(hatchMayOpen(null), false);

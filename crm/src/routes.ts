@@ -18,6 +18,7 @@ const router = createRouter({
         { path: "", name: "dashboard", component: () => import("@/pages/DashboardPage.vue") },
         { path: "funnels", name: "funnels", component: () => import("@/pages/FunnelsHubPage.vue") },
         { path: "funnels/:key", name: "funnel-detail", component: () => import("@/pages/FunnelDetailPage.vue") },
+        { path: "growth", name: "growth", component: () => import("@/pages/GrowthSpeedPage.vue") },
         { path: "traffic", name: "traffic", component: () => import("@/pages/TrafficPage.vue") },
         { path: "usage", name: "usage", component: () => import("@/pages/UsagePage.vue") },
         { path: "usage/copies", name: "usage-copies", component: () => import("@/pages/UsageCopiesPage.vue") },

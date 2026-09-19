@@ -1,4 +1,4 @@
-"""Promocodes on the same Postgres ledger. Packs and construction worlds."""
+"""Promocodes on the same Postgres ledger. Packs, construction worlds, plaza toys."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import func, select
 
+from app.commerce.skus import PLAZA_TOY_1
 from app.commerce.store import PACK_SIZES
 from app.persistence.db import session
 from app.persistence.models import PaymentRow, PromoCodeRow
@@ -16,7 +17,7 @@ from app.worlds import ISLAND_KINDS
 CODE_RE = re.compile(r"^[A-Z0-9_-]{3,24}$")
 GENERATION_PACK_IDS = tuple(f"pack_{n}" for n in PACK_SIZES)
 WORLD_SKUS = tuple(kind.construction_sku for kind in ISLAND_KINDS)
-SHOP_SKU_IDS = (*GENERATION_PACK_IDS, *WORLD_SKUS)
+SHOP_SKU_IDS = (*GENERATION_PACK_IDS, *WORLD_SKUS, PLAZA_TOY_1)
 
 
 class QuoteError(ValueError):

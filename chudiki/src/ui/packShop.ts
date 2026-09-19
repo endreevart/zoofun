@@ -37,14 +37,19 @@ export function packsForShop(packs: Pack[], remaining: number, expanded = false)
   return view.offers;
 }
 
-export function packShopTitle(remaining: number): string {
+export function packShopTitle(remaining: number, forFriend = false): string {
+  if (forFriend && remaining <= 0) return 'Оживите этого друга';
   return remaining > 0 ? 'Пополнить сад' : 'Ваш первый Зуфик ожил!';
 }
 
-export function packShopLead(remaining: number): string {
-  return remaining > 0
-    ? 'Пакет добавляет новых зуфунят. Удаление слот не возвращает.'
-    : 'Теперь ему нужен друг. Оживите ещё один рисунок или сразу соберите маленькую компанию.';
+export function packShopLead(remaining: number, forFriend = false): string {
+  if (remaining > 0) {
+    return 'Каждый зуфик — 10 картинок. Удаление слот не возвращает.';
+  }
+  if (forFriend) {
+    return 'Этот рисунок ждёт. Оживите его или сразу соберите маленькую компанию.';
+  }
+  return 'Каждый зуфик — 10 картинок. Оживите ещё один рисунок или сразу соберите маленькую компанию.';
 }
 
 export function packAnimalLabel(animals: number): string {

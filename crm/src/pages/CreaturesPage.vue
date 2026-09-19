@@ -2,11 +2,19 @@
   <div class="flex flex-col gap-6">
     <CrmPageHeader
       title="Звери"
-      subtitle="По дате появления. Луг на плитке."
+      subtitle="Сначала новые. Почту можно найти сверху."
       :count="total"
-      help="Плитки без исходного рисунка. Фильтры — картинка, нейросеть, 3D, луг. Зависшие яйца сверху."
+      help="На плитке игрушка и садовая открытка, не рисунок ребёнка. Сначала самые свежие. Фильтры — картинка, нейросеть, 3D, луг. Зависшие яйца сверху."
     >
       <template #actions>
+        <input
+          v-model="query"
+          class="parent-search"
+          type="search"
+          placeholder="почта"
+          @keydown.enter.prevent="search"
+        />
+        <button type="button" class="crm-nav-pill-item is-active" @click="search">Найти</button>
         <div class="flex flex-wrap gap-2">
           <button
             v-for="item in filters"
@@ -72,7 +80,7 @@
         <CreatureTile :row="open" :ok="imageOk(open)" large preview @broken="markBroken(open)" />
         <p class="m-0"><span class="text-muted">Родитель</span><br />{{ open.parent_email }}</p>
         <p class="m-0"><span class="text-muted">Профиль</span><br />{{ open.child_nickname || "—" }}</p>
-        <p class="m-0"><span class="text-muted">Когда</span><br />{{ formatWhen(open.created_at) }}</p>
+        <p class="m-0"><span class="text-muted">Когда</span><br />{{ formatWhen(open.created_at, true) }}</p>
         <p class="m-0"><span class="text-muted">Луг</span><br />{{ open.lawn_title || "—" }}</p>
         <p class="m-0 text-sm text-muted">
           {{ open.painted ? "Картинку чуть подчистили, силуэт ребёнка сохранён." : "Свой рисунок, как нарисовали." }}
@@ -106,6 +114,8 @@ const total = ref(0);
 const offset = ref(0);
 const loading = ref(true);
 const filter = ref<CreatureKind>("all");
+const query = ref("");
+const applied = ref("");
 const open = ref<CreatureRow | null>(null);
 const broken = ref(new Set<string>());
 
@@ -142,6 +152,20 @@ function markBroken(row: CreatureRow) {
 function setFilter(next: CreatureKind) {
   if (filter.value === next) return;
   filter.value = next;
+  resetPage();
+}
+
+function search() {
+  const next = query.value.trim();
+  if (applied.value === next && offset.value === 0) {
+    void load();
+    return;
+  }
+  applied.value = next;
+  resetPage();
+}
+
+function resetPage() {
   if (offset.value === 0) {
     void load();
     return;
@@ -162,6 +186,7 @@ async function load() {
         limit: PAGE,
         offset: offset.value,
         kind: filter.value,
+        q: applied.value || undefined,
       }),
       crmApi.stuck({ limit: 20, offset: 0 }),
     ]);
@@ -189,5 +214,13 @@ watch(offset, () => {
 
 .parent-row:hover {
   background: #fafafa;
+}
+
+.parent-search {
+  min-width: 12rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #ece7df;
+  border-radius: 999px;
+  background: #fff;
 }
 </style>

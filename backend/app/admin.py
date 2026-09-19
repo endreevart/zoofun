@@ -70,6 +70,7 @@ class ParentAdmin(UnixDates, ModelView, model=ParentRow):
         ParentRow.yandex_id,
         ParentRow.quota_total,
         ParentRow.generation_used,
+        ParentRow.still_used,
         ParentRow.last_login_at,
         ParentRow.created_at,
         ParentRow.id,
@@ -79,6 +80,7 @@ class ParentAdmin(UnixDates, ModelView, model=ParentRow):
         ParentRow.email,
         ParentRow.quota_total,
         ParentRow.generation_used,
+        ParentRow.still_used,
         ParentRow.last_login_at,
         ParentRow.created_at,
     ]
@@ -87,8 +89,9 @@ class ParentAdmin(UnixDates, ModelView, model=ParentRow):
         ParentRow.email: "Почта",
         ParentRow.yandex_id: "Яндекс ID",
         ParentRow.password_hash: "Пароль (новый текст будет захеширован)",
-        ParentRow.quota_total: "Лимит генераций",
-        ParentRow.generation_used: "Использовано",
+        ParentRow.quota_total: "Лимит 3D",
+        ParentRow.generation_used: "Оживлено",
+        ParentRow.still_used: "Гармонизаций",
         ParentRow.created_at: "Создан",
         ParentRow.updated_at: "Изменён",
         ParentRow.last_login_at: "Последний вход",
@@ -151,21 +154,25 @@ class CreatureAdmin(UnixDates, ModelView, model=CreatureRow):
 
 
 class _PackKindMixin:
-    """Same `packs` table: generation SKUs vs paid worlds."""
+    """Same `packs` table: generation SKUs vs paid worlds vs plaza toys."""
 
     _worlds_only = False
+    _plaza_only = False
+
+    def _scope(self, stmt):
+        from app.commerce.skus import PLAZA_TOY_1
+
+        if self._plaza_only:
+            return stmt.where(PackRow.id == PLAZA_TOY_1)
+        if self._worlds_only:
+            return stmt.where(PackRow.id.startswith(WORLD_PREFIX))
+        return stmt.where(~PackRow.id.startswith(WORLD_PREFIX), PackRow.id != PLAZA_TOY_1)
 
     def list_query(self, request: Request):  # noqa: ARG002
-        stmt = select(self.model)
-        if self._worlds_only:
-            return stmt.where(PackRow.id.startswith(WORLD_PREFIX))
-        return stmt.where(~PackRow.id.startswith(WORLD_PREFIX))
+        return self._scope(select(self.model))
 
     def count_query(self, request: Request):  # noqa: ARG002
-        stmt = select(func.count(PackRow.id)).select_from(PackRow)
-        if self._worlds_only:
-            return stmt.where(PackRow.id.startswith(WORLD_PREFIX))
-        return stmt.where(~PackRow.id.startswith(WORLD_PREFIX))
+        return self._scope(select(func.count(PackRow.id)).select_from(PackRow))
 
 
 class PackAdmin(_PackKindMixin, UnixDates, ModelView, model=PackRow):
@@ -220,6 +227,29 @@ class WorldAdmin(_PackKindMixin, UnixDates, ModelView, model=PackRow):
 
 
 WorldAdmin.identity = "world-sku"
+
+
+class PlazaToySkuAdmin(_PackKindMixin, UnixDates, ModelView, model=PackRow):
+    name = "Штука поляны"
+    name_plural = "Штуки поляны"
+    icon = "fa-solid fa-pencil"
+    category = "Коммерция"
+    _plaza_only = True
+    column_list = [PackRow.id, PackRow.price_rub, PackRow.list_price_rub]
+    column_sortable_list = [PackRow.price_rub, PackRow.list_price_rub]
+    column_labels = {
+        PackRow.id: "Код",
+        PackRow.price_rub: "Цена, ₽",
+        PackRow.list_price_rub: "Цена без скидки, ₽",
+    }
+    form_columns = [PackRow.id, PackRow.price_rub, PackRow.list_price_rub]
+    form_include_pk = True
+    can_create = False
+    can_delete = False
+    can_export = True
+
+
+PlazaToySkuAdmin.identity = "plaza-toy-sku"
 
 
 class FamilyWorldAdmin(UnixDates, ModelView, model=WorldRow):
@@ -522,6 +552,7 @@ def mount_admin(app) -> Admin:
     admin.add_view(CreatureAdmin)
     admin.add_view(PackAdmin)
     admin.add_view(WorldAdmin)
+    admin.add_view(PlazaToySkuAdmin)
     admin.add_view(FamilyWorldAdmin)
     admin.add_view(PaymentAdmin)
     admin.add_view(PromoAdmin)

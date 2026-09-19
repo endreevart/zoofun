@@ -6,7 +6,7 @@ import { CreatureMenuIcon, type CreatureMenuIconName } from './CreatureMenuIcon'
 import { ParentGate } from './ParentGate';
 
 /**
- * Extra settings for one creature: voice, find, walk, move, or send home.
+ * Extra settings for one creature: voice, find, walk, or send home.
  * Opened from the gear on the tap tray (the long press still works too).
  */
 
@@ -23,7 +23,8 @@ export type CreatureCardProps = {
   onSaveRecording(recording: { bytes: ArrayBuffer; mimeType: string }): void;
   onClearRecording(): void;
   onDelete(): void;
-  onMove?: () => void;
+  onRevive?(): void;
+  onDownloadGlb?(): void;
   onGardenQuiet?(quiet: boolean): void;
   onSpeak?(id: 'record'): void;
 };
@@ -39,7 +40,8 @@ export function CreatureCard({
   onSaveRecording,
   onClearRecording,
   onDelete,
-  onMove,
+  onRevive,
+  onDownloadGlb,
   onGardenQuiet,
   onSpeak,
 }: CreatureCardProps) {
@@ -52,6 +54,8 @@ export function CreatureCard({
   const [problem, setProblem] = useState<string | null>(null);
   const [showGate, setShowGate] = useState(false);
   const park = isParkResidentId(spec.id);
+  const canRevive = Boolean(onRevive) && !park && !spec.drawing?.modelUrl && Boolean(spec.hatchJobId);
+  const canDownloadGlb = Boolean(onDownloadGlb) && !park && Boolean(spec.drawing?.modelUrl);
 
   // Never leave the microphone open behind us.
   useEffect(
@@ -167,10 +171,19 @@ export function CreatureCard({
         <div className="creature-sheet-group">
           <SheetRow icon="find" label="Найти в зоопарке" onClick={onFind} />
           <SheetRow icon="lead" label="Вести от третьего лица" onClick={onPilot} />
-          {park || !onMove ? null : (
-            <SheetRow icon="move" label="Переместить в другой мир" onClick={onMove} />
-          )}
         </div>
+
+        {park ? null : canRevive ? (
+          <button className="creature-sheet-home is-revive" type="button" onClick={onRevive}>
+            <span aria-hidden>✨</span>
+            <span>Оживить</span>
+          </button>
+        ) : canDownloadGlb ? (
+          <button className="creature-sheet-home is-glb" type="button" onClick={() => void onDownloadGlb?.()}>
+            <span aria-hidden>📦</span>
+            <span>Скачать 3D</span>
+          </button>
+        ) : null}
 
         {park ? null : (
           <button className="creature-sheet-home" type="button" onClick={() => setShowGate(true)}>

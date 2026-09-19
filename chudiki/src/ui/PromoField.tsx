@@ -1,18 +1,19 @@
 type PromoFieldProps = {
   value: string;
   error?: string;
+  busy?: boolean;
   onChange(value: string): void;
   onApply(): void;
 };
 
-export function PromoField({ value, error, onChange, onApply }: PromoFieldProps) {
+export function PromoField({ value, error, busy, onChange, onApply }: PromoFieldProps) {
   return (
     <>
       <form
-        className="pack-promo"
+        className={`pack-promo${busy ? ' is-busy' : ''}`}
         onSubmit={(event) => {
           event.preventDefault();
-          onApply();
+          if (!busy) onApply();
         }}
       >
         <input
@@ -23,9 +24,10 @@ export function PromoField({ value, error, onChange, onApply }: PromoFieldProps)
           autoComplete="off"
           spellCheck={false}
           aria-label="Промокод"
+          disabled={busy}
         />
-        <button className="pack-promo-apply" type="submit">
-          Ок
+        <button className="pack-promo-apply" type="submit" disabled={busy} aria-busy={busy}>
+          {busy ? '…' : 'Ок'}
         </button>
       </form>
       {error ? <p className="pack-promo-error">{error}</p> : null}

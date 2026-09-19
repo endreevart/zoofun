@@ -45,10 +45,21 @@ export function hatchFromWait(wait: number, heat: number, ready: boolean): boole
   return wait >= Math.max(0.35, HATCH_WAIT - heat * 2);
 }
 
-/** The egg stays shut until the GLB is on the creature. A still is not a puppet. */
+/** The egg stays shut until the GLB is on the creature, unless mesh is deferred (D-031). */
 export function eggCanOpen(
-  _mesh: 'pending' | 'ready' | 'skipped' | 'failed',
+  mesh: 'pending' | 'ready' | 'skipped' | 'failed' | 'deferred',
   modelUrl?: string,
 ): boolean {
-  return Boolean(modelUrl);
+  if (modelUrl) return true;
+  return mesh === 'deferred';
+}
+
+/** A deferred postcard may leave the egg without a GLB. A paid mesh must not. */
+export function hatchMayOpen(drawing?: {
+  modelUrl?: string | null;
+  meshDeferred?: boolean;
+} | null): boolean {
+  if (!drawing) return false;
+  if (drawing.modelUrl) return true;
+  return drawing.meshDeferred === true;
 }

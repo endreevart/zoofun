@@ -22,7 +22,8 @@ from app.persistence.models import (
     PaymentRow,
     StylizeJobRow,
 )
-from app.worlds import is_world_sku, lawn_title, pack_label
+from app.commerce.skus import sku_kind
+from app.worlds import lawn_title, pack_label
 
 from .window import TimeWindow, as_window, in_window
 
@@ -41,7 +42,40 @@ EMPTY_EFFECT = {
     "paid": 0,
 }
 
-_TIMELINE_EVENTS = ("shop.open", "draw.open", "play.open")
+_TIMELINE_EVENTS = (
+    "shop.open",
+    "shop.pay",
+    "shop.checkout",
+    "shop.checkout_fail",
+    "shop.paid",
+    "shop.pay_fail",
+    "shop.quote_fail",
+    "auth.otp_sent",
+    "auth.otp_ok",
+    "auth.otp_fail",
+    "auth.login",
+    "auth.register",
+    "draw.block",
+    "draw.fail",
+    "draw.open",
+    "photo.open",
+    "play.open",
+    "roster.open",
+    "roster.guest",
+    "vitrine.open",
+    "vitrine.open_zoo",
+    "visit.open",
+    "visit.share",
+    "visit.heart",
+    "visit.close",
+    "world.open",
+    "worlds.open",
+    "first_draw.offer",
+    "auth.logout",
+    "friend.invite",
+    "arcade.start",
+    "arcade.done",
+)
 
 
 def _page(limit: int, offset: int) -> tuple[int, int]:
@@ -137,7 +171,7 @@ def abandoned_checkouts(
                     "amount_rub": payment.amount_rub,
                     "status": payment.status,
                     "created_at": payment.created_at,
-                    "kind": "world" if is_world_sku(payment.pack_id) else "pack",
+                    "kind": sku_kind(payment.pack_id),
                 }
             )
 
@@ -291,8 +325,37 @@ def family_timeline(parent_id: str) -> list[dict]:
         ).all()
         labels = {
             "shop.open": "Открыл магазин",
+            "shop.pay": "Перешёл к оплате",
+            "shop.checkout": "Создал счёт",
+            "shop.checkout_fail": "Счёт не открылся",
+            "shop.paid": "Оплатил",
+            "shop.pay_fail": "Оплата не прошла",
+            "shop.quote_fail": "Промокод не подошёл",
+            "auth.otp_sent": "Запросил код",
+            "auth.otp_ok": "Вошёл по коду",
+            "auth.otp_fail": "Код не подошёл",
+            "auth.login": "Вошёл",
+            "auth.register": "Зарегистрировался",
+            "draw.block": "Не смог нарисовать",
+            "draw.fail": "Рисунок не приняли",
             "draw.open": "Открыл рисовалку",
+            "photo.open": "Открыл фото рисунка",
             "play.open": "Открыл /play",
+            "roster.open": "Открыл альбом",
+            "roster.guest": "Смотрел чужих зуфиков",
+            "vitrine.open": "Открыл витрину",
+            "vitrine.open_zoo": "Зашёл в сад с витрины",
+            "visit.open": "В гостях",
+            "visit.share": "Поделился садом",
+            "visit.heart": "Поставил сердце",
+            "visit.close": "Вышел из гостей",
+            "world.open": "Открыл сад",
+            "worlds.open": "Выбор сада",
+            "first_draw.offer": "Предложили нарисовать",
+            "auth.logout": "Вышел",
+            "friend.invite": "Пригласили друга",
+            "arcade.start": "Начал аркаду",
+            "arcade.done": "Прошёл аркаду",
         }
         for event in clicks:
             events.append(

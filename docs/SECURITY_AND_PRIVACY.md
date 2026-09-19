@@ -23,7 +23,7 @@ This document is an engineering baseline, not a substitute for jurisdiction-spec
 
 - Parent authentication protects account, deletion, export, and permissions.
 - The public site signs a parent in with a one-time code from `info@zooo.fun` or Yandex ID. Mail.ru SMTP, Yandex client id, and Yandex secret stay in `.env`. The island never talks to Yandex or SMTP.
-- Login codes are stored as short-lived HMAC hashes. Do not log the code. Password `/register` and `/replace-password` are closed in production.
+- Login codes are stored as short-lived HMAC hashes. Do not log the code. Password `/register` and `/replace-password` are closed in production. `POST /v1/auth/dev-session` mints the local `dev@zoofun.local` parent and returns 404 outside `ENVIRONMENT=development`.
 - Child actions operate through a limited child profile, not unrestricted parent credentials.
 - Every object lookup is authorized by parent account and child profile ownership.
 - Signed asset URLs are short-lived and scoped to individual objects.

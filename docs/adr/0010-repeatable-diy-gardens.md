@@ -13,7 +13,7 @@ ADR-0009 sold one empty twin of the authored island (`world_diy_garden`) once. T
 2. The construction SKU can be bought as many times as the parent wants. Each purchase mints a new empty garden with an automatic name («Сад 1», «Сад 2», …).
 3. Child-made creatures live on one world. When the free garden is full, tell the family and offer another construction garden. Buying one must not dump every creature onto it — offer a move, all or one by one.
 
-Park animals stay fixtures on every lawn. Credits stay on the parent and work in every owned garden. No new biomes, StoreKit, or child-facing cards.
+The lawn has no bundled park animals. Credits stay on the parent and work in every owned garden. No new biomes, StoreKit, or child-facing cards.
 
 ## Decision
 

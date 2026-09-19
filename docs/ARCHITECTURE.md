@@ -25,7 +25,7 @@
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Creation credits and a T-Bank purchase ledger are in scope (D-016 / ADR-0006). StoreKit stays out. DIY gardens of the current island are sold as D-020 (repeatable `world_diy_garden` instances). Further islands are D-021 kinds (authored shell + construction SKU); `garden`, `meadow`, and `grove` (Куболесье) are in the catalog.
+Creation credits and a T-Bank purchase ledger are in scope (D-016 / ADR-0006). StoreKit stays out. The first `world_diy_garden` is granted on `GET /v1/auth/me` (D-027); later garden copies stay D-020. Further islands are D-021 kinds (authored shell + construction SKU); `garden`, `meadow`, and `grove` (Куболесье) are in the catalog. The island arcade is a quest layer on that first empty garden, not a new world. Guest walks and the heart vitrine are D-028 (`GET /v1/public/zoos`). The shared lawn is D-029 (`/v1/plaza`, rooms of 8, Redis seats, emoji only, one global stamp lawn via REST poll). Personal drawing-toys are D-032 (`/v1/plaza/toys`, `plaza_toy_1` 59 ₽, still then Tripo mesh, owner-only stamps). Plaza mounds (D-030) are personal hunts; `POST /v1/plaza/dig` may grant a generation credit from a global pool of 8 per Moscow day (`plaza_meta.ticket_used`).
 
 ## Client boundaries
 
@@ -49,12 +49,15 @@ The bridge exposes a narrow C-compatible boundary to C#. Domain rules do not liv
 
 - Parent landing, email one-time-code or Yandex ID registration, and sign-in.
 - Opening the Chudiki island after a backend parent session (`/play` → `/island`).
+- Web app manifest and icons so Chromium can install the island as a home-screen app (D-033). The playable `/island` registers a passthrough service worker and a picture-first install hint.
 - The Kenney fixture garden (`/zoo/demo`) as the iteration-00 local demo.
 - `/admin` redirects to SQLAdmin at `/staff`. Visual metrics live at `crm.zooo.fun` (D-018).
 
 The website never calls OpenRouter. Child legal names, voice, and other child PII are not collected. The Chudiki island stores the family zoo on the API for the signed-in child; voice recordings stay on the device. Parents, children, creatures, packs, and payments live in PostgreSQL. SQLAdmin at `/staff` is the write console. CRM at `crm.zooo.fun` reads the same database. When the API host cannot reach OpenRouter or Tripo directly, the backend uses `OPENROUTER_HTTP_PROXY` (Tripo can override with `TRIPO_HTTP_PROXY`). Meshy stays on a direct path unless `MESHY_HTTP_PROXY` is set.
 
-Cookie consent on the marketing site enables first-party `source=site` events. Child paths `/play`, `/zoo`, and `/island` do not load Metrika. `/play` still posts a first-party hop (`play.open`) with the parent session so CRM can see the handoff. Island sessions always send product events (`world.open`, `shop.open`, `draw.open`, care) without the cookie banner.
+The island is installable as a home-screen web app (D-033): Chromium prompt on `/island`, iOS Share → Home Screen, passthrough service worker (no drawing/API cache). Not StoreKit.
+
+Cookie consent on the marketing site enables first-party `source=site` events and Yandex Metrika. Child paths `/play`, `/zoo`, and `/island` do not show the banner. The playable `/island` loads the same Metrika counter with webvisor unless the parent chose necessary-only. `/play` still posts a first-party hop (`play.open`) with the parent session so CRM can see the handoff. Island sessions also send product events (screens, shop, draw blocks/fails, visit, care, friend). The API records auth and checkout/paid/fail into the same table. Payloads are ids and counts, not names or drawings.
 
 CRM at `crm.zooo.fun` reads the same ledger. It may send consented parent mail (composite audience sets) and CRUD promocodes. SQLAdmin `/staff` stays the write console for credits and pack prices. There is no second cash register.
 
@@ -91,7 +94,7 @@ In scope for the web API: generation-credit ledger and T-Bank payments. StoreKit
 - `generation_jobs`: asynchronous state, attempts, provider metadata, and errors.
 - `artifacts`: original, normalized input, final texture, manifest, and narration references.
 
-Commerce records in PostgreSQL: `quota_total`, `generation_used`, pack catalog, `payments`. Alembic owns the schema. Credit reserve and T-Bank settlement are single locked transactions. A one-time import reads the old JSON files if the parents table is empty.
+Commerce records in PostgreSQL: `quota_total`, `generation_used`, `still_used`, `plaza_toy_quota` / `plaza_toy_used`, pack catalog, `payments`, `plaza_toys`. Still capacity is derived (`10 + 10 * max(0, quota_total - 1)`, D-031). A plaza-toy settlement must not raise `quota_total` (D-032). Alembic owns the schema. Credit reserve and T-Bank settlement are single locked transactions. A one-time import reads the old JSON files if the parents table is empty.
 
 ## Generation state machine
 
@@ -110,7 +113,7 @@ Any processing state → retry_wait → same/next safe state
 Any terminal validation failure → failed
 ```
 
-Transitions are persisted. Worker retries must be idempotent. Duplicate client submission must not create a second job. A signed-in parent reserves one generation credit when a job is accepted after the drawing safety gate. The gate also labels the upload `drawing` or `pet` (D-025). The job payload echoes `remaining` after that reserve and a `mesh_status` (`pending` / `ready` / `skipped` / `failed`) so the island can lock the credit chip immediately. The still marks the job ready; the egg stays in the garden until the GLB is stored. Mesh retries and broker redelivery must not substitute a 2.5D standee.
+Transitions are persisted. Worker retries must be idempotent. Duplicate client submission must not create a second job. A signed-in parent reserves one 3D credit on the first job, or one still credit on later jobs, after the drawing safety gate (D-031). Plaza-toy jobs (`purpose=plaza_toy`) skip postcard. Preview paints without mesh. `POST /v1/plaza/toys/commit` spends `plaza_toy_used`, stores the standee, and starts Tripo without spending `quota_total`. The gate also labels the upload `drawing` or `pet` (D-025). The job payload echoes `remaining` and `still_remaining` after that reserve and a `mesh_status` (`pending` / `ready` / `skipped` / `failed` / `deferred`) so the island can lock the chips immediately. The still marks the job ready; the first egg stays until the GLB is stored. Later jobs may stay `deferred` as a postcard until Revive. Mesh retries and broker redelivery must not substitute a 2.5D standee for a paid mesh that is only delayed.
 
 ## Runtime creature structure
 

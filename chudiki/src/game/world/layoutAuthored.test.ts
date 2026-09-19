@@ -10,6 +10,7 @@ import {
   GROVE_CATALOG_MODELS,
   catalogForShell,
   childCatalogForShell,
+  plazaChildCatalog,
   catalogGroup,
 } from './layoutCatalog.ts';
 
@@ -37,6 +38,13 @@ assert.equal(catalogForShell('garden'), CATALOG_MODELS);
 assert.equal(catalogForShell('grove'), GROVE_CATALOG_MODELS);
 assert.ok(GROVE_CATALOG_MODELS.includes('voxel-tree'));
 assert.ok(GROVE_CATALOG_MODELS.includes('voxel-verdant-garden'));
+const plaza = plazaChildCatalog();
+assert.equal(plaza.includes('grass_a'), false);
+assert.ok(plaza.includes('sunlit-canopy'));
+assert.ok(plaza.includes('acorn-cottage'));
+assert.ok(plaza.includes('voxel-tree'));
+assert.ok(plaza.includes('mossy-burrow'));
+assert.equal(new Set(plaza).size, plaza.length);
 assert.ok(GROVE_CATALOG_MODELS.includes('lp_tree_01'));
 assert.ok(GROVE_CATALOG_MODELS.includes('lp_pine_01'));
 assert.ok(GROVE_CATALOG_MODELS.includes('rustic-bench'));

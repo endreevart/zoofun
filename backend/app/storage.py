@@ -82,6 +82,34 @@ async def save_asset(settings: Settings, key: str, data: bytes, content_type: st
     return None
 
 
+def _safe_key(key: str) -> str | None:
+    if not key or ".." in key or key.startswith("/") or "\\" in key:
+        return None
+    parts = key.split("/")
+    if any(not part or part in {".", ".."} for part in parts):
+        return None
+    return key
+
+
+def read_asset(settings: Settings, key: str) -> bytes | None:
+    """Local file first, then our bucket. Key is ours — never a caller URL."""
+    safe = _safe_key(key)
+    if safe is None:
+        return None
+    path = Path(settings.storage_local_root) / safe
+    if path.is_file():
+        return path.read_bytes()
+    if not s3_ready(settings):
+        return None
+    try:
+        obj = _client(settings).get_object(Bucket=settings.s3_bucket, Key=safe)
+        body = obj.get("Body")
+        return body.read() if body is not None else None
+    except Exception:
+        logger.info("s3 miss for %s", safe)
+        return None
+
+
 def creature_still_key(child_id: str, spec_id: str) -> str:
     child = "".join(ch for ch in child_id if ch.isalnum() or ch in "-_")[:32]
     safe = "".join(ch for ch in spec_id if ch.isalnum() or ch in "-_")[:64]
