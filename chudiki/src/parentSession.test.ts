@@ -27,6 +27,9 @@ assert.equal(shouldSendToAuth(null, '?tv=1', false), false);
 assert.equal(shouldSendToAuth(null, '?visit=abc12345', false), false);
 assert.equal(shouldSendToAuth('parent-token', '?tv=1', false), false);
 assert.equal(shouldSendToAuth(null, '', true), true, 'dev without studio still signs in');
+assert.equal(shouldSendToAuth(null, '', true, 'localhost'), true);
+assert.equal(shouldSendToAuth(null, '', true, '192.168.1.60'), false, 'phone LAN stays on island');
+assert.equal(shouldSendToAuth(null, '', true, 'random.trycloudflare.com'), false);
 
 forgetParentToken();
 {

@@ -2987,6 +2987,7 @@ export function App() {
           {nearCrystal &&
           !guestOn &&
           !diyBuild &&
+          !isAuthoringStudio() &&
           !diyPicking &&
           !arcadeBuilding &&
           !arcadeSettle &&

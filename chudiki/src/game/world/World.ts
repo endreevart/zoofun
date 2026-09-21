@@ -26,11 +26,12 @@ import {
 } from './layout';
 import { PathLayer } from './PathLayer';
 import { SpawnLayer } from './SpawnLayer';
-import { GrassField } from './GrassField';
 import {
   childCatalogForShell,
   defaultLandmarks,
+  dropGrassStamps,
   ensureGardenGate,
+  GRASS_MODELS,
   loadBakedLayout,
   resolveLayoutDocument,
   authoredGroundY,
@@ -83,7 +84,6 @@ export class World implements WalkableQuery {
   private unsubscribe: () => void = () => {};
   readonly pathLayer: PathLayer;
   readonly spawnLayer: SpawnLayer;
-  readonly grassField: GrassField;
   private toys: DiyToyLayer;
   private authored: AuthoredProp[] = [];
   private authoredPaths: AuthoredPath[] = [];
@@ -122,7 +122,6 @@ export class World implements WalkableQuery {
       const stamps = options.catalog ?? [...childCatalogForShell(shell)];
       const library = await IdyllicLibrary.load(onProgress, [
         island,
-        ...(shell === 'garden' ? ['grass_a', 'grass_b'] : []),
         ...stamps,
         ...diyProps.map((prop) => prop.model).filter((model) => !isPlazaToyModel(model)),
       ], options.signal, options.renderer);
@@ -139,7 +138,6 @@ export class World implements WalkableQuery {
     const props = shell === 'garden' ? ensureGardenGate(rawProps) : rawProps;
     const library = await IdyllicLibrary.load(onProgress, [
       island,
-      ...(shell === 'garden' ? ['grass_a', 'grass_b'] : []),
       ...props.map((prop) => prop.model),
     ], options.signal, options.renderer);
     try {
@@ -197,8 +195,6 @@ export class World implements WalkableQuery {
     this.root.add(this.pathLayer.group);
     this.spawnLayer = new SpawnLayer(this.terrain);
     this.root.add(this.spawnLayer.group);
-    this.grassField = new GrassField(this.terrain, library);
-    if (shell === 'garden') this.root.add(this.grassField.group);
     this.toys = new DiyToyLayer(this.root, (x, z) => this.groundAt(x, z));
 
     if (mode !== 'diy' && shell === 'garden') {
@@ -275,8 +271,9 @@ export class World implements WalkableQuery {
     const previous = this.root.getObjectByName('idyllic-nature');
     if (previous) discardNatureGroup(previous);
 
+    const visible = dropGrassStamps(props);
     const scatter = new InstancedScatter(this.library);
-    for (const prop of props) {
+    for (const prop of visible) {
       if (!this.library.has(prop.model)) continue;
       scatter.place(prop.model, this.placementOf(prop));
     }
@@ -286,9 +283,9 @@ export class World implements WalkableQuery {
       receiveShadow: true,
       spatial: useSpatialBatches(),
     });
-    this.tagInstances(group, props);
+    this.tagInstances(group, visible);
     this.root.add(group);
-    this.authored = props;
+    this.authored = visible;
     this.toys.sync(this.authored);
     this.refreshContactShadows();
     this.requestWalkGrid();
@@ -296,6 +293,7 @@ export class World implements WalkableQuery {
 
   /** Add one stamp without rebuilding every other model. */
   appendAuthored(prop: AuthoredProp) {
+    if (GRASS_MODELS.has(prop.model)) return;
     this.authored = [...this.authored, prop];
     if (isPlazaToyModel(prop.model)) this.toys.sync(this.authored);
     else this.rebuildNatureModel(prop.model);
@@ -315,7 +313,6 @@ export class World implements WalkableQuery {
   applyAuthoredPaths(paths: AuthoredPath[]) {
     this.authoredPaths = paths;
     this.pathLayer.rebuild(paths);
-    if (this.shell === 'garden') this.grassField.rebuild(paths);
   }
 
   patchAuthoredPath(id: string, patch: Partial<AuthoredPath>) {
@@ -650,7 +647,6 @@ export class World implements WalkableQuery {
 
   update(elapsed: number) {
     this.water.update(elapsed, this.sun);
-    this.grassField.update(elapsed);
   }
 
   private refreshContactShadows(azimuthDeg = tuning.get().sunAzimuth) {
@@ -673,7 +669,6 @@ export class World implements WalkableQuery {
     disposeContactShadows(this.root);
     this.pathLayer.dispose();
     this.spawnLayer.dispose();
-    this.grassField.dispose();
     this.terrain.dispose();
     this.water.dispose();
     this.toys.dispose();

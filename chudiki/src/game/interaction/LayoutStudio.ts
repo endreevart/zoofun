@@ -332,7 +332,7 @@ export class LayoutStudio {
   }
 
   setActiveModel(model: string) {
-    if (this.kind === 'child' && GRASS_MODELS.has(model)) return;
+    if (GRASS_MODELS.has(model)) return;
     if (this.kind === 'child') {
       this.holdingModel = this.holdingModel === model ? null : model;
       if (this.holdingModel) this.activeModel = this.holdingModel;
@@ -350,7 +350,7 @@ export class LayoutStudio {
 
   /** Arcade / guided hold: always keep this model in hand. */
   forceHold(model: string) {
-    if (this.kind === 'child' && GRASS_MODELS.has(model)) return;
+    if (GRASS_MODELS.has(model)) return;
     this.holdingModel = model;
     this.activeModel = model;
     this.selectedId = null;
@@ -972,15 +972,13 @@ export class LayoutStudio {
       this.notifyMissed();
       return;
     }
-    if (this.kind === 'child') {
-      if (GRASS_MODELS.has(model)) {
-        this.notifyMissed();
-        return;
-      }
-      if (this.world.authoredProps.length >= this.propCap) {
-        this.notifyMissed();
-        return;
-      }
+    if (GRASS_MODELS.has(model)) {
+      this.notifyMissed();
+      return;
+    }
+    if (this.kind === 'child' && this.world.authoredProps.length >= this.propCap) {
+      this.notifyMissed();
+      return;
     }
     const toy = isPlazaToyModel(model);
     if (!toy && !this.world.library.has(model)) {

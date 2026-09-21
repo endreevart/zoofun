@@ -43,7 +43,7 @@ import { JoyAir } from './visits/joyAir';
 import { joyFromHearts } from './visits/joy';
 import { mayWriteFamilyZoo } from './visits/guestPersist';
 import { CrystalField } from './garden/crystalField';
-import { GARDEN_DIG_NEAR, nearMound, type PlazaMound, type PlazaTicket } from './plaza/plazaDig';
+import { gardenSmashId, type PlazaMound, type PlazaTicket } from './plaza/plazaDig';
 
 export type CareState = {
   joy: number;
@@ -1262,7 +1262,7 @@ export class Game {
         z = driver.position.z;
       }
     }
-    const id = nearMound(x, z, this.crystalMounds, GARDEN_DIG_NEAR);
+    const id = gardenSmashId(x, z, this.rig.orbitDistance, this.crystalMounds);
     if (id === this.lastNearCrystal) return;
     this.lastNearCrystal = id;
     this.callbacks.onNearCrystal?.(id);

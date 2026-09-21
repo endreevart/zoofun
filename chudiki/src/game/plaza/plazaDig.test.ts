@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  gardenSmashId,
   localPlazaMounds,
   localGardenMounds,
   moundsFromRoom,
@@ -10,6 +11,8 @@ import {
   GARDEN_CRYSTAL_COUNT,
   GARDEN_CRYSTAL_INNER,
   GARDEN_CRYSTAL_OUTER,
+  GARDEN_DIG_MAX_CAMERA,
+  GARDEN_DIG_NEAR,
   GARDEN_TICKETS_PER_DAY,
   PLAZA_CRYSTAL_COUNT,
   PLAZA_CRYSTAL_INNER,
@@ -60,5 +63,10 @@ for (const mound of garden) {
   assert.ok(radius <= GARDEN_CRYSTAL_OUTER + 0.5);
 }
 assert.equal(nearMound(garden[0].x, garden[0].z, garden), garden[0].id);
+assert.equal(gardenSmashId(garden[0].x, garden[0].z, 8, garden), garden[0].id);
+assert.equal(gardenSmashId(garden[0].x, garden[0].z, 46, garden), null, 'overview is not a smash');
+assert.equal(gardenSmashId(0, -5, 8, garden), null, 'island centre is not next to a crystal');
+assert.ok(GARDEN_DIG_NEAR <= 2.5);
+assert.ok(GARDEN_DIG_MAX_CAMERA < 40);
 const gardenLeft = garden.slice(0, 2);
 assert.equal(refillGardenMounds(gardenLeft).length, GARDEN_CRYSTAL_COUNT);

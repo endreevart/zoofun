@@ -13,9 +13,10 @@ import {
   plazaChildCatalog,
   catalogGroup,
 } from './layoutCatalog.ts';
+import { dropGrassStamps, parseLayoutDocument } from './layoutAuthored.ts';
 
-assert.ok(CATALOG_MODELS.includes('grass_a'));
-assert.ok(CATALOG_MODELS.includes('grass_b'));
+assert.equal(CATALOG_MODELS.includes('grass_a'), false);
+assert.equal(CATALOG_MODELS.includes('grass_b'), false);
 assert.equal(CHILD_CATALOG_MODELS.includes('grass_a'), false);
 assert.equal(CHILD_CATALOG_MODELS.includes('grass_b'), false);
 assert.ok(CHILD_CATALOG_MODELS.includes('sunlit-canopy'));
@@ -24,7 +25,7 @@ assert.equal(DIY_PROP_CAP, 258);
 
 assert.equal(catalogGroup('sunlit-canopy'), 'plants');
 assert.equal(catalogGroup('mossy-burrow'), 'houses');
-assert.equal(catalogGroup('harvest-cradle'), 'objects');
+assert.equal(catalogGroup('blockstone-peaks'), 'objects');
 
 assert.ok(MEADOW_CATALOG_MODELS.includes('whimsywood-tree'));
 assert.ok(MEADOW_CATALOG_MODELS.includes('acorn-cottage'));
@@ -38,6 +39,7 @@ assert.equal(catalogForShell('garden'), CATALOG_MODELS);
 assert.equal(catalogForShell('grove'), GROVE_CATALOG_MODELS);
 assert.ok(GROVE_CATALOG_MODELS.includes('voxel-tree'));
 assert.ok(GROVE_CATALOG_MODELS.includes('voxel-verdant-garden'));
+assert.ok(GROVE_CATALOG_MODELS.includes('blockstone-peaks'));
 const plaza = plazaChildCatalog();
 assert.equal(plaza.includes('grass_a'), false);
 assert.ok(plaza.includes('sunlit-canopy'));
@@ -58,20 +60,48 @@ assert.equal(catalogGroup('acorn-cottage'), 'houses');
 assert.equal(catalogGroup('mushroom-lantern'), 'houses');
 assert.equal(catalogGroup('pebble-blossom'), 'plants');
 
+const gardenBaked = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../public/layout/island-layout.json'), 'utf8'),
+);
+assert.equal(gardenBaked.version, 2);
+assert.ok(Array.isArray(gardenBaked.props) && gardenBaked.props.length >= 140);
+assert.ok(gardenBaked.props.some((prop: { model: string }) => prop.model === 'garden-gate'));
+assert.ok(gardenBaked.props.some((prop: { model: string }) => prop.model === 'lotus-pond'));
+assert.ok(gardenBaked.props.some((prop: { model: string }) => prop.model === 'timber-bridge'));
+assert.equal(gardenBaked.props.some((prop: { model: string }) => prop.model === 'grass_a'), false);
+
 const meadowBaked = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../public/layout/meadow-layout.json'), 'utf8'),
 );
 assert.equal(meadowBaked.version, 2);
-assert.ok(Array.isArray(meadowBaked.props) && meadowBaked.props.length >= 80);
+assert.ok(Array.isArray(meadowBaked.props) && meadowBaked.props.length >= 40);
 assert.ok(meadowBaked.props.some((prop: { model: string }) => prop.model === 'spiral-garden'));
-assert.ok(meadowBaked.props.some((prop: { model: string }) => prop.model === 'pebble-blossom'));
+assert.ok(meadowBaked.props.some((prop: { model: string }) => prop.model === 'whimsywood-tree'));
+assert.ok(meadowBaked.props.some((prop: { model: string }) => prop.model === 'acorn-cottage'));
 
 const groveBaked = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../public/layout/grove-layout.json'), 'utf8'),
 );
 assert.equal(groveBaked.version, 2);
-assert.ok(Array.isArray(groveBaked.props) && groveBaked.props.length >= 90);
+assert.ok(Array.isArray(groveBaked.props) && groveBaked.props.length >= 40);
 assert.ok(groveBaked.props.some((prop: { model: string }) => prop.model === 'voxel-tree'));
-assert.ok(groveBaked.props.some((prop: { model: string }) => prop.model === 'lp_tree_01'));
 assert.ok(groveBaked.props.some((prop: { model: string }) => prop.model === 'lp_pine_02'));
 assert.ok(groveBaked.props.some((prop: { model: string }) => prop.model === 'rustic-bench'));
+
+assert.deepEqual(
+  dropGrassStamps([
+    { id: 'a', model: 'garden-gate', x: 0, z: 0, height: 4, rotationY: 0 },
+    { id: 'b', model: 'grass_a', x: 1, z: 1, height: 0.5, rotationY: 0 },
+    { id: 'c', model: 'grass_b', x: 2, z: 2, height: 0.5, rotationY: 0 },
+  ]).map((prop) => prop.model),
+  ['garden-gate'],
+);
+
+const parsedGrass = parseLayoutDocument({
+  props: [
+    { id: 'keep', model: 'rustic-bench', x: 0, z: 0, height: 1, rotationY: 0 },
+    { id: 'drop', model: 'grass_a', x: 1, z: 1, height: 0.5, rotationY: 0 },
+  ],
+});
+assert.equal(parsedGrass.props?.length, 1);
+assert.equal(parsedGrass.props?.[0].model, 'rustic-bench');

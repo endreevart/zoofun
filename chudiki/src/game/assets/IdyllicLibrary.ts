@@ -32,74 +32,182 @@ const EXTRA_MODELS = [
   { name: 'giant-tree', path: assetUrl('models/props/giant-tree.glb') },
   { name: 'rustic-bench', path: assetUrl('models/props/rustic-bench.glb') },
   { name: 'red-mushroom', path: assetUrl('models/props/red-mushroom.glb') },
-  { name: 'sunlit-canopy', path: assetUrl('models/props/sunlit-canopy.glb') },
-  { name: 'verdant-glow', path: assetUrl('models/props/verdant-glow.glb') },
-  { name: 'mosslit-stones', path: assetUrl('models/props/mosslit-stones.glb') },
-  { name: 'garden-blooms', path: assetUrl('models/props/garden-blooms.glb') },
-  { name: 'neon-leaves', path: assetUrl('models/props/neon-leaves.glb') },
-  { name: 'vibrant-bloom', path: assetUrl('models/props/vibrant-bloom.glb') },
-  { name: 'neon-bloom', path: assetUrl('models/props/neon-bloom.glb') },
-  { name: 'blooming-bush', path: assetUrl('models/props/blooming-bush.glb') },
-  { name: 'harvest-cradle', path: assetUrl('models/props/harvest-cradle.glb') },
-  { name: 'emerald-cascade', path: assetUrl('models/props/emerald-cascade.glb') },
+  {
+    name: 'sunlit-canopy',
+    path: `${assetUrl('models/props/sunlit-canopy.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/sunlit-canopy-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'verdant-glow',
+    path: `${assetUrl('models/props/verdant-glow.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/verdant-glow-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'mosslit-stones',
+    path: `${assetUrl('models/props/mosslit-stones.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/mosslit-stones-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'garden-blooms',
+    path: `${assetUrl('models/props/garden-blooms.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/garden-blooms-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'neon-leaves',
+    path: `${assetUrl('models/props/neon-leaves.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/neon-leaves-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'vibrant-bloom',
+    path: `${assetUrl('models/props/vibrant-bloom.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/vibrant-bloom-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'neon-bloom',
+    path: `${assetUrl('models/props/neon-bloom.glb')}?v=tex1`,
+  },
+  {
+    name: 'blooming-bush',
+    path: `${assetUrl('models/props/blooming-bush.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/blooming-bush-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'harvest-cradle',
+    path: `${assetUrl('models/props/harvest-cradle.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/harvest-cradle-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'emerald-cascade',
+    path: `${assetUrl('models/props/emerald-cascade.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/emerald-cascade-gpu.glb')}?v=tex1`,
+  },
   { name: 'wooden-fence', path: assetUrl('models/props/wooden-fence.glb') },
-  { name: 'floating-island', path: assetUrl('models/props/floating-island.glb') },
-  { name: 'lotus-pond', path: assetUrl('models/props/lotus-pond.glb') },
-  { name: 'timber-bridge', path: assetUrl('models/props/timber-bridge.glb') },
-  { name: 'mossy-burrow', path: assetUrl('models/props/mossy-burrow.glb') },
-  { name: 'garden-gate', path: `${assetUrl('models/props/garden-gate.glb')}?feet=1` },
-  { name: 'mossflower-hollow', path: assetUrl('models/props/mossflower-hollow.glb') },
+  { name: 'floating-island', path: `${assetUrl('models/props/floating-island.glb')}?v=tex1` },
+  {
+    name: 'lotus-pond',
+    path: `${assetUrl('models/props/lotus-pond.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/lotus-pond-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'timber-bridge',
+    path: `${assetUrl('models/props/timber-bridge.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/timber-bridge-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'mossy-burrow',
+    path: `${assetUrl('models/props/mossy-burrow.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/mossy-burrow-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'garden-gate',
+    path: `${assetUrl('models/props/garden-gate.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/garden-gate-gpu.glb')}?v=tex1`,
+  },
+  {
+    name: 'mossflower-hollow',
+    path: `${assetUrl('models/props/mossflower-hollow.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/mobile/mossflower-hollow-gpu.glb')}?v=tex1`,
+  },
   { name: 'wooden-lantern', path: assetUrl('models/props/wooden-lantern.glb') },
   {
     name: 'whimsy-isle',
-    path: `${assetUrl('models/props/meadow/whimsy-isle.glb')}?v=raw`,
-    mobilePath: `${assetUrl('models/props/meadow/whimsy-isle-mobile-gpu.glb')}?v=gpu1`,
+    path: `${assetUrl('models/props/meadow/whimsy-isle.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/whimsy-isle-mobile-gpu.glb')}?v=tex1`,
   },
-  { name: 'whimsywood-tree', path: assetUrl('models/props/meadow/whimsywood-tree.glb') },
-  { name: 'blossom-tree', path: assetUrl('models/props/meadow/blossom-tree.glb') },
-  { name: 'lantern-leaf-tree', path: assetUrl('models/props/meadow/lantern-leaf-tree.glb') },
-  { name: 'luminous-canopy', path: `${assetUrl('models/props/meadow/luminous-canopy.glb')}?v=petals` },
-  { name: 'whimsy-bloom-coral', path: `${assetUrl('models/props/meadow/whimsy-bloom-coral.glb')}?v=petals` },
-  { name: 'blossomback-tortoise', path: `${assetUrl('models/props/meadow/blossomback-tortoise.glb')}?v=petals` },
-  { name: 'pebble-blossom', path: `${assetUrl('models/props/meadow/pebble-blossom.glb')}?v=petals` },
-  { name: 'moonlit-glow', path: `${assetUrl('models/props/meadow/moonlit-glow.glb')}?v=petals` },
-  { name: 'spiral-garden', path: `${assetUrl('models/props/meadow/spiral-garden.glb')}?v=petals` },
-  { name: 'acorn-cottage', path: assetUrl('models/props/meadow/acorn-cottage.glb') },
-  { name: 'mushroom-lantern', path: assetUrl('models/props/meadow/mushroom-lantern.glb') },
+  {
+    name: 'whimsywood-tree',
+    path: `${assetUrl('models/props/meadow/whimsywood-tree.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/whimsywood-tree.glb')}?v=tex1`,
+  },
+  {
+    name: 'blossom-tree',
+    path: `${assetUrl('models/props/meadow/blossom-tree.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/blossom-tree.glb')}?v=tex1`,
+  },
+  {
+    name: 'lantern-leaf-tree',
+    path: `${assetUrl('models/props/meadow/lantern-leaf-tree.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/lantern-leaf-tree.glb')}?v=tex1`,
+  },
+  {
+    name: 'luminous-canopy',
+    path: `${assetUrl('models/props/meadow/luminous-canopy.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/luminous-canopy.glb')}?v=tex1`,
+  },
+  {
+    name: 'whimsy-bloom-coral',
+    path: `${assetUrl('models/props/meadow/whimsy-bloom-coral.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/whimsy-bloom-coral.glb')}?v=tex1`,
+  },
+  {
+    name: 'blossomback-tortoise',
+    path: `${assetUrl('models/props/meadow/blossomback-tortoise.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/blossomback-tortoise.glb')}?v=tex1`,
+  },
+  {
+    name: 'pebble-blossom',
+    path: `${assetUrl('models/props/meadow/pebble-blossom.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/pebble-blossom.glb')}?v=tex1`,
+  },
+  {
+    name: 'moonlit-glow',
+    path: `${assetUrl('models/props/meadow/moonlit-glow.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/moonlit-glow.glb')}?v=tex1`,
+  },
+  {
+    name: 'spiral-garden',
+    path: `${assetUrl('models/props/meadow/spiral-garden.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/spiral-garden.glb')}?v=tex1`,
+  },
+  {
+    name: 'acorn-cottage',
+    path: `${assetUrl('models/props/meadow/acorn-cottage.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/acorn-cottage.glb')}?v=tex1`,
+  },
+  {
+    name: 'mushroom-lantern',
+    path: `${assetUrl('models/props/meadow/mushroom-lantern.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/meadow/mobile/mushroom-lantern.glb')}?v=tex1`,
+  },
   {
     name: 'floating-grassland',
-    path: `${assetUrl('models/props/grove/floating-grassland.glb')}?v=raw`,
-    mobilePath: `${assetUrl('models/props/grove/floating-grassland-mobile.glb')}?v=mobile1`,
+    path: `${assetUrl('models/props/grove/floating-grassland.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/grove/floating-grassland-mobile.glb')}?v=tex1`,
   },
   {
     name: 'voxel-tree',
-    path: `${assetUrl('models/props/grove/voxel-tree.glb')}?v=lod`,
-    mobilePath: `${assetUrl('models/props/grove/voxel-tree-mobile.glb')}?v=mobile1`,
+    path: `${assetUrl('models/props/grove/voxel-tree.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-tree-mobile.glb')}?v=tex1`,
   },
   {
     name: 'voxel-blossom-tree',
-    path: `${assetUrl('models/props/grove/voxel-blossom-tree.glb')}?v=lod`,
-    mobilePath: `${assetUrl('models/props/grove/voxel-blossom-tree-mobile.glb')}?v=mobile1`,
+    path: `${assetUrl('models/props/grove/voxel-blossom-tree.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-blossom-tree-mobile.glb')}?v=tex1`,
   },
   {
     name: 'voxel-evergreen',
-    path: `${assetUrl('models/props/grove/voxel-evergreen.glb')}?v=lod`,
-    mobilePath: `${assetUrl('models/props/grove/voxel-evergreen-mobile.glb')}?v=mobile1`,
+    path: `${assetUrl('models/props/grove/voxel-evergreen.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-evergreen-mobile.glb')}?v=tex1`,
   },
   {
     name: 'voxel-blossom-canopy',
-    path: `${assetUrl('models/props/grove/voxel-blossom-canopy.glb')}?v=lod`,
-    mobilePath: `${assetUrl('models/props/grove/voxel-blossom-canopy-mobile.glb')}?v=mobile1`,
+    path: `${assetUrl('models/props/grove/voxel-blossom-canopy.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-blossom-canopy-mobile.glb')}?v=tex1`,
   },
   {
     name: 'voxel-bloom-garden',
-    path: `${assetUrl('models/props/grove/voxel-bloom-garden.glb')}?v=lod`,
-    mobilePath: `${assetUrl('models/props/grove/voxel-bloom-garden-mobile.glb')}?v=mobile1`,
+    path: `${assetUrl('models/props/grove/voxel-bloom-garden.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-bloom-garden-mobile.glb')}?v=tex1`,
   },
   {
     name: 'voxel-verdant-garden',
-    path: `${assetUrl('models/props/grove/voxel-verdant-garden.glb')}?v=lod`,
-    mobilePath: `${assetUrl('models/props/grove/voxel-verdant-garden-mobile.glb')}?v=mobile1`,
+    path: `${assetUrl('models/props/grove/voxel-verdant-garden.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/grove/voxel-verdant-garden-mobile.glb')}?v=tex1`,
+  },
+  {
+    name: 'blockstone-peaks',
+    path: `${assetUrl('models/props/grove/blockstone-peaks.glb')}?v=tex1`,
+    mobilePath: `${assetUrl('models/props/grove/blockstone-peaks-mobile.glb')}?v=tex1`,
   },
 ];
 
@@ -518,7 +626,7 @@ function extraModelPath(extra: ExtraModel): string {
   if (!usePackedExtra(extra.name, quality().tier)) return extra.path;
   let mobilePath = 'mobilePath' in extra ? extra.mobilePath : undefined;
   if (!mobilePath && extra.name === 'floating-island') {
-    mobilePath = `${assetUrl('models/props/floating-island-gpu.glb')}?v=gpu1`;
+    mobilePath = `${assetUrl('models/props/floating-island-gpu.glb')}?v=tex1`;
   }
   if (!mobilePath && ROOT_MOBILE_MODELS.has(extra.name)) {
     mobilePath = `${assetUrl(`models/props/mobile/${extra.name}-gpu.glb`)}?v=gpu1`;

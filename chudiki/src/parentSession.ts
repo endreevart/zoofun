@@ -108,15 +108,21 @@ export function siteAuthUrl(): string {
   return `${siteHomeUrl().replace(/\/$/, '')}/auth`;
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === '' || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
 /**
  * Unsigned /island is a free walk and, on the dev server, a free hatch.
- * Production (and a phone on the Vite LAN) must go to parent sign-in.
- * `?tv` is a display, not play. `?studio=1` on the dev server is authoring.
+ * Production must go to parent sign-in.
+ * `?tv` is a display, not play. `?studio=1` on the local Vite is authoring.
+ * A phone on LAN or a tunnel is not localhost — stay on the island.
  */
 export function shouldSendToAuth(
   token: string | null,
   search = typeof window === 'undefined' ? '' : window.location.search,
   dev = Boolean(import.meta.env?.DEV),
+  hostname = typeof window === 'undefined' ? '' : window.location.hostname,
 ): boolean {
   if (token) return false;
   try {
@@ -127,6 +133,7 @@ export function shouldSendToAuth(
     if (dev && params.has('studio')) return false;
     if (dev && params.has('arcade')) return false;
     if (dev && params.has('ui')) return false;
+    if (dev && !isLoopbackHost(hostname)) return false;
   } catch {
     /* ignore */
   }

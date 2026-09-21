@@ -63,28 +63,28 @@ export type AuthoredProp = {
   tint?: [number, number, number];
 };
 
-export const LAYOUT_STORAGE_KEY = 'chudiki.layout.v12';
-export const MEADOW_LAYOUT_STORAGE_KEY = 'chudiki.layout.meadow.v3';
-export const GROVE_LAYOUT_STORAGE_KEY = 'chudiki.layout.grove.v3';
+export const LAYOUT_STORAGE_KEY = 'chudiki.layout.v14';
+export const MEADOW_LAYOUT_STORAGE_KEY = 'chudiki.layout.meadow.v4';
+export const GROVE_LAYOUT_STORAGE_KEY = 'chudiki.layout.grove.v4';
 
 const SHELL_LAYOUT = {
   garden: {
     key: LAYOUT_STORAGE_KEY,
     file: 'island-layout.json',
     baked: 'layout/island-layout.json',
-    bust: 'park258',
+    bust: 'park154',
   },
   meadow: {
     key: MEADOW_LAYOUT_STORAGE_KEY,
     file: 'meadow-layout.json',
     baked: 'layout/meadow-layout.json',
-    bust: 'meadow3',
+    bust: 'meadow4',
   },
   grove: {
     key: GROVE_LAYOUT_STORAGE_KEY,
     file: 'grove-layout.json',
     baked: 'layout/grove-layout.json',
-    bust: 'grove3',
+    bust: 'grove4',
   },
 } as const;
 
@@ -154,6 +154,7 @@ const LABELS: Record<string, string> = {
   'voxel-blossom-canopy': 'Крона',
   'voxel-bloom-garden': 'Клумба',
   'voxel-verdant-garden': 'Садик',
+  'blockstone-peaks': 'Камень',
 };
 
 export function propLabel(model: string): string {
@@ -187,10 +188,11 @@ export function parseDiyProps(raw: unknown): AuthoredProp[] {
   if (!raw || typeof raw !== 'object') return [];
   const props = (raw as { props?: unknown }).props;
   if (!Array.isArray(props)) return [];
-  return props
-    .filter(isAuthoredProp)
-    .filter((prop) => !GRASS_MODELS.has(prop.model))
-    .slice(0, DIY_PROP_CAP);
+  return dropGrassStamps(props.filter(isAuthoredProp)).slice(0, DIY_PROP_CAP);
+}
+
+export function dropGrassStamps(props: AuthoredProp[]): AuthoredProp[] {
+  return props.filter((prop) => !GRASS_MODELS.has(prop.model));
 }
 
 export function defaultStamp(model: string): Pick<AuthoredProp, 'height' | 'fit' | 'sink'> {
@@ -235,6 +237,7 @@ export function defaultStamp(model: string): Pick<AuthoredProp, 'height' | 'fit'
   if (model === 'voxel-bloom-garden' || model === 'voxel-verdant-garden') {
     return { height: 2.2, fit: 'width', sink: 0.06 };
   }
+  if (model === 'blockstone-peaks') return { height: 1.6, fit: 'width', sink: 0.12 };
   return { height: 1 };
 }
 
@@ -341,7 +344,8 @@ const EMPTY_DOCUMENT: LayoutDocument = { props: null, paths: [], spawns: [] };
 export function parseLayoutDocument(raw: unknown): LayoutDocument {
   if (!raw || typeof raw !== 'object') return { ...EMPTY_DOCUMENT };
   const parsed = raw as { props?: AuthoredProp[]; paths?: unknown[]; spawns?: unknown[] };
-  const props = Array.isArray(parsed.props) && parsed.props.length > 0 ? parsed.props : null;
+  const rawProps = Array.isArray(parsed.props) && parsed.props.length > 0 ? parsed.props : null;
+  const props = rawProps ? dropGrassStamps(rawProps) : null;
   const paths = Array.isArray(parsed.paths) ? parsed.paths.filter(isAuthoredPath) : [];
   const spawns = Array.isArray(parsed.spawns) ? parsed.spawns.filter(isAuthoredSpawn) : [];
   return { props, paths, spawns };

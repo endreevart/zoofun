@@ -47,6 +47,7 @@ const HEAVY_PACKED = new Set([
   'voxel-blossom-canopy',
   'voxel-bloom-garden',
   'voxel-verdant-garden',
+  'blockstone-peaks',
 ]);
 
 export function usePackedExtra(name: string, tier: 'high' | 'low'): boolean {

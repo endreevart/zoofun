@@ -9,8 +9,6 @@ export const CATALOG_MODELS = [
   'blooming-bush',
   'harvest-cradle',
   'emerald-cascade',
-  'grass_a',
-  'grass_b',
   'mosslit-stones',
   'wooden-fence',
   'red-mushroom',
@@ -75,6 +73,7 @@ export const GROVE_CATALOG_MODELS = [
   'voxel-blossom-canopy',
   'voxel-bloom-garden',
   'voxel-verdant-garden',
+  'blockstone-peaks',
   'lp_tree_01',
   'lp_tree_02',
   'lp_tree_03',
@@ -142,6 +141,7 @@ const OBJECT_MODELS = new Set([
   'wooden-lantern',
   'rock_medium_01',
   'rock_small_01',
+  'blockstone-peaks',
 ]);
 
 export function catalogGroup(model: string): CatalogGroupId {
