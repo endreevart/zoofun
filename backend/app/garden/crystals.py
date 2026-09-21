@@ -10,6 +10,7 @@ import random
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.plaza.tickets import plaza_day
@@ -22,7 +23,8 @@ CENTER_Z = -5.0
 MIN_R = 6.0
 MAX_R = 18.0
 MIN_GAP = 7.0
-HUNT_TTL = 40.0
+# Keep the hunt until Moscow midnight so a walk to the crystal still pays.
+_MSK = timezone(timedelta(hours=3))
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,12 @@ def _redis_client():
         )
         _redis.ping()
     return _redis
+
+
+def hunt_ttl_seconds(now: float | None = None) -> int:
+    stamp = datetime.now(_MSK) if now is None else datetime.fromtimestamp(now, tz=_MSK)
+    nxt = datetime.combine(stamp.date() + timedelta(days=1), datetime.min.time(), tzinfo=_MSK)
+    return max(3600, int((nxt - stamp).total_seconds()) + 60)
 
 
 def hunt_key(parent_id: str, world_id: str, day: str | None = None) -> str:
@@ -209,20 +217,14 @@ def _load(key: str) -> Hunt | None:
             logger.warning("garden hunt redis get failed")
             return None
     with _lock:
-        hunt = _hunts.get(key)
-        if hunt is None:
-            return None
-        if time.time() - hunt.seen_at > HUNT_TTL:
-            _hunts.pop(key, None)
-            return None
-        return hunt
+        return _hunts.get(key)
 
 
 def _save(hunt: Hunt) -> None:
     hunt.seen_at = time.time()
     if _use_redis():
         try:
-            _redis_client().set(_redis_name(hunt.key), _hunt_json(hunt), ex=int(HUNT_TTL))
+            _redis_client().set(_redis_name(hunt.key), _hunt_json(hunt), ex=hunt_ttl_seconds())
         except Exception:
             logger.warning("garden hunt redis set failed")
         return

@@ -175,6 +175,7 @@ import {
   refillGardenMounds,
   PLAZA_FIND_MS,
   type PlazaMound,
+  type PlazaTicket,
 } from './game/plaza/plazaDig';
 import { digGardenCrystal, fetchGardenCrystals } from './game/garden/gardenApi';
 import { ownVitrineRemountsGarden, vitrineCoversWorlds } from './game/visits/vitrineSort';
@@ -519,6 +520,7 @@ export function App() {
   const crystalDigging = useRef(false);
   const crystalFindTimer = useRef(0);
   const crystalHinted = useRef<string | null>(null);
+  const crystalTicketTimer = useRef(0);
   const [soundOpen, setSoundOpen] = useState(false);
   const [moveDest, setMoveDest] = useState<string | null>(null);
   const [moveFrom, setMoveFrom] = useState<ChudikSpec[]>([]);
@@ -945,15 +947,15 @@ export function App() {
   const arcadeSettle = Boolean(arcadeOn && arcadeQuest?.step === 'settle');
 
   useEffect(() => {
-    return () => window.clearTimeout(crystalFindTimer.current);
+    return () => {
+      window.clearTimeout(crystalFindTimer.current);
+      window.clearTimeout(crystalTicketTimer.current);
+    };
   }, []);
 
   useEffect(() => {
     setCrystalMounds([]);
     setNearCrystal(null);
-    setNearPath(false);
-    setPathOpen(false);
-    setPathSpec(null);
     setCrystalFound(false);
     setCrystalFinding(false);
     crystalWins.current = 0;
@@ -961,6 +963,8 @@ export function App() {
     crystalHinted.current = null;
     crystalDigging.current = false;
     window.clearTimeout(crystalFindTimer.current);
+    window.clearTimeout(crystalTicketTimer.current);
+    gameRef.current?.setCrystalTickets([]);
   }, [world]);
 
   useEffect(() => {
@@ -1843,7 +1847,14 @@ export function App() {
     const hit = crystalMounds.find((item) => item.id === id);
     crystalDigging.current = true;
     getIslandAudio().playSfx('smash');
-    const celebrate = (remaining?: number) => {
+    const celebrate = (remaining?: number, ticket?: PlazaTicket | null) => {
+      if (ticket) {
+        gameRef.current?.setCrystalTickets([ticket]);
+        window.clearTimeout(crystalTicketTimer.current);
+        crystalTicketTimer.current = window.setTimeout(() => {
+          gameRef.current?.setCrystalTickets([]);
+        }, 4500);
+      }
       speak('plaza_found');
       if (remaining != null) bumpQuotaRemaining(remaining);
       setCrystalFinding(true);
@@ -1862,16 +1873,18 @@ export function App() {
         crystalDigging.current = false;
         if (hit && crystalWins.current < GARDEN_TICKETS_PER_DAY) {
           crystalWins.current += 1;
-          celebrate();
+          celebrate(undefined, { id: `local-${Date.now()}`, x: hit.x, z: hit.z });
         }
         return;
       }
       const body = await digGardenCrystal(gardenId, id);
       crystalDigging.current = false;
       if (!body) {
-        const next = refillGardenMounds(crystalMounds.filter((item) => item.id !== id));
-        setCrystalMounds(next);
-        gameRef.current?.setCrystalMounds(next);
+        const remote = await fetchGardenCrystals(gardenId);
+        if (remote) {
+          setCrystalMounds(remote.mounds);
+          gameRef.current?.setCrystalMounds(remote.mounds);
+        }
         setNearCrystal(null);
         return;
       }
@@ -1880,7 +1893,10 @@ export function App() {
       setNearCrystal(null);
       trackAction('world.dig', { found: body.found, world_id: gardenId });
       if (!body.found) return;
-      celebrate(body.remaining);
+      celebrate(
+        body.remaining,
+        body.ticket ?? (hit ? { id: `t-${id}`, x: hit.x, z: hit.z } : null),
+      );
     })();
   }, [
     bumpQuotaRemaining,

@@ -43,7 +43,7 @@ import { JoyAir } from './visits/joyAir';
 import { joyFromHearts } from './visits/joy';
 import { mayWriteFamilyZoo } from './visits/guestPersist';
 import { CrystalField } from './garden/crystalField';
-import { GARDEN_DIG_NEAR, nearMound, type PlazaMound } from './plaza/plazaDig';
+import { GARDEN_DIG_NEAR, nearMound, type PlazaMound, type PlazaTicket } from './plaza/plazaDig';
 
 export type CareState = {
   joy: number;
@@ -109,6 +109,7 @@ export class Game {
   private guestVisit = false;
   private crystals: CrystalField | null = null;
   private crystalMounds: PlazaMound[] = [];
+  private crystalTickets: PlazaTicket[] = [];
   private lastNearCrystal: string | null | undefined;
   private held = false;
 
@@ -296,6 +297,7 @@ export class Game {
     this.crystals = new CrystalField((x, z) => this.world.heightAt(x, z));
     this.world.root.add(this.crystals.group);
     if (this.crystalMounds.length) this.crystals.setMounds(this.crystalMounds);
+    if (this.crystalTickets.length) this.crystals.setTickets(this.crystalTickets);
     this.scene.add(this.world.root);
     this.scene.fog = this.world.root.userData.fog as THREE.FogExp2;
     this.planetCore = this.world.root.getObjectByName('planet-core') ?? null;
@@ -1018,6 +1020,11 @@ export class Game {
     this.emitNearCrystal();
   }
 
+  setCrystalTickets(tickets: readonly PlazaTicket[]) {
+    this.crystalTickets = tickets.slice();
+    this.crystals?.setTickets(this.crystalTickets);
+  }
+
   get library() {
     return this.world.library;
   }
@@ -1166,6 +1173,7 @@ export class Game {
     this.world.update(this.elapsed);
     this.sparkles.update(dt);
     this.joyAir?.update(dt);
+    this.crystals?.update(this.elapsed);
 
     // The stylized shading and the light shafts both need the key light
     // expressed relative to this frame's camera.

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+import time
+from datetime import datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -46,6 +48,28 @@ def test_garden_crystals_are_five_and_two_pay() -> None:
     assert extra == 0
 
 
+def test_garden_hunt_survives_a_long_walk() -> None:
+    crystals.reset_crystals()
+    hunt = crystals.ensure("p-walk", WORLD_AUTHORED, True)
+    prize_ids = set(hunt.prizes)
+    mound_ids = [item.id for item in hunt.mounds]
+    hunt.seen_at = time.time() - 400
+    crystals._save(hunt)
+    later = crystals.ensure("p-walk", WORLD_AUTHORED, True)
+    assert [item.id for item in later.mounds] == mound_ids
+    assert later.prizes == prize_ids
+    kind, _left, _x, _z = crystals.smash("p-walk", WORLD_AUTHORED, next(iter(prize_ids)), True)
+    assert kind == "prize"
+
+
+def test_hunt_ttl_covers_moscow_night() -> None:
+    evening = datetime(2026, 9, 21, 19, 0, tzinfo=crystals._MSK).timestamp()
+    ttl = crystals.hunt_ttl_seconds(evening)
+    assert 5 * 3600 + 50 <= ttl <= 5 * 3600 + 70
+    late = datetime(2026, 9, 21, 23, 50, tzinfo=crystals._MSK).timestamp()
+    assert crystals.hunt_ttl_seconds(late) == 3600
+
+
 def test_world_tickets_are_per_island() -> None:
     first = store.register("garden-a@example.com", "secret1")
     second_world = WORLD_AUTHORED_MEADOW
@@ -82,6 +106,12 @@ async def test_zoo_crystal_dig_grants_two_then_empty() -> None:
             assert len(body["mounds"]) == 5
             if body["found"]:
                 wins += 1
+                assert body["ticket"]
+                assert body["ticket"]["id"]
+                assert isinstance(body["ticket"]["x"], (int, float))
+                assert isinstance(body["ticket"]["z"], (int, float))
+            else:
+                assert body["ticket"] is None
         assert wins == WORLD_TICKETS_PER_DAY
         later = await client.get("/v1/auth/me", headers=head)
         assert later.json()["remaining"] == start + WORLD_TICKETS_PER_DAY

@@ -4629,15 +4629,17 @@ html.is-cinema #root {
 
 @media (min-width: 860px) {
   .hatch-preview {
-    grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(280px, 460px) minmax(320px, 460px);
+    grid-template-rows: auto auto auto;
     grid-template-areas:
-      "head tools"
+      "head head"
       "art tools"
-      "hint tools";
-    padding: 28px 36px 28px 40px;
-    gap: 14px 28px;
-    align-items: center;
+      "hint .";
+    justify-content: center;
+    align-content: center;
+    align-items: stretch;
+    padding: 24px 32px;
+    gap: 10px 20px;
   }
 
   .hatch-preview.is-painting {
@@ -4663,27 +4665,41 @@ html.is-cinema #root {
   }
 
   .hatch-preview-art-btn {
-    width: min(100%, 520px);
-    justify-self: start;
+    width: 100%;
+    max-width: 460px;
+    justify-self: stretch;
+    align-self: stretch;
   }
 
   .hatch-preview-hint {
-    text-align: left;
+    text-align: center;
+    align-self: start;
   }
 
   .hatch-tools {
-    width: min(100%, 380px);
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    min-height: 0;
     justify-self: stretch;
-    align-self: center;
+    align-self: stretch;
   }
 
   .hatch-go {
+    flex: 0 0 auto;
     min-height: 72px;
     font-size: 28px;
   }
 
+  .hatch-grid {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: 1fr 1fr;
+  }
+
   .hatch-tile {
-    min-height: 96px;
+    min-height: 0;
+    height: 100%;
     font-size: 18px;
   }
 }
