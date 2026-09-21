@@ -99,7 +99,7 @@ import {
   type VitrineCard,
 } from './game/visits/visitApi';
 import { shouldKeepFriendLawn, shouldOfferFirstDraw, shouldOfferFriendInvite } from './ui/firstDraw';
-import { hatchCanDrawAnother, hatchGardenOpensShop, hatchGardenStartsPaidMesh, hatchMeshCooking } from './ui/hatchView';
+import { hatchCanDrawAnother, hatchGardenOpensFirstShop, hatchGardenOpensShop, hatchGardenStartsPaidMesh, hatchMeshCooking } from './ui/hatchView';
 import { rosterGardenStartsMesh } from './ui/rosterView';
 import {
   applyArcadeStamp,
@@ -1366,7 +1366,9 @@ export function App() {
 
   const finishHatch = useCallback((id: string) => {
     const remaining = remainingNow();
-    const buy = hatchGardenOpensShop(stillRemainingNow(), remaining);
+    const quota = quotaRef.current;
+    const firstFree = hatchGardenOpensFirstShop(remaining, quota?.used, quota?.quotaTotal);
+    const buy = firstFree || hatchGardenOpensShop(stillRemainingNow(), remaining);
     const payMesh = hatchGardenStartsPaidMesh(remaining);
     hatchLookRef.current = null;
     setHatchLook(null);
@@ -3412,6 +3414,10 @@ export function App() {
               track('friend.decline');
               flash('Ему будет скучно');
             }
+          }}
+          onSkip={() => {
+            trackAction('shop.skip');
+            setShopOpen(false);
           }}
           onError={flash}
         />

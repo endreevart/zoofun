@@ -36,6 +36,18 @@ export function hatchCanDrawAnother(
   return stillRemaining == null || stillRemaining > 0;
 }
 
+/** Bundled first 3D already spent: hatch «В сад» shows pack_1 / pack_5. */
+export function hatchGardenOpensFirstShop(
+  remaining: number | null | undefined,
+  used: number | null | undefined,
+  quotaTotal: number | null | undefined,
+): boolean {
+  if (remaining == null || remaining > 0) return false;
+  const spent = Math.max(0, Math.floor(used ?? 0));
+  const total = Math.max(0, Math.floor(quotaTotal ?? 0));
+  return spent >= 1 && total === 1;
+}
+
 /** 3D credits gone: «В сад!» opens pack_1 / pack_5 (10–20 behind expand). */
 export function hatchGardenOpensShop(
   _stillRemaining: number | null | undefined,

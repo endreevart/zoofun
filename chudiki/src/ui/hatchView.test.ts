@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   hatchCanDrawAnother,
+  hatchGardenOpensFirstShop,
   hatchGardenOpensShop,
   hatchGardenStartsPaidMesh,
   hatchMeshCooking,
@@ -39,6 +40,13 @@ assert.equal(hatchGardenOpensShop(0, 3), false);
 assert.equal(hatchGardenOpensShop(0, 0), true);
 assert.equal(hatchGardenOpensShop(null, 0), true);
 assert.equal(hatchGardenOpensShop(0, null), false);
+
+assert.equal(hatchGardenOpensFirstShop(0, 1, 1), true);
+assert.equal(hatchGardenOpensFirstShop(0, 1, 0), false);
+assert.equal(hatchGardenOpensFirstShop(1, 0, 1), false);
+assert.equal(hatchGardenOpensFirstShop(0, 0, 1), false);
+assert.equal(hatchGardenOpensFirstShop(0, 2, 6), false);
+assert.equal(hatchGardenOpensFirstShop(null, 1, 1), false);
 
 assert.equal(hatchGardenStartsPaidMesh(1), true);
 assert.equal(hatchGardenStartsPaidMesh(0), false);

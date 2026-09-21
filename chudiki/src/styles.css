@@ -2870,6 +2870,10 @@ html.is-cinema #root {
   gap: 12px;
 }
 
+.pack-shop-head.is-plain {
+  padding-left: 6px;
+}
+
 .pack-shop-titles {
   display: flex;
   flex-direction: column;
@@ -2976,9 +2980,16 @@ html.is-cinema #root {
   min-height: 168px;
 }
 
+.pack-shop-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
 .pack-more {
   display: block;
-  margin: 18px auto 0;
+  margin: 0;
   padding: 4px 8px;
   border: 0;
   background: none;
@@ -8383,6 +8394,10 @@ html.is-cinema #root {
   padding: 0 16px;
 }
 
+.move-sheet .section-label {
+  text-align: center;
+}
+
 .move-sheet .sheet-body,
 .world-full .sheet-body {
   overflow: auto;
@@ -8394,6 +8409,20 @@ html.is-cinema #root {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 14px;
   padding: 0 4px;
+}
+
+@media (min-width: 860px) {
+  .move-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px 16px;
+    max-width: 960px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .move-pick-fallback {
+    font-size: clamp(28px, 3.4vw, 44px);
+  }
 }
 
 .move-pick {

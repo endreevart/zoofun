@@ -2,6 +2,8 @@ import type { Pack } from '../game/commerce';
 
 export const FRIEND_PACK_ID = 'pack_1';
 export const STARTER_PACK_ID = 'pack_5';
+export const PACK_SHOP_MORE = 'Посмотреть все пакеты';
+export const PACK_SHOP_SKIP = 'Пропустить';
 
 export type PackShopView = {
   offers: Pack[];
@@ -40,6 +42,16 @@ export function packsForShop(packs: Pack[], remaining: number, expanded = false)
 export function packShopTitle(remaining: number, forFriend = false): string {
   if (forFriend && remaining <= 0) return 'Оживите этого друга';
   return remaining > 0 ? 'Пополнить сад' : 'Ваш первый Зуфик ожил!';
+}
+
+/** Quiet skip under the first-free offers. Not on restock or a waiting friend. */
+export function packShopShowsSkip(remaining: number, forFriend = false): boolean {
+  return remaining <= 0 && !forFriend;
+}
+
+/** First-free sheet: only «Пропустить», no ✕. */
+export function packShopShowsClose(remaining: number, forFriend = false): boolean {
+  return !packShopShowsSkip(remaining, forFriend);
 }
 
 export function packShopRemainLabel(remaining: number): string {

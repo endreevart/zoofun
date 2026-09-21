@@ -3,8 +3,12 @@ import type { Pack } from '../game/commerce.ts';
 import {
   FRIEND_PACK_ID,
   packAnimalLabel,
+  PACK_SHOP_MORE,
+  PACK_SHOP_SKIP,
   packShopLead,
   packShopRemainLabel,
+  packShopShowsClose,
+  packShopShowsSkip,
   packShopTitle,
   packShopView,
   packsForShop,
@@ -24,6 +28,15 @@ const catalog: Pack[] = [
 assert.equal(packShopTitle(3), 'Пополнить сад');
 assert.equal(packShopTitle(0), 'Ваш первый Зуфик ожил!');
 assert.equal(packShopTitle(0, true), 'Оживите этого друга');
+assert.equal(PACK_SHOP_MORE, 'Посмотреть все пакеты');
+assert.equal(PACK_SHOP_SKIP, 'Пропустить');
+assert.equal(packShopShowsSkip(0), true);
+assert.equal(packShopShowsSkip(0, false), true);
+assert.equal(packShopShowsSkip(0, true), false);
+assert.equal(packShopShowsSkip(3), false);
+assert.equal(packShopShowsClose(0), false);
+assert.equal(packShopShowsClose(0, true), true);
+assert.equal(packShopShowsClose(3), true);
 assert.equal(packShopRemainLabel(1), 'Осталось 1 оживление');
 assert.equal(packShopRemainLabel(2), 'Осталось 2 оживления');
 assert.equal(packShopRemainLabel(11), 'Осталось 11 оживлений');

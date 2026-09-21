@@ -4,8 +4,12 @@ import { track, trackAction } from '../analytics';
 import { siteAuthUrl } from '../parentSession';
 import { CreditEggs } from './CreditEggs';
 import {
+  PACK_SHOP_MORE,
+  PACK_SHOP_SKIP,
   packShopLead,
   packShopRemainLabel,
+  packShopShowsClose,
+  packShopShowsSkip,
   packShopTitle,
   packShopView,
   packsForShop,
@@ -21,6 +25,7 @@ type PackSheetProps = {
   onError: (message: string) => void;
   friendPreview?: string | null;
   forRevive?: boolean;
+  onSkip?: () => void;
 };
 
 const CATALOG_PREVIEW: Pack[] = [
@@ -40,7 +45,14 @@ const FAIL_TEXT = {
   promo: 'Промокод не подошёл.',
 } as const;
 
-export function PackSheet({ remaining, onClose, onError, friendPreview, forRevive = false }: PackSheetProps) {
+export function PackSheet({
+  remaining,
+  onClose,
+  onError,
+  friendPreview,
+  forRevive = false,
+  onSkip,
+}: PackSheetProps) {
   const forFriend = Boolean(friendPreview) || forRevive;
   const [packs, setPacks] = useState<Pack[]>(CATALOG_PREVIEW);
   const [busy, setBusy] = useState<string | null>(null);
@@ -68,6 +80,9 @@ export function PackSheet({ remaining, onClose, onError, friendPreview, forReviv
   const view = packShopView(packs, remaining);
   const shown = packsForShop(packs, remaining, expanded);
   const showMore = remaining <= 0 && view.more.length > 0 && !expanded;
+  const showSkip = packShopShowsSkip(remaining, forFriend);
+  const showClose = packShopShowsClose(remaining, forFriend);
+  const skip = onSkip ?? onClose;
 
   const promoForPay = () => quote?.promo_code || promo.trim() || undefined;
 
@@ -137,12 +152,19 @@ export function PackSheet({ remaining, onClose, onError, friendPreview, forReviv
 
   return (
     <div className="pack-shop" role="dialog" aria-labelledby="pack-shop-title">
-      <button className="pack-shop-scrim" type="button" aria-label="Закрыть" onClick={onClose} />
+      <button
+        className="pack-shop-scrim"
+        type="button"
+        aria-label={showSkip ? PACK_SHOP_SKIP : 'Закрыть'}
+        onClick={showSkip ? skip : onClose}
+      />
       <div className="pack-shop-card">
-        <header className="pack-shop-head">
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Закрыть">
-            ✕
-          </button>
+        <header className={`pack-shop-head${showClose ? '' : ' is-plain'}`}>
+          {showClose ? (
+            <button className="icon-button" type="button" onClick={onClose} aria-label="Закрыть">
+              ✕
+            </button>
+          ) : null}
           <div className="pack-shop-titles">
             <h2 id="pack-shop-title" className="pack-shop-title">
               {packShopTitle(remaining, forFriend)}
@@ -205,10 +227,19 @@ export function PackSheet({ remaining, onClose, onError, friendPreview, forReviv
             );
           })}
         </div>
-        {showMore ? (
-          <button className="pack-more" type="button" onClick={() => setExpanded(true)}>
-            Посмотреть все пакеты
-          </button>
+        {showMore || showSkip ? (
+          <div className="pack-shop-foot">
+            {showMore ? (
+              <button className="pack-more" type="button" onClick={() => setExpanded(true)}>
+                {PACK_SHOP_MORE}
+              </button>
+            ) : null}
+            {showSkip ? (
+              <button className="pack-more" type="button" onClick={skip}>
+                {PACK_SHOP_SKIP}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       {pending && !adult ? (

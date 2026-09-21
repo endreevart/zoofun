@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { generateSpec, type ChudikSpec } from '../game/creatures/ChudikSpec';
 import type { PlazaToy } from '../game/plaza/plazaApi';
 import { WORLD_DIY_GROVE, WORLD_DIY_MEADOW, WORLD_DIY_SKU } from '../game/world/kinds';
@@ -5,6 +6,7 @@ import type { GardenWorld } from '../game/world/gardens';
 import { PlazaPick } from './PlazaPick';
 import { MoveCreaturesSheet } from './MoveCreaturesSheet';
 import { HatchPreview } from './HatchPreview';
+import { PackSheet } from './PackSheet';
 import { WorldFullPrompt } from './WorldFullPrompt';
 
 export type LayoutPreviewMode = 'hub' | 'pick' | 'move' | 'full' | 'hatch' | 'paint';
@@ -71,6 +73,28 @@ function go(mode: LayoutPreviewMode) {
 
 type Props = { mode: LayoutPreviewMode };
 
+/** First bundled 3D: «В сад» opens pack_1 / pack_5. Leftover paid 3D does not. */
+function HatchFirstPackPreview() {
+  const [shop, setShop] = useState(false);
+  return (
+    <div className="app">
+      <HatchPreview
+        src="/ui/golden.png"
+        name="Пушок"
+        stillRemaining={10}
+        canDrawAnother
+        meshCooking={false}
+        onDrawAnother={() => go('hub')}
+        onForward={() => setShop(true)}
+        onPuzzle={() => go('hub')}
+      />
+      {shop ? (
+        <PackSheet remaining={0} onClose={() => setShop(false)} onSkip={() => setShop(false)} onError={() => {}} />
+      ) : null}
+    </div>
+  );
+}
+
 /** Dev-only: look at the phone sheets without booting the garden. */
 export function LayoutPreview({ mode }: Props) {
   if (mode === 'pick') {
@@ -96,18 +120,7 @@ export function LayoutPreview({ mode }: Props) {
     );
   }
   if (mode === 'hatch') {
-    return (
-      <HatchPreview
-        src="/ui/golden.png"
-        name="Пушок"
-        stillRemaining={3}
-        canDrawAnother
-        meshCooking={false}
-        onDrawAnother={() => go('hub')}
-        onForward={() => go('hub')}
-        onPuzzle={() => go('hub')}
-      />
-    );
+    return <HatchFirstPackPreview />;
   }
   if (mode === 'full') {
     return (
