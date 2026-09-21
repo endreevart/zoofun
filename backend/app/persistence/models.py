@@ -68,6 +68,9 @@ class ParentRow(Base):
         back_populates="parent", cascade="all, delete-orphan"
     )
 
+    def __str__(self) -> str:
+        return self.email or self.id
+
 
 class ChildRow(Base):
     __tablename__ = "children"
@@ -83,6 +86,9 @@ class ChildRow(Base):
     creatures: Mapped[list[CreatureRow]] = relationship(
         back_populates="child", cascade="all, delete-orphan"
     )
+
+    def __str__(self) -> str:
+        return self.nickname or self.id
 
 
 class ParentSessionRow(Base):
@@ -125,6 +131,9 @@ class CreatureRow(Base):
 
     child: Mapped[ChildRow] = relationship(back_populates="creatures")
 
+    def __str__(self) -> str:
+        return self.name or self.spec_id
+
 
 class WorldRow(Base):
     """A purchased construction copy. Instance id is unique per parent, not globally."""
@@ -145,6 +154,9 @@ class WorldRow(Base):
 
     parent: Mapped[ParentRow] = relationship(back_populates="worlds")
 
+    def __str__(self) -> str:
+        return self.title or self.sku or self.id
+
 
 class PackRow(Base):
     __tablename__ = "packs"
@@ -155,6 +167,9 @@ class PackRow(Base):
     list_price_rub: Mapped[int] = mapped_column(Integer, default=0)
     featured: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    def __str__(self) -> str:
+        return self.id
 
 
 class PaymentRow(Base):
@@ -184,6 +199,10 @@ class PaymentRow(Base):
     utm_content: Mapped[str] = mapped_column(String(120), default="")
 
     parent: Mapped[ParentRow] = relationship(back_populates="payments")
+
+    def __str__(self) -> str:
+        money = f"{self.amount_rub} ₽" if self.amount_rub is not None else ""
+        return " · ".join(part for part in (self.pack_id, money, self.status, self.id) if part)
 
 
 class OpsLogRow(Base):
@@ -338,6 +357,9 @@ class PromoCodeRow(Base):
         default=list,
     )
 
+    def __str__(self) -> str:
+        return self.code
+
 
 class MailSetRow(Base):
     __tablename__ = "mail_sets"
@@ -409,6 +431,9 @@ class MailDeliveryRow(Base):
     )
     status: Mapped[str] = mapped_column(String(16), default="skipped")
     reason: Mapped[str] = mapped_column(String(32), default="")
+    hop_token: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
+    clicked_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    click_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
@@ -486,3 +511,15 @@ class PlazaMetaRow(Base):
     rev: Mapped[int] = mapped_column(Integer, default=0)
     ticket_day: Mapped[str] = mapped_column(String(16), default="")
     ticket_used: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class WorldTicketRow(Base):
+    __tablename__ = "world_tickets"
+
+    parent_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    world_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    ticket_day: Mapped[str] = mapped_column(String(16), default="")
+    ticket_used: Mapped[int] = mapped_column(Integer, default=0)
+
+    def __str__(self) -> str:
+        return f"{self.world_id} · {self.ticket_used}/{self.ticket_day or '—'}"

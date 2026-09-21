@@ -36,6 +36,7 @@ export function displayStillUrl(url: string | null): string | null {
   if (!token) return resolved;
   const needsToken =
     /\/v1\/zoo\/creatures\/[^/?#]+\/(?:portrait|postcard|model)(?:\?|$)/.test(resolved) ||
+    /\/v1\/zoo\/run\/creatures\/[^/?#]+\/sprite\.png(?:\?|$)/.test(resolved) ||
     /\/v1\/plaza\/(?:portraits|models)\/[^/?#]+(?:\?|$)/.test(resolved) ||
     /\/v1\/plaza\/toys\/[^/?#]+\/still(?:\?|$)/.test(resolved);
   if (!needsToken) return resolved;

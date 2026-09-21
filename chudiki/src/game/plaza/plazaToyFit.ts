@@ -5,7 +5,7 @@ const MAX_TOY_MAP = 512;
 /** Sit a Tripo lawn toy on the grass. Provider meshes are centred, not footed. */
 export function seatPlazaToyGlb(
   object: THREE.Object3D,
-  options: { height: number; x: number; z: number; rotationY?: number; castShadow?: boolean },
+  options: { height: number; x: number; z: number; y?: number; rotationY?: number; castShadow?: boolean },
 ): void {
   object.position.set(0, 0, 0);
   object.rotation.set(0, 0, 0);
@@ -13,7 +13,7 @@ export function seatPlazaToyGlb(
   object.updateMatrixWorld(true);
   const raw = new THREE.Box3().setFromObject(object);
   if (raw.isEmpty()) {
-    object.position.set(options.x, 0, options.z);
+    object.position.set(options.x, Number.isFinite(options.y) ? options.y! : 0, options.z);
     object.rotation.y = options.rotationY ?? 0;
     return;
   }
@@ -29,6 +29,9 @@ export function seatPlazaToyGlb(
   object.position.x += options.x - cx;
   object.position.z += options.z - cz;
   object.position.y -= seated.min.y;
+  if (typeof options.y === 'number' && Number.isFinite(options.y)) {
+    object.position.y += options.y;
+  }
   const casts = options.castShadow !== false;
   object.traverse((node) => {
     const mesh = node as THREE.Mesh;

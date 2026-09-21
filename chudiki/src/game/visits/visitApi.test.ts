@@ -5,7 +5,9 @@ import {
   isMineCard,
   matchVitrineQuery,
   mergeVitrinePage,
+  ownVitrineRemountsGarden,
   sortVitrine,
+  vitrineCoversWorlds,
 } from './vitrineSort.ts';
 
 const order = sortVitrine([
@@ -75,3 +77,11 @@ assert.deepEqual(
   arrangeVitrine(cards, '', 'all', null, 'fresh').map((item) => item.id),
   ['mine', 'fresh', 'old', 'empty'],
 );
+
+assert.equal(vitrineCoversWorlds('vitrine'), true);
+assert.equal(vitrineCoversWorlds('zoo'), false);
+assert.equal(vitrineCoversWorlds('plaza'), false);
+assert.equal(ownVitrineRemountsGarden(null, 'world_diy_garden', false), true);
+assert.equal(ownVitrineRemountsGarden('world_diy_garden', 'world_diy_garden', false), false);
+assert.equal(ownVitrineRemountsGarden('world_diy_garden', 'world_diy_garden', true), true);
+assert.equal(ownVitrineRemountsGarden('world_diy_garden', 'world_diy_meadow', false), true);

@@ -9,7 +9,7 @@ import {
   type AuthoredProp,
 } from '../world/layoutAuthored';
 import { getIslandAudio } from '../audio/AudioBus';
-import { PLAZA_WALK } from './plazaCopy';
+import { PLAZA_LOAD_R, PLAZA_VIEW_CELL, PLAZA_WALK } from './plazaCopy';
 import {
   nearPlazaProps,
   plazaCastsShadow,
@@ -91,6 +91,8 @@ export class PlazaStudio {
   private viewCell = '';
   private shadeCell = '';
   private viewToken = 0;
+  private loadR = PLAZA_LOAD_R;
+  private viewCellSize = PLAZA_VIEW_CELL;
 
   constructor(options: {
     library: IdyllicLibrary;
@@ -98,12 +100,16 @@ export class PlazaStudio {
     camera: THREE.PerspectiveCamera;
     canvas: HTMLElement;
     renderer: THREE.WebGLRenderer;
+    loadR?: number;
+    viewCell?: number;
   }) {
     this.library = options.library;
     this.scene = options.scene;
     this.camera = options.camera;
     this.canvas = options.canvas;
     this.renderer = options.renderer;
+    this.loadR = options.loadR ?? PLAZA_LOAD_R;
+    this.viewCellSize = options.viewCell ?? PLAZA_VIEW_CELL;
     this.marker = new THREE.Mesh(
       new THREE.TorusGeometry(0.55, 0.05, 8, 24),
       new THREE.MeshBasicMaterial({ color: 0xffdd55, depthTest: false }),
@@ -785,7 +791,7 @@ export class PlazaStudio {
   syncView(x: number, z: number) {
     this.viewX = x;
     this.viewZ = z;
-    const cell = plazaViewCell(x, z);
+    const cell = plazaViewCell(x, z, this.viewCellSize);
     if (cell !== this.viewCell) {
       this.viewCell = cell;
       void this.ensureNearThenRebuild();
@@ -799,7 +805,7 @@ export class PlazaStudio {
   }
 
   private viewProps(): AuthoredProp[] {
-    const near = nearPlazaProps(this.props, this.viewX, this.viewZ);
+    const near = nearPlazaProps(this.props, this.viewX, this.viewZ, this.loadR);
     const selected = this.selected();
     if (selected && !near.some((row) => row.id === selected.id)) return [...near, selected];
     return near;
@@ -807,7 +813,7 @@ export class PlazaStudio {
 
   private toyVisible(prop: AuthoredProp): boolean {
     if (prop.id === this.selectedId) return true;
-    return nearPlazaProps([prop], this.viewX, this.viewZ).length > 0;
+    return nearPlazaProps([prop], this.viewX, this.viewZ, this.loadR).length > 0;
   }
 
   private async ensureNearThenRebuild() {
@@ -862,7 +868,7 @@ export class PlazaStudio {
     this.tagInstances(this.nature, placed);
     this.scene.add(this.nature);
     this.rebuildToys();
-    this.viewCell = plazaViewCell(this.viewX, this.viewZ);
+    this.viewCell = plazaViewCell(this.viewX, this.viewZ, this.viewCellSize);
     this.shadeCell = plazaViewCell(this.viewX, this.viewZ, 8);
     this.paintNearShadows();
   }

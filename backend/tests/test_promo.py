@@ -2,6 +2,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.accounts.store import store
+from app.commerce.promo import PRIVET_CODE, privet_pack_ids
+from app.commerce.skus import PLAZA_TOY_1
 from app.commerce.store import commerce
 from app.main import app
 from app.settings import Settings
@@ -159,7 +161,12 @@ async def test_promo_pack_scope_dates_and_toggle(monkeypatch: pytest.MonkeyPatch
         assert wrong_world.json()["detail"] == "promo_not_for_pack"
         world_pack = await client.post(
             "/v1/crm/promos",
-            json={"code": "island10", "kind": "percent", "value": 10, "pack_ids": [WORLD_DIY_GARDEN]},
+            json={
+                "code": "island10",
+                "kind": "percent",
+                "value": 10,
+                "pack_ids": [WORLD_DIY_GARDEN],
+            },
             headers=staff,
         )
         assert world_pack.status_code == 200
@@ -235,3 +242,65 @@ async def test_promo_pack_scope_dates_and_toggle(monkeypatch: pytest.MonkeyPatch
         )
         assert old.status_code == 400
         assert old.json()["detail"] == "promo_expired"
+
+
+@pytest.mark.asyncio
+async def test_privet_is_25_percent_except_one_zufik_and_plaza_toy() -> None:
+    from app.commerce.promo import ensure_named_promos
+    from app.persistence.db import session
+    from app.persistence.models import PromoCodeRow
+
+    ensure_named_promos()
+    pack_5 = commerce.get_pack("pack_5")
+    garden = commerce.get_pack(WORLD_DIY_GARDEN)
+    assert pack_5 is not None
+    assert garden is not None
+    scoped = privet_pack_ids()
+    assert "pack_1" not in scoped
+    assert PLAZA_TOY_1 not in scoped
+    assert "pack_5" in scoped
+    assert WORLD_DIY_GARDEN in scoped
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        five = await client.post(
+            "/v1/commerce/quote",
+            json={"pack_id": "pack_5", "promo_code": "privet"},
+        )
+        assert five.status_code == 200
+        assert five.json()["promo_code"] == PRIVET_CODE
+        assert five.json()["discount_rub"] == pack_5.price_rub * 25 // 100
+        assert five.json()["amount_rub"] == pack_5.price_rub - five.json()["discount_rub"]
+        island = await client.post(
+            "/v1/commerce/quote",
+            json={"pack_id": WORLD_DIY_GARDEN, "promo_code": PRIVET_CODE},
+        )
+        assert island.status_code == 200
+        assert island.json()["discount_rub"] == garden.price_rub * 25 // 100
+        one = await client.post(
+            "/v1/commerce/quote",
+            json={"pack_id": "pack_1", "promo_code": PRIVET_CODE},
+        )
+        assert one.status_code == 400
+        assert one.json()["detail"] == "promo_not_for_pack"
+        toy = await client.post(
+            "/v1/commerce/quote",
+            json={"pack_id": PLAZA_TOY_1, "promo_code": PRIVET_CODE},
+        )
+        assert toy.status_code == 400
+        assert toy.json()["detail"] == "promo_not_for_pack"
+
+    with session() as db:
+        row = db.get(PromoCodeRow, PRIVET_CODE)
+        assert row is not None
+        row.active = False
+        row.value = 10
+        row.pack_ids = ["pack_10"]
+    ensure_named_promos()
+    with session() as db:
+        again = db.get(PromoCodeRow, PRIVET_CODE)
+        assert again is not None
+        assert again.active is False
+        assert again.value == 25
+        assert again.pack_ids == scoped
+

@@ -448,6 +448,27 @@ def seated_spec(spec_id: str) -> Seat | None:
     return _call(_seated_spec_memory, _seated_spec_redis, spec_id, unavailable=None)
 
 
+def _seats_memory() -> list[Seat]:
+    now = time.time()
+    with _lock:
+        _purge_memory(now)
+        return list(_seats.values())
+
+
+def _seats_redis() -> list[Seat]:
+    client = _redis_client()
+    live: list[Seat] = []
+    for key in client.scan_iter("plaza:seat:*"):
+        seat = _seat_from_json(client.get(key))
+        if seat is not None:
+            live.append(seat)
+    return live
+
+
+def online_seats() -> list[Seat]:
+    return list(_call(_seats_memory, _seats_redis, unavailable=[]) or [])
+
+
 def online_count() -> int:
     return int(_call(_online_memory, _online_redis, unavailable=0) or 0)
 

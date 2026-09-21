@@ -13,6 +13,7 @@ from pathlib import Path
 
 from sqlalchemy import func, select
 
+from app.commerce.promo import PRIVET_CODE
 from app.crm import audience, ops
 from app.mailer import MailError, send_parent_mail
 from app.ops.log import write_log
@@ -77,6 +78,33 @@ DEFAULT_SETS = (
         "combinator": "and",
         "conditions": [{"field": "inactive_days", "op": "gte", "value": 3}],
     },
+    {
+        "id": "ms_only_free",
+        "name": "Только бесплатный зуфик",
+        "combinator": "and",
+        "conditions": [{"field": "only_free", "op": "eq", "value": True}],
+    },
+    {
+        "id": "ms_abandoned_pay",
+        "name": "Начали оплату и не закончили",
+        "combinator": "and",
+        "conditions": [{"field": "abandoned_pay", "op": "eq", "value": True}],
+    },
+    {
+        "id": "ms_deferred",
+        "name": "Открытка без 3D",
+        "combinator": "and",
+        "conditions": [{"field": "has_deferred", "op": "eq", "value": True}],
+    },
+    {
+        "id": "ms_plaza_no_toy",
+        "name": "Были на поляне, штуки нет",
+        "combinator": "and",
+        "conditions": [
+            {"field": "opened_plaza", "op": "eq", "value": True},
+            {"field": "has_plaza_toy", "op": "eq", "value": False},
+        ],
+    },
 )
 
 
@@ -113,6 +141,36 @@ def parent_id_from_unsubscribe(token: str) -> str | None:
 def unsubscribe_url(parent_id: str) -> str:
     base = get_settings().public_site_url.rstrip("/")
     return f"{base}/api/zoo/v1/public/unsubscribe?t={unsubscribe_token(parent_id)}"
+
+
+def mint_hop_token() -> str:
+    return secrets.token_hex(16)
+
+
+def hop_url(token: str) -> str:
+    base = get_settings().public_site_url.rstrip("/")
+    return f"{base}/api/zoo/v1/public/mail-go/{token}"
+
+
+def _hop_button(hop: str) -> str:
+    if not hop:
+        return ""
+    safe = html.escape(hop, quote=True)
+    return (
+        '<p style="margin:22px 0 8px; text-align:center;">'
+        f'<a href="{safe}" style="display:inline-block; padding:14px 22px; '
+        "border-radius:999px; background:#315f50; color:#fffaf0; "
+        'font-family:Arial,sans-serif; font-size:16px; font-weight:800;">'
+        "Открыть сад</a></p>"
+    )
+
+
+def inject_hop(body: str, hop: str) -> str:
+    if not hop or "{{link}}" not in body:
+        return body
+    if body.lstrip().startswith("<"):
+        return body.replace("{{link}}", html.escape(hop, quote=True))
+    return body.replace("{{link}}", hop)
 
 
 def body_html(text: str) -> str:
@@ -238,25 +296,32 @@ def broadcast_parts(
     body: str,
     *,
     unsub: str,
+    hop: str = "",
     for_preview: bool = False,
 ) -> tuple[str, str, str]:
     settings = get_settings()
     base = settings.public_site_url.rstrip("/") or "https://zooo.fun"
     safe_subject = html.escape(subject.strip(), quote=True)
     html_body = _TEMPLATE.read_text(encoding="utf-8")
-    inner = render_body(body)
+    filled = inject_hop(body, hop)
+    inner = render_body(filled)
     if not for_preview:
         inner = absolutize_mail_html(inner)
     for key, value in {
         "{{SUBJECT}}": safe_subject,
         "{{BODY}}": inner,
+        "{{HOP}}": _hop_button(hop),
         "{{UNSUB}}": html.escape(unsub, quote=True),
         "{{LOGO_URL}}": f"{base}/mail/zoofun-logo.png",
         "{{TREE_URL}}": f"{base}/mail/tree.png",
         "{{BUSH_URL}}": f"{base}/mail/bush.png",
     }.items():
         html_body = html_body.replace(key, value)
-    plain = f"{_plain_from_body(body)}\n\nОтписаться: {unsub}\n"
+    plain = (
+        f"{_plain_from_body(filled)}\n\n"
+        f"Открыть сад: {hop or base + '/play'}\n\n"
+        f"Отписаться: {unsub}\n"
+    )
     return subject.strip(), plain, html_body
 
 
@@ -623,8 +688,9 @@ def deliver_campaign(campaign_id: str) -> dict:
                     )
                     continue
                 unsub = unsubscribe_url(parent.id)
+                hop_token = mint_hop_token()
                 mail_subject, plain, html_body = broadcast_parts(
-                    subject, body, unsub=unsub
+                    subject, body, unsub=unsub, hop=hop_url(hop_token)
                 )
                 try:
                     send_parent_mail(
@@ -653,6 +719,8 @@ def deliver_campaign(campaign_id: str) -> dict:
                         parent_id=parent.id,
                         status="sent",
                         reason="",
+                        hop_token=hop_token,
+                        click_count=0,
                         created_at=time.time(),
                     )
                 )
@@ -900,6 +968,218 @@ def run_rule(rule_id: str, *, force: bool = False) -> dict:
         send_crm_campaign.delay(campaign["id"])
         return {**campaign, "status": "sending"}
     return deliver_campaign(campaign["id"])
+
+
+PRIVET_HINT = (
+    f"В письме уже код {PRIVET_CODE}: 25% на пакеты 5–20 и острова. "
+    "Не действует на одного зуфика (pack_1) и на штуки для общего зоопарка."
+)
+PRIVET_LINE = (
+    f"Если захотите пакет из пяти, десяти, пятнадцати или двадцати зуфиков "
+    f"или ещё один остров — в магазине введите код {PRIVET_CODE}. Это скидка 25%. "
+    "На одного зуфика и на штуку для общего зоопарка код не действует."
+)
+
+OFFERS = (
+    {
+        "id": "only_free",
+        "set_id": "ms_only_free",
+        "title": "Только бесплатный зуфик",
+        "why": (
+            "Семья уже получила первого зуфика и ни разу не платила. "
+            "После него в саду ещё десять картинок."
+        ),
+        "promo_hint": PRIVET_HINT,
+        "subject": "В саду можно нарисовать ещё",
+        "body": (
+            "У вас уже есть первый зуфик.\n\n"
+            "После него можно нарисовать ещё десять картинок — они сразу появятся в саду. "
+            "Объёмную игрушку можно сделать отдельно, когда будете готовы.\n\n"
+            f"{PRIVET_LINE}\n\n"
+            "Откройте сад по кнопке ниже."
+        ),
+    },
+    {
+        "id": "abandoned_pay",
+        "set_id": "ms_abandoned_pay",
+        "title": "Начали оплату и не закончили",
+        "why": (
+            "Счёт в Т-Банке висит больше 20 минут без подтверждения. Часто закрыли вкладку."
+        ),
+        "promo_hint": PRIVET_HINT,
+        "subject": "Оплата не дошла — сад ждёт",
+        "body": (
+            "Вы начали оплату, но она не закончилась.\n\n"
+            "Можно вернуться и закончить. "
+            f"{PRIVET_LINE}\n\n"
+            "Если пока не хотите платить — после первого зуфика в саду ещё десять картинок.\n\n"
+            "Откройте сад по кнопке ниже."
+        ),
+    },
+    {
+        "id": "deferred",
+        "set_id": "ms_deferred",
+        "title": "Открытка без 3D",
+        "why": "Рисунок стал открыткой и ждёт оживления. Это не зависшая сетка.",
+        "promo_hint": PRIVET_HINT,
+        "subject": "Картинка уже в саду",
+        "body": (
+            "Рисунок уже стал открыткой в саду.\n\n"
+            "Объёмную игрушку можно сделать позже. А ещё можно нарисовать следующие картинки — "
+            "после первого зуфика их десять.\n\n"
+            f"{PRIVET_LINE}\n\n"
+            "Откройте сад по кнопке ниже."
+        ),
+    },
+    {
+        "id": "plaza_no_toy",
+        "set_id": "ms_plaza_no_toy",
+        "title": "Были на поляне, штуки нет",
+        "why": (
+            "Заходили в общий зоопарк и не оставили свою Штуку. "
+            "Это отдельная игрушка за 59 ₽, не кредит на зуфика."
+        ),
+        "promo_hint": (
+            f"{PRIVET_HINT} На Штуку за 59 ₽ скидки нет — в письме это сказано."
+        ),
+        "subject": "Общий зоопарк открыт",
+        "body": (
+            "Можно зайти на общую поляну, погулять и оставить свою Штуку.\n\n"
+            "Это отдельная игрушка, не кредит на зуфика. "
+            f"Код {PRIVET_CODE} на штуку не действует.\n\n"
+            "В своём саду по-прежнему можно нарисовать ещё картинки.\n\n"
+            f"{PRIVET_LINE}\n\n"
+            "Откройте сад по кнопке ниже."
+        ),
+    },
+    {
+        "id": "drew_unpaid",
+        "set_id": "ms_drew_unpaid",
+        "title": "Нарисовали, не купили",
+        "why": (
+            "Есть зверь, оплат нет. Близко к «только бесплатный зуфик», "
+            "но смотрит на зверя, а не на кредит 3D."
+        ),
+        "promo_hint": PRIVET_HINT,
+        "subject": "Сад уже живой",
+        "body": (
+            "Первый зуфик уже в саду.\n\n"
+            "Можно нарисовать ещё десять картинок без оплаты.\n\n"
+            f"{PRIVET_LINE}\n\n"
+            "Откройте сад по кнопке ниже."
+        ),
+    },
+)
+
+
+def list_offers() -> dict:
+    ensure_default_sets()
+    items = []
+    for offer in OFFERS:
+        preview = preview_recipe(_rule_recipe(str(offer["set_id"])))
+        items.append(
+            {
+                **offer,
+                "matching": preview["matching"],
+                "sendable": preview["sendable"],
+            }
+        )
+    return {
+        "items": items,
+        "note": (
+            f"Черновик. Само письмо не уходит. В шаблонах уже код {PRIVET_CODE} — "
+            "25% на пакеты 5–20 и острова, без одного зуфика и без штук."
+        ),
+    }
+
+
+def create_offer_campaign(offer_id: str) -> dict:
+    spec = next((item for item in OFFERS if item["id"] == offer_id), None)
+    if spec is None:
+        raise MailCampaignError("unknown_offer")
+    ensure_default_sets()
+    return create_campaign(
+        subject=str(spec["subject"]),
+        body=str(spec["body"]),
+        recipe=_rule_recipe(str(spec["set_id"])),
+    )
+
+
+def list_deliveries(campaign_id: str, limit: int = 50, offset: int = 0) -> dict | None:
+    cap = min(max(int(limit), 1), 100)
+    skip = max(int(offset), 0)
+    with session() as db:
+        campaign = db.get(MailCampaignRow, campaign_id)
+        if campaign is None:
+            return None
+        total = db.scalar(
+            select(func.count()).select_from(MailDeliveryRow).where(
+                MailDeliveryRow.campaign_id == campaign_id
+            )
+        ) or 0
+        clicked = db.scalar(
+            select(func.count()).select_from(MailDeliveryRow).where(
+                MailDeliveryRow.campaign_id == campaign_id,
+                MailDeliveryRow.status == "sent",
+                MailDeliveryRow.click_count > 0,
+            )
+        ) or 0
+        rows = db.execute(
+            select(MailDeliveryRow, ParentRow.email)
+            .join(ParentRow, ParentRow.id == MailDeliveryRow.parent_id)
+            .where(MailDeliveryRow.campaign_id == campaign_id)
+            .order_by(MailDeliveryRow.created_at.desc())
+            .offset(skip)
+            .limit(cap)
+        ).all()
+        items = [
+            {
+                "parent_id": row.parent_id,
+                "email": email,
+                "status": row.status,
+                "reason": row.reason,
+                "created_at": row.created_at,
+                "hop_url": hop_url(row.hop_token) if row.hop_token else "",
+                "clicked_at": row.clicked_at,
+                "click_count": int(row.click_count or 0),
+            }
+            for row, email in rows
+        ]
+    return {
+        "campaign_id": campaign_id,
+        "items": items,
+        "total": int(total),
+        "clicked": int(clicked),
+        "limit": cap,
+        "offset": skip,
+    }
+
+
+def follow_hop(token: str) -> str | None:
+    key = (token or "").strip().lower()
+    if len(key) != 32 or any(ch not in "0123456789abcdef" for ch in key):
+        return None
+    campaign_id = ""
+    parent_id = ""
+    with session() as db:
+        row = db.scalar(select(MailDeliveryRow).where(MailDeliveryRow.hop_token == key))
+        if row is None or row.status != "sent":
+            return None
+        now = time.time()
+        row.click_count = int(row.click_count or 0) + 1
+        if not row.clicked_at:
+            row.clicked_at = now
+        campaign_id = row.campaign_id
+        parent_id = row.parent_id
+        db.flush()
+    from app.analytics.actions import record_action
+
+    record_action("mail.click", parent_id=parent_id, payload={"campaign_id": campaign_id})
+    base = get_settings().public_site_url.rstrip("/") or "https://zooo.fun"
+    return (
+        f"{base}/play?utm_source=crm_mail&utm_medium=email"
+        f"&utm_campaign={campaign_id}"
+    )
 
 
 def run_enabled_rules(*, force: bool = False) -> dict:

@@ -53,3 +53,10 @@ export function albumSrc(entry: RosterEntry, composed?: string | null): string |
   if (entry.hasPostcard) return entry.garden;
   return composed || entry.garden;
 }
+
+/** Roster «В сад» on an album postcard starts leftover 3D (D-031). */
+export function rosterGardenStartsMesh(spec: {
+  drawing?: { modelUrl?: string | null; meshDeferred?: boolean } | null;
+}): boolean {
+  return Boolean(spec.drawing?.meshDeferred) && !spec.drawing?.modelUrl?.trim();
+}

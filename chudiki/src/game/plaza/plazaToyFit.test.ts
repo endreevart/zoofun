@@ -27,6 +27,12 @@ const fitted = new THREE.Box3().setFromObject(tall);
 assert.ok(Math.abs(fitted.min.y) < 0.02);
 assert.ok(Math.abs(fitted.max.y - 1.6) < 0.02);
 
+const lifted = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));
+seatPlazaToyGlb(lifted, { height: 2, x: 0, z: 0, y: 3 });
+lifted.updateMatrixWorld(true);
+const liftedBox = new THREE.Box3().setFromObject(lifted);
+assert.ok(Math.abs(liftedBox.min.y - 3) < 0.02, `min.y should sit on island, ${liftedBox.min.y}`);
+
 const empty = new THREE.Group();
 seatPlazaToyGlb(empty, { height: 2, x: 8, z: 9 });
 assert.equal(empty.position.x, 8);

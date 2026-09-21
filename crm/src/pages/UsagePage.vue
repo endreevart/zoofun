@@ -2,22 +2,51 @@
   <div class="flex flex-col gap-6">
     <CrmPageHeader
       title="Острова"
-      subtitle="Бесплатные луга и купленные копии, где ребёнок строит сам."
-      help="Три бесплатных луга всегда есть. Купленные копии — отдельные сады семьи. Цифры за дни, выбранные сверху."
+      subtitle="Семьи в саду, заходы отдельно, кто сейчас на лугу."
+      help="Три бесплатных луга всегда есть. Цифры семей — разные аккаунты. Заходы — отдельные сессии, одна семья может зайти несколько раз."
     />
     <CrmBusy :loading="loading && !data" />
     <template v-if="data">
-      <div class="crm-grid-charts-2">
+      <div class="crm-grid-kpi crm-stagger">
         <StatCard
           highlight
-          label="Заходы в сад"
+          label="Семьи в саду"
+          :value="data.island_parents ?? 0"
+          :hint="`${data.island_sessions} заходов`"
+          help="Сколько разных семей открывали сад. Одна семья может зайти несколько раз — это заходы."
+        />
+        <StatCard
+          label="Заходы"
           :value="data.island_sessions"
-          help="Сколько раз открывали сад за выбранные дни. Страница «играть» на сайте — это другое."
+          help="Сессии острова. Это не число семей и не кнопка «играть» на сайте."
+        />
+        <StatCard
+          label="Сейчас в саду"
+          :value="data.live?.island.count ?? 0"
+          help="Семьи с открытым садом прямо сейчас, но не на поляне."
+        />
+        <StatCard
+          label="Сейчас на поляне"
+          :value="data.live?.plaza.count ?? 0"
+          help="Кто сидит в общем зоопарке. Подробнее — страница поляны."
         />
         <StatCard
           label="Новые звери"
           :value="data.creatures_new"
           help="Сколько зверей появилось за эти дни, на любом лугу."
+        />
+      </div>
+
+      <div class="crm-grid-charts-2">
+        <LivePeople
+          title="Сейчас в саду"
+          help="Сердцебиение сессии за последние полторы минуты. Кто на поляне — в соседней таблице."
+          :people="data.live?.island.people ?? []"
+        />
+        <LivePeople
+          title="Сейчас на поляне"
+          help="Места в общем зоопарке прямо сейчас. Не заходы за выбранные дни."
+          :people="data.live?.plaza.people ?? []"
         />
       </div>
 
@@ -29,7 +58,14 @@
           :help="lawnHelp(lawn.id)"
         >
           <p v-if="lawn.leading" class="crm-tile-kicker m-0 mb-3">сюда заходят чаще</p>
-          <div class="crm-grid-bento-3">
+          <div class="crm-grid-bento-4">
+            <StatCard
+              clickable
+              label="Семьи"
+              :value="lawn.parents ?? 0"
+              help="Сколько разных семей заходили на этот луг. Нажмите — кто и сколько раз."
+              @click="openLawn(lawn, 'parents')"
+            />
             <StatCard
               clickable
               label="Звери"
@@ -40,7 +76,7 @@
             />
             <StatCard
               clickable
-              label="Визиты"
+              label="Заходы"
               :value="lawn.visits"
               help="Сколько раз открывали этот луг. Нажмите — кто заходил."
               @click="openLawn(lawn, 'visits')"
@@ -55,6 +91,34 @@
           </div>
         </CrmPanel>
       </div>
+
+      <CrmPanel
+        title="Кто был в саду"
+        help="Семьи и сколько раз каждая открывала сад. Нажмите — карточка родителя."
+      >
+        <p v-if="!(data.visitors ?? []).length" class="text-sm text-muted m-0">За эти дни никого не было.</p>
+        <table v-else class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-muted">
+              <th class="py-2">Почта</th>
+              <th>Заходы</th>
+              <th>Последний</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in data.visitors"
+              :key="row.parent_id"
+              class="parent-row"
+              @click="openParent(row.parent_id, row.email)"
+            >
+              <td class="py-2">{{ row.email || "—" }}</td>
+              <td>{{ row.visits }}</td>
+              <td>{{ formatWhen(row.last_at, true) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </CrmPanel>
 
       <div class="crm-grid-bento-3">
         <StatCard
@@ -104,7 +168,7 @@
                 <th class="py-2">Семья</th>
                 <th v-if="showCopyCols">Остров</th>
                 <th>Звери</th>
-                <th v-if="peopleMetric !== 'buyers'">Визиты</th>
+                <th v-if="peopleMetric !== 'buyers'">Заходы</th>
                 <th v-if="peopleMetric !== 'buyers'">Время</th>
                 <th v-if="peopleMetric === 'buyers'">Куплено</th>
                 <th v-if="peopleMetric === 'buyers'">Копий</th>
@@ -150,9 +214,10 @@ import CrmBusy from "@/components/crm/CrmBusy.vue";
 import CrmPageHeader from "@/components/crm/CrmPageHeader.vue";
 import CrmPager from "@/components/crm/CrmPager.vue";
 import CrmPanel from "@/components/crm/CrmPanel.vue";
+import LivePeople from "@/components/crm/LivePeople.vue";
 import StatCard from "@/components/dashboard/StatCard.vue";
 import { crmApi, type LawnRow, type Usage, type UsagePersonRow } from "@/lib/api";
-import { formatDuration } from "@/lib/when";
+import { formatDuration, formatWhen } from "@/lib/when";
 import { usePeriodStore } from "@/stores/period";
 
 const PAGE = 50;

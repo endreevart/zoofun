@@ -4,6 +4,7 @@ import { WORLD_DIY_SKU } from './gardens';
 
 export const WORLD_DIY_GARDEN = WORLD_DIY_SKU;
 export const DIY_LAYOUT_KEY = 'chudiki.diy.garden.v1';
+export const DIY_LAYOUT_FETCH_MS = 2500;
 
 export { DIY_PROP_CAP };
 
@@ -34,17 +35,22 @@ export function saveDiyLayout(props: AuthoredProp[], worldId: string = WORLD_DIY
 
 export async function fetchRemoteDiyLayout(
   worldId: string = WORLD_DIY_SKU,
+  ms = DIY_LAYOUT_FETCH_MS,
 ): Promise<AuthoredProp[] | null> {
   if (!parentToken()) return null;
+  const abort = new AbortController();
+  const timer = window.setTimeout(() => abort.abort(), ms);
   try {
     const response = await fetch(
       `${API_BASE}/v1/zoo/layout?world_id=${encodeURIComponent(worldId)}`,
-      { headers: authHeaders() },
+      { headers: authHeaders(), signal: abort.signal },
     );
     if (!response.ok) return null;
     return parseDiyProps(await response.json());
   } catch {
     return null;
+  } finally {
+    window.clearTimeout(timer);
   }
 }
 

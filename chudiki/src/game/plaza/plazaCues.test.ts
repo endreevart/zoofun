@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { UI_CUES } from '../audio/cues.ts';
 import {
   PLAZA_CUE_IDS,
+  PLAZA_PUBLIC,
   PLAZA_TOY_WAIT_MS,
   plazaCoversWorlds,
   plazaEnterCues,
@@ -27,6 +28,7 @@ assert.equal(plazaCoversWorlds('draw'), false);
 assert.equal(plazaCoversWorlds('draw', true), true);
 assert.equal(plazaCoversWorlds('zoo', true), true);
 assert.equal(plazaCoversWorlds('zoo', false, true), true);
+assert.equal(PLAZA_PUBLIC, false);
 assert.equal(UI_CUES.plaza_hello.line, 'Это общий зоопарк. Сюда приходят зуфики из разных садов.');
 assert.equal(UI_CUES.plaza_friends.line, 'Тут могут быть другие зуфики. Помаши им.');
 assert.equal(PLAZA_CUE_IDS.length, 16);

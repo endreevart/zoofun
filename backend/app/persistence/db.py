@@ -137,6 +137,9 @@ def init_schema() -> None:
                 apply_migrations()
                 with session() as db:
                     seed_packs(db)
+                from app.commerce.promo import ensure_named_promos
+
+                ensure_named_promos()
             finally:
                 lock.execute(text("SELECT pg_advisory_unlock(87236401)"))
                 lock.commit()
@@ -144,3 +147,6 @@ def init_schema() -> None:
     apply_migrations()
     with session() as db:
         seed_packs(db)
+    from app.commerce.promo import ensure_named_promos
+
+    ensure_named_promos()

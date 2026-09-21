@@ -2,14 +2,117 @@
   <div class="flex flex-col gap-6">
     <CrmPageHeader
       title="Письма"
-      subtitle="Только с согласием. Имя ребёнка в письмо не попадает. Набор — блоки условий, кампания складывает наборы И / ИЛИ."
-      help="Набор — кого выбрать. Кампания — письмо сейчас. Правило само шлёт, только если включено. Не чаще раза в сутки на семью. Мы не видим, открыли ли письмо."
+      :subtitle="tabMeta.subtitle"
+      :help="tabMeta.help"
+      :count="tab === 'sent' ? campaigns.length : null"
     />
 
-    <div class="crm-grid-charts-2 mail-split items-start">
+    <div v-show="tab === 'sent'" class="flex flex-col gap-6">
+      <CrmPanel
+        title="История"
+        subtitle="Зашли, нарисовали, заплатили или кликнули ссылку за двое суток. Открытие письма мы не видим."
+        help="Смотрим вход, рисунок, оплату и клик по персональной ссылке. Если в теме есть пометка правила — это авторассылка."
+      >
+        <p v-if="!campaigns.length" class="text-sm text-muted m-0">Пока нет рассылок.</p>
+        <table v-else class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-muted">
+              <th class="py-2">Тема</th>
+              <th>Статус</th>
+              <th>Отправлено</th>
+              <th>Пропуск</th>
+              <th>Клики</th>
+              <th>Вход 48ч</th>
+              <th>Рисунок 48ч</th>
+              <th>Оплата 48ч</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in campaigns"
+              :key="row.id"
+              class="parent-row"
+              :class="{ 'is-active': selectedCampaign === row.id }"
+              @click="openDeliveries(row.id)"
+            >
+              <td class="py-2">{{ row.subject }}<span v-if="row.rule_id" class="text-muted"> · правило</span></td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.sent_count }}</td>
+              <td>{{ row.skipped_count }}</td>
+              <td>{{ row.effect?.clicked ?? "—" }}</td>
+              <td>{{ row.effect?.returned ?? "—" }}</td>
+              <td>{{ row.effect?.drew ?? "—" }}</td>
+              <td>{{ row.effect?.paid ?? "—" }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="deliveries.length" class="mt-4">
+          <p class="text-sm m-0 mb-2">
+            Получатели: {{ deliveryTotal }} · кликнули ссылку: {{ deliveryClicked }}
+          </p>
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-muted">
+                <th class="py-2">Почта</th>
+                <th>Статус</th>
+                <th>Клики</th>
+                <th>Ссылка</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in deliveries" :key="row.parent_id + row.created_at">
+                <td class="py-2">{{ row.email }}</td>
+                <td>{{ row.status }}{{ row.reason ? ` · ${row.reason}` : "" }}</td>
+                <td>{{ row.click_count || "—" }}</td>
+                <td>
+                  <button
+                    v-if="row.hop_url"
+                    type="button"
+                    class="crm-nav-pill-item"
+                    @click.stop="copyHop(row.hop_url)"
+                  >
+                    Скопировать
+                  </button>
+                  <span v-else class="text-muted">нет</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </CrmPanel>
+    </div>
+
+    <div v-show="tab === 'write'" class="flex flex-col gap-6">
+    <CrmPanel
+      title="Кому писать, чтобы вернулись"
+      help="Черновик. Само не уходит. В шаблонах уже код PRIVET: 25% на пакеты из нескольких зуфиков и на острова. На одного зуфика и на штуки для общего зоопарка — нет."
+    >
+      <p v-if="offerNote" class="text-sm text-muted m-0 mb-3">{{ offerNote }}</p>
+      <p v-if="!offers.length" class="text-sm text-muted m-0">Пока нет подсказок.</p>
+      <div v-else class="flex flex-col gap-3">
+        <div v-for="item in offers" :key="item.id" class="mail-group">
+          <div class="mail-group-head">
+            <p class="m-0 font-semibold">{{ item.title }}</p>
+            <span class="text-sm text-muted">подошло {{ item.matching }} · отправим {{ item.sendable }}</span>
+          </div>
+          <p class="text-sm m-0">{{ item.why }}</p>
+          <p class="text-sm text-muted m-0">{{ item.promo_hint }}</p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="crm-nav-pill-item is-active" @click="useOffer(item)">Подставить</button>
+            <button type="button" class="crm-nav-pill-item" :disabled="drafting === item.id" @click="draftOffer(item)">
+              Черновик
+            </button>
+          </div>
+        </div>
+      </div>
+    </CrmPanel>
+
+    </div>
+
+    <div v-show="tab === 'sets'" class="flex flex-col gap-6">
       <CrmPanel
         title="Наборы"
-        help="Свои наборы слева. Готовые нельзя стереть — только взять в письмо или скопировать. «Все сразу» — каждая группа; «любой» — достаточно одной."
+        help="Свои наборы. Готовые нельзя стереть — только взять в письмо или скопировать. «Все сразу» — каждая группа; «любой» — достаточно одной."
       >
         <template #header>
           <button type="button" class="crm-nav-pill-item is-active" @click="newSet">Новый набор</button>
@@ -30,7 +133,7 @@
           <details class="mail-hint">
             <summary>Готовые наборы — подсказка</summary>
             <p class="text-sm text-muted m-0">
-              Их нельзя стереть. Можно взять в кампанию справа или скопировать в свой набор.
+              Их нельзя стереть. Можно взять в письмо на вкладке «Написать» или скопировать в свой набор.
             </p>
             <div v-for="item in systemSets" :key="item.id" class="mail-hint-row">
               <span>{{ item.name }}</span>
@@ -109,7 +212,9 @@
           <p v-if="error" class="text-sm m-0" style="color:#b42318">{{ error }}</p>
         </form>
       </CrmPanel>
+    </div>
 
+    <div v-show="tab === 'write'" class="flex flex-col gap-6">
       <CrmPanel
         title="Кампания"
         help="Тема и тело уходят только тем, у кого согласие и нормальная почта. Имя ребёнка в шаблон не подставляется."
@@ -171,6 +276,7 @@
       </CrmPanel>
     </div>
 
+    <div v-show="tab === 'rules'" class="flex flex-col gap-6">
     <CrmPanel
       title="Правила"
       help="Выключенное само не пишет. «Запустить» — один раз сейчас, даже если выкл. Между письмами пауза не меньше суток."
@@ -249,44 +355,13 @@
         </p>
       </form>
     </CrmPanel>
-
-    <CrmPanel
-      title="История"
-      subtitle="Зашли, нарисовали или заплатили за двое суток после письма. Мы не видим, открыли ли письмо."
-      help="Смотрим вход, рисунок и оплату после письма. Если в теме есть пометка правила — это авторассылка."
-    >
-      <p v-if="!campaigns.length" class="text-sm text-muted m-0">Пока нет рассылок.</p>
-      <table v-else class="w-full text-sm">
-        <thead>
-          <tr class="text-left text-muted">
-            <th class="py-2">Тема</th>
-            <th>Статус</th>
-            <th>Отправлено</th>
-            <th>Пропуск</th>
-            <th>Вход 48ч</th>
-            <th>Рисунок 48ч</th>
-            <th>Оплата 48ч</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in campaigns" :key="row.id">
-            <td class="py-2">{{ row.subject }}<span v-if="row.rule_id" class="text-muted"> · правило</span></td>
-            <td>{{ row.status }}</td>
-            <td>{{ row.sent_count }}</td>
-            <td>{{ row.skipped_count }}</td>
-            <td>{{ row.effect?.returned ?? "—" }}</td>
-            <td>{{ row.effect?.drew ?? "—" }}</td>
-            <td>{{ row.effect?.paid ?? "—" }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </CrmPanel>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import CrmPageHeader from "@/components/crm/CrmPageHeader.vue";
 import CrmPanel from "@/components/crm/CrmPanel.vue";
 import MailComposer from "@/components/crm/MailComposer.vue";
@@ -294,20 +369,60 @@ import {
   crmApi,
   type MailCampaign,
   type MailCondition,
+  type MailDelivery,
   type MailGroup,
   type MailMeta,
+  type MailOffer,
   type MailPreview,
   type MailRecipe,
   type MailRule,
   type MailSet,
 } from "@/lib/api";
+import { mailTabFromQuery, type MailTabId } from "@/lib/mail-nav";
 
 type CampaignPart = { set_id: string; join: string; email?: string };
 
 const route = useRoute();
+const router = useRouter();
+const tab = computed(() => mailTabFromQuery(route.query.tab));
+const tabMeta = computed(() => {
+  if (tab.value === "write") {
+    return {
+      subtitle: "Тема и тело только тем, у кого согласие. Имя ребёнка в письмо не попадает.",
+      help: "Подставить шаблон или написать своё. Отправка руками. Черновик сам не уходит.",
+    };
+  }
+  if (tab.value === "sets") {
+    return {
+      subtitle: "Набор — кого выбрать. Кампания потом складывает наборы И / ИЛИ.",
+      help: "Готовые нельзя стереть. Свои можно править. «Все сразу» — каждая группа; «любой» — достаточно одной.",
+    };
+  }
+  if (tab.value === "rules") {
+    return {
+      subtitle: "Выключенное само не пишет. Между письмами пауза не меньше суток.",
+      help: "«Запустить» — один раз сейчас, даже если выкл. Не чаще раза в сутки на семью.",
+    };
+  }
+  return {
+    subtitle: "Что уже ушло. Клик по ссылке видно, открытие письма — нет.",
+    help: "Смотрим вход, рисунок, оплату и клик по персональной ссылке. Если в теме есть пометка правила — это авторассылка.",
+  };
+});
+
+function goMailTab(id: MailTabId) {
+  void router.replace({ query: { ...route.query, tab: id } });
+}
 const sets = ref<MailSet[]>([]);
 const rules = ref<MailRule[]>([]);
 const campaigns = ref<MailCampaign[]>([]);
+const offers = ref<MailOffer[]>([]);
+const offerNote = ref("");
+const deliveries = ref<MailDelivery[]>([]);
+const deliveryTotal = ref(0);
+const deliveryClicked = ref(0);
+const selectedCampaign = ref("");
+const drafting = ref("");
 const fields = ref<MailMeta["fields"]>([]);
 const opLabels = ref<Record<string, string>>({});
 const editing = ref<(MailSet & { isNew?: boolean; groups: MailGroup[] }) | null>(null);
@@ -381,6 +496,7 @@ function useInCampaign(item: MailSet) {
     if (empty) empty.set_id = item.id;
     else parts.value.push({ set_id: item.id, join: "and" });
   }
+  goMailTab("write");
 }
 
 function newSet() {
@@ -546,6 +662,8 @@ async function runRule(id: string) {
       error.value = "Это правило уже запускали меньше часа назад.";
     } else if (result.skipped === "empty") {
       error.value = "Некого слать: нет согласия, пауза или уже писали.";
+    } else {
+      goMailTab("sent");
     }
     await load();
   } catch {
@@ -593,17 +711,69 @@ function recipe(): MailRecipe {
 }
 
 async function load() {
-  const [meta, setBody, history, ruleBody] = await Promise.all([
+  const [meta, setBody, history, ruleBody, offerBody] = await Promise.all([
     crmApi.mailMeta(),
     crmApi.mailSets(),
     crmApi.mailCampaigns({ limit: 50, offset: 0 }),
     crmApi.mailRules(),
+    crmApi.mailOffers(),
   ]);
   fields.value = meta.fields;
   opLabels.value = meta.op_labels ?? {};
   sets.value = setBody.items;
   campaigns.value = history.items;
   rules.value = ruleBody.items;
+  offers.value = offerBody.items;
+  offerNote.value = offerBody.note ?? "";
+}
+
+function useOffer(item: MailOffer) {
+  subject.value = item.subject;
+  body.value = item.body;
+  const empty = parts.value.find((part) => !part.set_id && !part.email);
+  if (empty) empty.set_id = item.set_id;
+  else if (!parts.value.some((part) => part.set_id === item.set_id)) {
+    parts.value.push({ set_id: item.set_id, join: "and" });
+  }
+  stats.value = null;
+  goMailTab("write");
+}
+
+async function draftOffer(item: MailOffer) {
+  error.value = "";
+  drafting.value = item.id;
+  try {
+    const created = await crmApi.mailOfferDraft(item.id);
+    await load();
+    goMailTab("sent");
+    await openDeliveries(created.id);
+  } catch {
+    error.value = "Черновик не создался.";
+  } finally {
+    drafting.value = "";
+  }
+}
+
+async function openDeliveries(campaignId: string) {
+  selectedCampaign.value = campaignId;
+  try {
+    const body = await crmApi.mailDeliveries(campaignId, { limit: 50, offset: 0 });
+    deliveries.value = body.items;
+    deliveryTotal.value = body.total;
+    deliveryClicked.value = body.clicked;
+  } catch {
+    deliveries.value = [];
+    deliveryTotal.value = 0;
+    deliveryClicked.value = 0;
+  }
+}
+
+async function copyHop(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    error.value = "Ссылку не скопировали. Скопируйте вручную из адреса письма.";
+  }
 }
 
 async function saveSet() {
@@ -682,6 +852,7 @@ async function send() {
     body.value = "";
     await load();
     await preview();
+    goMailTab("sent");
   } catch {
     error.value = "Не отправили. Нужно согласие, и набор не должен быть пустым.";
   } finally {
@@ -694,6 +865,7 @@ onMounted(async () => {
   const email = String(route.query.email || "").trim();
   if (email) {
     parts.value = [{ set_id: "", join: "and", email }];
+    goMailTab("write");
   }
 });
 </script>
@@ -822,5 +994,14 @@ onMounted(async () => {
   gap: 0.75rem;
   flex-wrap: wrap;
   padding-top: 0.5rem;
+}
+
+.parent-row {
+  cursor: pointer;
+}
+
+.parent-row:hover,
+.parent-row.is-active {
+  background: #fafafa;
 }
 </style>

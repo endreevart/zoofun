@@ -8,6 +8,7 @@ import {
   ROSTER_ALL,
   ROSTER_DOWNLOAD_GLB,
   ROSTER_GO_GARDEN,
+  rosterGardenStartsMesh,
   ROSTER_TITLE,
 } from './rosterView.ts';
 
@@ -43,3 +44,6 @@ assert.equal(two[1]?.garden, 'face-b');
 assert.equal(albumSrc(one, 'composed'), '/v1/zoo/creatures/ch1/postcard');
 assert.equal(albumSrc(two[1]!, 'meadow-b'), 'meadow-b');
 assert.equal(albumSrc(two[1]!, null), 'face-b');
+assert.equal(rosterGardenStartsMesh({ drawing: { modelUrl: undefined } }), false);
+assert.equal(rosterGardenStartsMesh({ drawing: { meshDeferred: true } }), true);
+assert.equal(rosterGardenStartsMesh({ drawing: { modelUrl: '/v1/generation/stylize/j/model.glb' } }), false);

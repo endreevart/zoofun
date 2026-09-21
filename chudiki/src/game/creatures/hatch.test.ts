@@ -7,6 +7,10 @@ import {
   hatchFromTap,
   hatchFromWait,
   hatchMayOpen,
+  drawingWaitsInEgg,
+  eggMeshCooking,
+  hatchRingVisible,
+  staysInAlbum,
   warmEgg,
 } from './hatch.ts';
 
@@ -33,11 +37,22 @@ assert.equal(eggCanOpen('ready', 'https://zooo.fun/model.glb'), true);
 assert.equal(eggCanOpen('failed'), false);
 assert.equal(eggCanOpen('skipped'), false);
 assert.equal(eggCanOpen('failed', 'https://zooo.fun/model.glb'), true);
-assert.equal(eggCanOpen('deferred'), true);
+assert.equal(eggCanOpen('deferred'), false);
 assert.equal(eggCanOpen('deferred', 'https://zooo.fun/model.glb'), true);
 
 assert.equal(hatchMayOpen({ modelUrl: 'https://zooo.fun/model.glb' }), true);
-assert.equal(hatchMayOpen({ meshDeferred: true }), true);
+assert.equal(hatchMayOpen({ meshDeferred: true }), false);
 assert.equal(hatchMayOpen({ meshDeferred: false }), false);
 assert.equal(hatchMayOpen({}), false);
 assert.equal(hatchMayOpen(null), false);
+assert.equal(drawingWaitsInEgg({}), true);
+assert.equal(drawingWaitsInEgg({ modelUrl: 'https://zooo.fun/model.glb' }), false);
+assert.equal(staysInAlbum({ meshDeferred: true }), true);
+assert.equal(staysInAlbum({}), false);
+assert.equal(staysInAlbum({ meshDeferred: true, modelUrl: 'https://zooo.fun/model.glb' }), false);
+assert.equal(eggMeshCooking({}), true);
+assert.equal(eggMeshCooking({ meshDeferred: true }), false);
+assert.equal(eggMeshCooking({ meshDeferred: true, modelUrl: 'https://zooo.fun/model.glb' }), false);
+assert.equal(hatchRingVisible(false, true), true);
+assert.equal(hatchRingVisible(true, false), true);
+assert.equal(hatchRingVisible(false, false), false);

@@ -103,9 +103,9 @@ export function HatchPreview({
 
   return (
     <div
-      className={`hatch-preview${mode === 'garden' ? ' is-garden' : ' is-studio'}`}
+      className={`hatch-preview${src ? (mode === 'garden' ? ' is-garden' : ' is-studio') : ' is-painting'}`}
       role="dialog"
-      aria-label={name ? name : 'Вот кто получился'}
+      aria-label={src ? (name ? name : 'Вот кто получился') : 'Красим игрушку'}
     >
       {src ? (
         <>

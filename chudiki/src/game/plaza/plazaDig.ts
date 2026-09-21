@@ -13,9 +13,17 @@ export const PLAZA_CRYSTAL_COUNT = 30;
 export const PLAZA_TICKET_CRYSTALS = 8;
 export const PLAZA_CRYSTAL_INNER = 28;
 export const PLAZA_CRYSTAL_OUTER = 265;
+export const GARDEN_CRYSTAL_COUNT = 5;
+export const GARDEN_TICKETS_PER_DAY = 2;
+export const GARDEN_CRYSTAL_INNER = 6;
+export const GARDEN_CRYSTAL_OUTER = 18;
+export const GARDEN_DIG_NEAR = 4.8;
 const MIN_R = PLAZA_CRYSTAL_INNER;
 const MAX_R = PLAZA_CRYSTAL_OUTER;
 const MIN_GAP = 16;
+const GARDEN_GAP = 7;
+const GARDEN_CX = 0;
+const GARDEN_CZ = -5;
 
 function mulberry(seed: number): () => number {
   let t = seed >>> 0;
@@ -68,6 +76,10 @@ export function refillPlazaMounds(
   return next;
 }
 
+export function ticketsFromRoom(raw: unknown): PlazaTicket[] {
+  return moundsFromRoom(raw);
+}
+
 export function moundsFromRoom(raw: unknown): PlazaMound[] {
   if (!Array.isArray(raw)) return [];
   const out: PlazaMound[] = [];
@@ -82,8 +94,50 @@ export function moundsFromRoom(raw: unknown): PlazaMound[] {
   return out;
 }
 
-export function ticketsFromRoom(raw: unknown): PlazaTicket[] {
-  return moundsFromRoom(raw);
+export function localGardenMounds(seed = 1): PlazaMound[] {
+  const rand = mulberry(seed);
+  const mounds: PlazaMound[] = [];
+  let gap = GARDEN_GAP;
+  for (let i = 0; i < GARDEN_CRYSTAL_COUNT; i += 1) {
+    mounds.push(placeGarden(mounds, `g${i}`, rand, gap));
+  }
+  return mounds;
+}
+
+function placeGarden(
+  from: readonly PlazaMound[],
+  id: string,
+  rand: () => number,
+  startGap: number,
+): PlazaMound {
+  let gap = startGap;
+  for (let attempt = 0; attempt < 96; attempt += 1) {
+    const radius = Math.sqrt(
+      GARDEN_CRYSTAL_INNER * GARDEN_CRYSTAL_INNER +
+        rand() * (GARDEN_CRYSTAL_OUTER * GARDEN_CRYSTAL_OUTER - GARDEN_CRYSTAL_INNER * GARDEN_CRYSTAL_INNER),
+    );
+    const angle = rand() * Math.PI * 2;
+    const x = GARDEN_CX + Math.cos(angle) * radius;
+    const z = GARDEN_CZ + Math.sin(angle) * radius;
+    if (from.every((item) => Math.hypot(item.x - x, item.z - z) >= gap)) {
+      return { id, x, z };
+    }
+    if (attempt === 32 || attempt === 64) gap *= 0.7;
+  }
+  const radius = GARDEN_CRYSTAL_INNER + rand() * (GARDEN_CRYSTAL_OUTER - GARDEN_CRYSTAL_INNER);
+  const angle = rand() * Math.PI * 2;
+  return { id, x: GARDEN_CX + Math.cos(angle) * radius, z: GARDEN_CZ + Math.sin(angle) * radius };
+}
+
+export function refillGardenMounds(current: readonly PlazaMound[]): PlazaMound[] {
+  const next = current.slice();
+  let seq = next.length;
+  const rand = Math.random;
+  while (next.length < GARDEN_CRYSTAL_COUNT) {
+    seq += 1;
+    next.push(placeGarden(next, `g${seq}-${Math.floor(rand() * 1e9)}`, rand, GARDEN_GAP));
+  }
+  return next;
 }
 
 export function nearMound(

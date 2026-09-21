@@ -12,6 +12,7 @@ export type HatchLook = {
   fill: number;
   spin: number;
   ready: boolean;
+  cooking: boolean;
 };
 
 export function warmEgg(heat: number): number {
@@ -45,21 +46,44 @@ export function hatchFromWait(wait: number, heat: number, ready: boolean): boole
   return wait >= Math.max(0.35, HATCH_WAIT - heat * 2);
 }
 
-/** The egg stays shut until the GLB is on the creature, unless mesh is deferred (D-031). */
+/** The egg stays shut until the GLB is on the creature. */
 export function eggCanOpen(
-  mesh: 'pending' | 'ready' | 'skipped' | 'failed' | 'deferred',
+  _mesh: 'pending' | 'ready' | 'skipped' | 'failed' | 'deferred',
   modelUrl?: string,
 ): boolean {
-  if (modelUrl) return true;
-  return mesh === 'deferred';
+  return Boolean(modelUrl && modelUrl.trim());
 }
 
-/** A deferred postcard may leave the egg without a GLB. A paid mesh must not. */
+/** Lawn puppet without a mesh is an egg, not a cookie cutout. */
 export function hatchMayOpen(drawing?: {
   modelUrl?: string | null;
   meshDeferred?: boolean;
 } | null): boolean {
-  if (!drawing) return false;
-  if (drawing.modelUrl) return true;
-  return drawing.meshDeferred === true;
+  return Boolean(drawing?.modelUrl && drawing.modelUrl.trim());
+}
+
+/** True when this drawing must sit in an egg instead of walking the lawn. */
+export function drawingWaitsInEgg(drawing?: { modelUrl?: string | null } | null): boolean {
+  return !drawing?.modelUrl?.trim();
+}
+
+/** Postcard without 3D lives in «Мои зуфики» until «В сад» / Revive. */
+export function staysInAlbum(drawing?: {
+  modelUrl?: string | null;
+  meshDeferred?: boolean;
+} | null): boolean {
+  return Boolean(drawing?.meshDeferred) && !drawing?.modelUrl?.trim();
+}
+
+/** Green wait ring only while a mesh is actually in flight, not a deferred postcard. */
+export function eggMeshCooking(drawing?: {
+  modelUrl?: string | null;
+  meshDeferred?: boolean;
+} | null): boolean {
+  if (drawing?.modelUrl?.trim()) return false;
+  return !drawing?.meshDeferred;
+}
+
+export function hatchRingVisible(ready: boolean, cooking: boolean): boolean {
+  return ready || cooking;
 }

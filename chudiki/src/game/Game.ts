@@ -9,7 +9,7 @@ import {
 import { isParkResidentId } from './creatures/residents';
 import { resolveModelUrl } from './drawing/stylizeDrawing';
 import { hasPersistedStill } from './drawing/portrait';
-import { hatchMayOpen } from './creatures/hatch';
+import { hatchMayOpen, drawingWaitsInEgg, staysInAlbum } from './creatures/hatch';
 import { CameraRig } from './interaction/CameraRig';
 import { TapController } from './interaction/TapController';
 import { LayoutStudio, type LayoutKind } from './interaction/LayoutStudio';
@@ -42,6 +42,8 @@ import { track, setAnalyticsWorld } from '../analytics';
 import { JoyAir } from './visits/joyAir';
 import { joyFromHearts } from './visits/joy';
 import { mayWriteFamilyZoo } from './visits/guestPersist';
+import { CrystalField } from './garden/crystalField';
+import { GARDEN_DIG_NEAR, nearMound, type PlazaMound } from './plaza/plazaDig';
 
 export type CareState = {
   joy: number;
@@ -56,6 +58,8 @@ export type GameCallbacks = {
   onRosterChanged?(specs: ChudikSpec[]): void;
   onCareChanged?(state: CareState): void;
   onReady?(): void;
+  /** Camera (or driven Zufik) is close enough to smash this crystal. */
+  onNearCrystal?(id: string | null): void;
 };
 
 export type GameStartOptions = {
@@ -103,8 +107,14 @@ export class Game {
   private drivenId: string | null = null;
   /** Guest walk: never persist this lawn into the signed-in family's zoo. */
   private guestVisit = false;
+  private crystals: CrystalField | null = null;
+  private crystalMounds: PlazaMound[] = [];
+  private lastNearCrystal: string | null | undefined;
+  private held = false;
 
   private creatures = new Map<string, Chudik>();
+  /** Deferred postcards: in «Мои зуфики», not on the lawn until «В сад». */
+  private album = new Map<string, ChudikSpec>();
   private recordings = new Map<string, { bytes: ArrayBuffer; mimeType: string }>();
   private untune: () => void = () => {};
 
@@ -283,6 +293,9 @@ export class Game {
     this.world = world;
     this.joyAir = new JoyAir();
     this.world.root.add(this.joyAir.group);
+    this.crystals = new CrystalField((x, z) => this.world.heightAt(x, z));
+    this.world.root.add(this.crystals.group);
+    if (this.crystalMounds.length) this.crystals.setMounds(this.crystalMounds);
     this.scene.add(this.world.root);
     this.scene.fog = this.world.root.userData.fog as THREE.FogExp2;
     this.planetCore = this.world.root.getObjectByName('planet-core') ?? null;
@@ -383,6 +396,10 @@ export class Game {
     const rng = mulberry32(4242);
     for (const record of records) {
       if (isParkResidentId(record.spec.id) || record.spec.origin === 'resident') continue;
+      if (staysInAlbum(record.spec.drawing)) {
+        this.album.set(record.spec.id, { ...record.spec, hatching: false });
+        continue;
+      }
       let spot = record.lastPosition
         ? new THREE.Vector3(record.lastPosition.x, 0, record.lastPosition.z)
         : this.world.findSpawnSpot(rng);
@@ -402,12 +419,26 @@ export class Game {
     const drawing = spec.drawing?.modelUrl
       ? { ...spec.drawing, modelUrl: resolveModelUrl(spec.drawing.modelUrl) }
       : spec.drawing;
-    const next = drawing === spec.drawing ? spec : { ...spec, drawing };
+    let next = drawing === spec.drawing ? spec : { ...spec, drawing };
+    if (
+      drawingWaitsInEgg(next.drawing) &&
+      !staysInAlbum(next.drawing) &&
+      next.origin !== 'resident' &&
+      !isParkResidentId(next.id)
+    ) {
+      next = { ...next, hatching: true };
+    }
     const chudik = new Chudik(next, this.world, spot);
     chudik.setScale(tuning.get().creatureScale);
     this.world.root.add(chudik.object3D);
     this.creatures.set(spec.id, chudik);
     if (arrival) chudik.playArrival();
+    if (next.hatching && spec.hatching !== true) {
+      void this.persistFamily({
+        spec: chudik.spec,
+        lastPosition: { x: chudik.position.x, z: chudik.position.z },
+      });
+    }
     return chudik;
   }
 
@@ -457,6 +488,40 @@ export class Game {
     this.showNameplate(chudik, egg ? 4.2 : 3.4);
   }
 
+  /** Postcard without 3D: persist for the album, do not plant an egg. */
+  async keepInAlbum(spec: ChudikSpec): Promise<void> {
+    const drawing = spec.drawing ? { ...spec.drawing, meshDeferred: true } : spec.drawing;
+    const home: ChudikSpec = {
+      ...spec,
+      hatching: false,
+      drawing,
+      worldId: spec.worldId ?? this.currentWorldId,
+    };
+    this.unloadCreature(home.id);
+    this.album.set(home.id, home);
+    await this.persistFamily({ spec: home });
+    this.emitRoster();
+  }
+
+  /** Lawn egg when leftover 3D actually starts Tripo. */
+  async plantEgg(spec: ChudikSpec): Promise<void> {
+    this.album.delete(spec.id);
+    const drawing = spec.drawing ? { ...spec.drawing, meshDeferred: false } : spec.drawing;
+    const egg: ChudikSpec = {
+      ...spec,
+      hatching: true,
+      drawing,
+      worldId: spec.worldId ?? this.currentWorldId,
+    };
+    if (this.creatures.has(spec.id)) {
+      const chudik = this.creatures.get(spec.id);
+      if (chudik && drawing) chudik.spec.drawing = drawing;
+      this.returnToEgg(spec.id);
+      return;
+    }
+    await this.addCreature(egg);
+  }
+
   hasHatching(): boolean {
     for (const chudik of this.creatures.values()) {
       if (chudik.isHatching) return true;
@@ -495,6 +560,7 @@ export class Game {
     }
     this.recordings.delete(id);
     this.audio.forgetRecording(id);
+    this.album.delete(id);
     await this.forgetFamily(id);
     this.emitRoster();
     track('creature.remove', { id });
@@ -517,6 +583,10 @@ export class Game {
   async receiveMoved(spec: ChudikSpec): Promise<void> {
     if (isParkResidentId(spec.id)) return;
     const home = { ...spec, worldId: spec.worldId ?? this.currentWorldId };
+    if (staysInAlbum(home.drawing)) {
+      await this.keepInAlbum(home);
+      return;
+    }
     if (!this.running) {
       await this.persistFamily({ spec: home });
       return;
@@ -545,28 +615,46 @@ export class Game {
       const drawing = chudik.spec.drawing;
       if (!jobId || !drawing || drawing.modelUrl) continue;
       if (!chudik.isHatching) continue;
+      if (staysInAlbum(drawing)) continue;
       waiting.push({ id: chudik.id, jobId, drawing });
     }
     return waiting;
   }
 
   /**
-   * Keep the egg. `open` is only true when the puppet exists (GLB or Meshy gave up).
-   * If the shell already opened as an extrude, a late GLB still replaces it.
+   * Keep the egg. `open` is only true when the GLB exists.
    */
   prepareHatch(
     id: string,
     patch: { drawing: DrawingData; name?: string; kindId?: string },
     options?: { open?: boolean },
   ) {
-    const chudik = this.creatures.get(id);
-    if (!chudik) return;
-    if (patch.name) chudik.spec.name = patch.name;
-    if (patch.kindId) chudik.spec.kindId = patch.kindId;
     const drawing = patch.drawing.modelUrl
       ? { ...patch.drawing, modelUrl: resolveModelUrl(patch.drawing.modelUrl) }
       : patch.drawing;
     const open = options?.open === true;
+    const chudik = this.creatures.get(id);
+    if (!chudik) {
+      const held = this.album.get(id);
+      if (!held) return;
+      if (patch.name) held.name = patch.name;
+      if (patch.kindId) held.kindId = patch.kindId;
+      held.drawing = staysInAlbum(drawing) || drawing.meshDeferred
+        ? { ...drawing, meshDeferred: true }
+        : drawing;
+      void this.persistFamily({ spec: held });
+      this.emitRoster();
+      return;
+    }
+    if (staysInAlbum(drawing) && !open) {
+      void this.keepInAlbum({
+        ...chudik.spec,
+        name: patch.name || chudik.spec.name,
+        kindId: patch.kindId || chudik.spec.kindId,
+        drawing,
+      });
+      return;
+    }
     if (!chudik.isHatching) {
       const current = chudik.spec.drawing;
       const next = {
@@ -581,6 +669,11 @@ export class Game {
         void this.upgradeCreature(id, { drawing: next, name: patch.name, kindId: patch.kindId });
         return;
       }
+      if (drawingWaitsInEgg(next)) {
+        chudik.spec.drawing = next;
+        this.returnToEgg(id);
+        return;
+      }
       if (hasPersistedStill(drawing)) {
         chudik.spec.drawing = next;
         void this.persistFamily({
@@ -591,13 +684,11 @@ export class Game {
       }
       return;
     }
+    if (patch.name) chudik.spec.name = patch.name;
+    if (patch.kindId) chudik.spec.kindId = patch.kindId;
     chudik.spec.drawing = drawing;
-    if (open) {
+    if (open && hatchMayOpen(drawing)) {
       chudik.prepareHatch(drawing);
-      if (hatchMayOpen(drawing) && !drawing.modelUrl) {
-        void this.finishHatch(id);
-        return;
-      }
     } else {
       chudik.noteHatchPainted();
     }
@@ -608,15 +699,34 @@ export class Game {
     this.showNameplate(chudik, 3);
   }
 
-  /** Second OpenRouter still: the toy in the garden. Does not reopen the egg. */
-  attachPostcard(id: string, postcardUrl: string) {
+  /** A cookie that never got a GLB sits back in the egg. */
+  returnToEgg(id: string) {
     const chudik = this.creatures.get(id);
-    if (!chudik?.spec.drawing) return;
-    chudik.spec.drawing = { ...chudik.spec.drawing, postcardUrl };
+    if (!chudik?.returnToEgg()) return;
+    if (this.drivenId === id) this.releaseControl();
     void this.persistFamily({
       spec: chudik.spec,
       lastPosition: { x: chudik.position.x, z: chudik.position.z },
     });
+    this.emitRoster();
+    this.showNameplate(chudik, 4.2);
+  }
+
+  /** Second OpenRouter still: the toy in the garden. Does not reopen the egg. */
+  attachPostcard(id: string, postcardUrl: string) {
+    const chudik = this.creatures.get(id);
+    if (chudik?.spec.drawing) {
+      chudik.spec.drawing = { ...chudik.spec.drawing, postcardUrl };
+      void this.persistFamily({
+        spec: chudik.spec,
+        lastPosition: { x: chudik.position.x, z: chudik.position.z },
+      });
+      return;
+    }
+    const held = this.album.get(id);
+    if (!held?.drawing) return;
+    held.drawing = { ...held.drawing, postcardUrl };
+    void this.persistFamily({ spec: held });
   }
 
   /** Swap the egg for the finished creature. */
@@ -665,7 +775,13 @@ export class Game {
   /** Replaces a spec in place, e.g. after renaming. */
   async updateSpec(spec: ChudikSpec): Promise<void> {
     const chudik = this.creatures.get(spec.id);
-    if (!chudik) return;
+    if (!chudik) {
+      if (!this.album.has(spec.id)) return;
+      this.album.set(spec.id, spec);
+      await this.persistFamily({ spec });
+      this.emitRoster();
+      return;
+    }
     Object.assign(chudik.spec, spec);
     await this.persistFamily({
       spec: chudik.spec,
@@ -675,10 +791,16 @@ export class Game {
   }
 
   getSpecs(): ChudikSpec[] {
-    return [...this.creatures.values()]
-      .map((c) => c.spec)
-      .filter((spec) => !isParkResidentId(spec.id) && spec.origin !== 'resident')
-      .sort((a, b) => a.createdAt - b.createdAt);
+    const byId = new Map<string, ChudikSpec>();
+    for (const spec of this.album.values()) {
+      if (isParkResidentId(spec.id) || spec.origin === 'resident') continue;
+      byId.set(spec.id, spec);
+    }
+    for (const chudik of this.creatures.values()) {
+      if (isParkResidentId(chudik.spec.id) || chudik.spec.origin === 'resident') continue;
+      byId.set(chudik.spec.id, chudik.spec);
+    }
+    return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt);
   }
 
   hasRecording(id: string): boolean {
@@ -766,6 +888,25 @@ export class Game {
 
   get isDriving(): boolean {
     return this.drivenId !== null;
+  }
+
+  get drivenCreatureId(): string | null {
+    return this.drivenId;
+  }
+
+  /** Freeze the 3D garden while a 2D overlay is playing. */
+  setHeld(held: boolean) {
+    if (this.held === held) return;
+    this.held = held;
+    if (held) {
+      cancelAnimationFrame(this.frameHandle);
+      this.frameHandle = 0;
+      return;
+    }
+    if (this.running && document.visibilityState !== 'hidden') {
+      this.clock.getDelta();
+      this.loop();
+    }
   }
 
   /** Send everyone to the harvest baskets. An empty DIY lawn gathers in the meadow. */
@@ -868,6 +1009,13 @@ export class Game {
   setDiyBuild(on: boolean) {
     this.layout.setEnabled(on);
     if (on) this.layout.setTool('place');
+  }
+
+  setCrystalMounds(mounds: readonly PlazaMound[]) {
+    this.crystalMounds = mounds.slice();
+    this.crystals?.setMounds(this.crystalMounds);
+    this.lastNearCrystal = undefined;
+    this.emitNearCrystal();
   }
 
   get library() {
@@ -999,7 +1147,7 @@ export class Game {
 
   private loop = () => {
     this.frameHandle = 0;
-    if (!this.running) return;
+    if (!this.running || this.held) return;
     if (document.visibilityState === 'hidden') return;
     this.frameHandle = requestAnimationFrame(this.loop);
 
@@ -1062,6 +1210,7 @@ export class Game {
       }
     }
     this.emitCare();
+    this.emitNearCrystal();
 
     this.updateNameplate(dt);
     if (this.mobileShadowCadence > 0) {
@@ -1086,6 +1235,29 @@ export class Game {
 
   private emitRoster() {
     this.callbacks.onRosterChanged?.(this.getSpecs());
+  }
+
+  private emitNearCrystal() {
+    if (!this.rig || this.crystalMounds.length === 0) {
+      if (this.lastNearCrystal) {
+        this.lastNearCrystal = null;
+        this.callbacks.onNearCrystal?.(null);
+      }
+      return;
+    }
+    let x = this.rig.lookX;
+    let z = this.rig.lookZ;
+    if (this.drivenId) {
+      const driver = this.creatures.get(this.drivenId);
+      if (driver) {
+        x = driver.position.x;
+        z = driver.position.z;
+      }
+    }
+    const id = nearMound(x, z, this.crystalMounds, GARDEN_DIG_NEAR);
+    if (id === this.lastNearCrystal) return;
+    this.lastNearCrystal = id;
+    this.callbacks.onNearCrystal?.(id);
   }
 
   private emitCare(force = false) {
@@ -1125,7 +1297,7 @@ export class Game {
       }
       return;
     }
-    if (this.running) {
+    if (this.running && !this.held) {
       this.clock.getDelta();
       this.loop();
     }
@@ -1251,12 +1423,20 @@ export class Game {
     this.feeding.cancel([...this.creatures.values()]);
     for (const chudik of this.creatures.values()) chudik.dispose();
     this.creatures.clear();
+    this.album.clear();
     this.sparkles.dispose();
     this.joyAir?.dispose();
+    this.crystals?.dispose();
+    this.crystals = null;
     this.world?.dispose();
     this.stopTvFeed();
     this.audio.setGardenPaused(true);
     this.nameplate.remove();
+    try {
+      this.renderer.forceContextLoss();
+    } catch {
+      /* Safari may already have dropped the only WebGL context. */
+    }
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

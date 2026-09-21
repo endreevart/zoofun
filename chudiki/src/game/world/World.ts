@@ -52,6 +52,8 @@ import {
   disposeContactShadows,
 } from './contactShadows';
 import { islandModelForShell, isHangingShell, skipsIslandShadows, usesLawnCatcher, type WorldShell } from './kinds';
+import { isPlazaToyModel } from '../plaza/plazaToy';
+import { DiyToyLayer } from './diyToys';
 
 export type WalkableQuery = {
   heightAt(x: number, z: number): number;
@@ -82,6 +84,7 @@ export class World implements WalkableQuery {
   readonly pathLayer: PathLayer;
   readonly spawnLayer: SpawnLayer;
   readonly grassField: GrassField;
+  private toys: DiyToyLayer;
   private authored: AuthoredProp[] = [];
   private authoredPaths: AuthoredPath[] = [];
   private authoredSpawns: AuthoredSpawn[] = [];
@@ -121,7 +124,7 @@ export class World implements WalkableQuery {
         island,
         ...(shell === 'garden' ? ['grass_a', 'grass_b'] : []),
         ...stamps,
-        ...diyProps.map((prop) => prop.model),
+        ...diyProps.map((prop) => prop.model).filter((model) => !isPlazaToyModel(model)),
       ], options.signal, options.renderer);
       const saved: LayoutDocument = { props: diyProps, paths: [], spawns: [] };
       try {
@@ -196,6 +199,7 @@ export class World implements WalkableQuery {
     this.root.add(this.spawnLayer.group);
     this.grassField = new GrassField(this.terrain, library);
     if (shell === 'garden') this.root.add(this.grassField.group);
+    this.toys = new DiyToyLayer(this.root, (x, z) => this.groundAt(x, z));
 
     if (mode !== 'diy' && shell === 'garden') {
       const scatter = new InstancedScatter(library);
@@ -285,6 +289,7 @@ export class World implements WalkableQuery {
     this.tagInstances(group, props);
     this.root.add(group);
     this.authored = props;
+    this.toys.sync(this.authored);
     this.refreshContactShadows();
     this.requestWalkGrid();
   }
@@ -292,7 +297,8 @@ export class World implements WalkableQuery {
   /** Add one stamp without rebuilding every other model. */
   appendAuthored(prop: AuthoredProp) {
     this.authored = [...this.authored, prop];
-    this.rebuildNatureModel(prop.model);
+    if (isPlazaToyModel(prop.model)) this.toys.sync(this.authored);
+    else this.rebuildNatureModel(prop.model);
     this.requestWalkGrid();
   }
 
@@ -301,7 +307,8 @@ export class World implements WalkableQuery {
     const gone = this.authored.find((prop) => prop.id === id);
     if (!gone) return;
     this.authored = this.authored.filter((prop) => prop.id !== id);
-    this.rebuildNatureModel(gone.model);
+    if (isPlazaToyModel(gone.model)) this.toys.sync(this.authored);
+    else this.rebuildNatureModel(gone.model);
     this.requestWalkGrid();
   }
 
@@ -339,6 +346,12 @@ export class World implements WalkableQuery {
       next.y = this.groundAt(next.x, next.z);
     }
     this.authored[index] = next;
+    if (isPlazaToyModel(next.model)) {
+      this.toys.sync(this.authored);
+      this.refreshContactShadows();
+      this.requestWalkGrid();
+      return;
+    }
     const group = this.root.getObjectByName('idyllic-nature');
     if (!group || !this.library.has(next.model)) return;
     const model = this.library.get(next.model);
@@ -461,6 +474,10 @@ export class World implements WalkableQuery {
 
   pickGround(raycaster: THREE.Raycaster): THREE.Vector3 | null {
     return this.terrain.pickSurface(raycaster);
+  }
+
+  pickToy(raycaster: THREE.Raycaster): string | null {
+    return this.toys.pick(raycaster);
   }
 
   isWalkable(x: number, z: number): boolean {
@@ -659,6 +676,7 @@ export class World implements WalkableQuery {
     this.grassField.dispose();
     this.terrain.dispose();
     this.water.dispose();
+    this.toys.dispose();
     const nature = this.root.getObjectByName('idyllic-nature');
     if (nature) disposeScatter(nature);
     const sky = this.root.getObjectByName('sky');

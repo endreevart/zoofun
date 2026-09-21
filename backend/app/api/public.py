@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
+from app.analytics.actions import record_action
 from app.crm.mail import (
     clear_marketing_consent,
+    follow_hop,
     mail_image_path,
     parent_id_from_unsubscribe,
 )
 from app.generation.jobs import recent_garden_postcards
 from app.ratelimit import enforce
-from app.analytics.actions import record_action
 from app.visits import zoos as public_zoos
 
 router = APIRouter(prefix="/v1/public", tags=["public"])
@@ -112,7 +113,8 @@ async def read_guest_portrait(share_id: str, creature_id: str, request: Request)
 
 _UNSUB_OK = """<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>Отписка</title></head>
-<body style="font-family:Arial,sans-serif;background:#f2eee3;color:#123a2e;padding:48px 16px;text-align:center">
+<body style="font-family:Arial,sans-serif;background:#f2eee3;color:#123a2e;
+padding:48px 16px;text-align:center">
   <p style="font-size:22px;font-weight:800">Письма больше не придут</p>
   <p style="color:#557667">Рассылка для этой почты выключена. Коды входа по-прежнему работают.</p>
 </body></html>
@@ -120,7 +122,8 @@ _UNSUB_OK = """<!doctype html>
 
 _UNSUB_BAD = """<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>Отписка</title></head>
-<body style="font-family:Arial,sans-serif;background:#f2eee3;color:#123a2e;padding:48px 16px;text-align:center">
+<body style="font-family:Arial,sans-serif;background:#f2eee3;color:#123a2e;
+padding:48px 16px;text-align:center">
   <p style="font-size:22px;font-weight:800">Ссылка не подошла</p>
   <p style="color:#557667">Откройте письмо ещё раз или напишите на info@zooo.fun.</p>
 </body></html>
@@ -146,6 +149,26 @@ async def read_mail_image(image_id: str, request: Request) -> FileResponse:
         media_type=media,
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
+
+
+_HOP_BAD = """<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Ссылка</title></head>
+<body style="font-family:Arial,sans-serif;background:#f2eee3;color:#123a2e;
+padding:48px 16px;text-align:center">
+  <p style="font-size:22px;font-weight:800">Ссылка не подошла</p>
+  <p style="color:#557667">Откройте письмо ещё раз или зайдите на
+  <a href="https://zooo.fun/play" style="color:#315f50">zooo.fun</a>.</p>
+</body></html>
+"""
+
+
+@router.get("/mail-go/{token}", response_model=None)
+async def mail_go(token: str, request: Request):
+    enforce(request, "public-mail-go", limit=60)
+    target = follow_hop(token)
+    if not target:
+        return HTMLResponse(_HOP_BAD, status_code=400)
+    return RedirectResponse(target, status_code=302)
 
 
 @router.get("/unsubscribe")

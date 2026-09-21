@@ -64,7 +64,7 @@
       <main class="crm-content">
         <RouterView v-slot="{ Component }">
           <Transition name="crm-page" mode="out-in">
-            <component :is="Component" :key="route.fullPath + viewKey" />
+            <component :is="Component" :key="pageKey" />
           </Transition>
         </RouterView>
       </main>
@@ -78,6 +78,7 @@ import { useRoute, useRouter } from "vue-router";
 import Button from "primevue/button";
 import PeriodPicker from "@/components/crm/PeriodPicker.vue";
 import { FUNNEL_NAV_TABS } from "@/lib/funnel-nav";
+import { MAIL_NAV_TABS } from "@/lib/mail-nav";
 import { USAGE_NAV_TABS } from "@/lib/usage-nav";
 import { useAuthStore } from "@/stores/auth";
 import { usePeriodStore } from "@/stores/period";
@@ -86,6 +87,7 @@ type SectionTab = {
   name: string;
   label: string;
   params?: { key: string };
+  query?: Record<string, string>;
 };
 
 const auth = useAuthStore();
@@ -99,6 +101,7 @@ const primaryNav = [
   { key: "growth", label: "Рост", icon: "pi pi-bolt", routes: ["growth"] },
   { key: "traffic", label: "Посещаемость", icon: "pi pi-globe", routes: ["traffic"] },
   { key: "usage", label: "Острова", icon: "pi pi-chart-bar", routes: ["usage", "usage-copies", "usage-buyers", "usage-events"] },
+  { key: "features", label: "Поляна", icon: "pi pi-sun", routes: ["features"] },
   { key: "parents", label: "Родители", icon: "pi pi-users", routes: ["parents"] },
   { key: "creatures", label: "Звери", icon: "pi pi-star", routes: ["creatures"] },
   { key: "mail", label: "Письма", icon: "pi pi-envelope", routes: ["mail"] },
@@ -107,6 +110,11 @@ const primaryNav = [
   { key: "payments", label: "Платежи", icon: "pi pi-money-bill", routes: ["payments"] },
 ];
 
+const pageKey = computed(() => {
+  if (route.name === "mail") return `mail-${viewKey.value}`;
+  return `${route.fullPath}-${viewKey.value}`;
+});
+
 const sectionTabs = computed((): SectionTab[] => {
   if (["funnels", "funnel-detail"].includes(String(route.name))) {
     return FUNNEL_NAV_TABS;
@@ -114,21 +122,32 @@ const sectionTabs = computed((): SectionTab[] => {
   if (["usage", "usage-copies", "usage-buyers", "usage-events"].includes(String(route.name))) {
     return USAGE_NAV_TABS;
   }
+  if (route.name === "mail") return MAIL_NAV_TABS;
   return [];
 });
 
 function tabKey(tab: SectionTab) {
-  return tab.params?.key ? `${tab.name}:${tab.params.key}` : tab.name;
+  const base = tab.params?.key ? `${tab.name}:${tab.params.key}` : tab.name;
+  const query = tab.query ? new URLSearchParams(tab.query).toString() : "";
+  return query ? `${base}?${query}` : base;
 }
 
 function isTabActive(tab: SectionTab) {
   if (route.name !== tab.name) return false;
   if (tab.params?.key) return route.params.key === tab.params.key;
+  if (tab.query?.tab) {
+    const current = String(route.query.tab || "sent");
+    return current === tab.query.tab;
+  }
   return true;
 }
 
 function goTab(tab: SectionTab) {
-  void router.push(tab.params ? { name: tab.name, params: tab.params } : { name: tab.name });
+  void router.push({
+    name: tab.name,
+    params: tab.params,
+    query: tab.query ? { ...route.query, ...tab.query } : tab.query,
+  });
 }
 
 function refreshPage() {

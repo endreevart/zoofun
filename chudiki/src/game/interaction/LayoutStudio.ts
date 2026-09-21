@@ -29,6 +29,7 @@ import {
   DEFAULT_SPAWN_RADIUS,
   nearestSpawnId,
 } from '../world/layoutSpawns';
+import { clearPlazaHold, isPlazaToyModel, type PlazaLawnToy } from '../plaza/plazaToy';
 
 export type LayoutTool = 'place' | 'select' | 'path' | 'spawn';
 
@@ -109,6 +110,10 @@ export class LayoutStudio {
     null;
   private touchCount = 0;
   private capturedId: number | null = null;
+  private toyStills = new Map<string, string>();
+  private toyHeights = new Map<string, number>();
+  private toyModelUrls = new Map<string, string>();
+  private toyMeshStatus = new Map<string, string>();
 
   constructor(options: {
     world: World;
@@ -356,6 +361,47 @@ export class LayoutStudio {
     const y = this.world.groundAt(0, 2);
     this.showDropGhost(new THREE.Vector3(0, y, 2));
     this.emit();
+  }
+
+  /** Hold a paid drawing-toy. It is not in the Idyllic catalog. */
+  holdToy(model: string, stillUrl: string, height: number, modelUrl?: string) {
+    if (!isPlazaToyModel(model)) return;
+    this.toyStills.set(model, stillUrl);
+    this.toyHeights.set(model, height);
+    if (modelUrl) this.toyModelUrls.set(model, modelUrl);
+    this.holdingModel = model;
+    this.activeModel = model;
+    this.selectedId = null;
+    this.moveArmed = false;
+    this.pendingPlace = null;
+    this.setTool('place');
+    this.syncMarker();
+    const y = this.world.groundAt(0, 2);
+    this.showDropGhost(new THREE.Vector3(0, y, 2));
+    this.emit();
+  }
+
+  noteToys(toys: PlazaLawnToy[]) {
+    for (const toy of toys) {
+      if (toy.still_url) this.toyStills.set(toy.model, toy.still_url);
+      this.toyHeights.set(toy.model, toy.height);
+      if (toy.model_url) this.toyModelUrls.set(toy.model, toy.model_url);
+      if (toy.mesh_status) this.toyMeshStatus.set(toy.model, toy.mesh_status);
+      for (const prop of this.world.authoredProps) {
+        if (prop.model !== toy.model) continue;
+        const nextUrl = toy.model_url || prop.modelUrl;
+        const nextStill = toy.still_url || prop.stillUrl;
+        const nextMesh = toy.mesh_status || prop.meshStatus;
+        if (prop.modelUrl === nextUrl && prop.stillUrl === nextStill && prop.meshStatus === nextMesh) {
+          continue;
+        }
+        this.world.patchAuthored(prop.id, {
+          modelUrl: nextUrl,
+          stillUrl: nextStill,
+          meshStatus: nextMesh,
+        });
+      }
+    }
   }
 
   /** Hold the move button, then drag: the toy follows the finger. */
@@ -936,11 +982,20 @@ export class LayoutStudio {
         return;
       }
     }
-    const extras = defaultStamp(model);
-    if (!this.world.library.has(model)) {
+    const toy = isPlazaToyModel(model);
+    if (!toy && !this.world.library.has(model)) {
       this.notifyMissed();
       return;
     }
+    const extras = toy
+      ? {
+          height: this.toyHeights.get(model) ?? defaultStamp(model).height,
+          stillUrl: this.toyStills.get(model),
+          modelUrl: this.toyModelUrls.get(model),
+          meshStatus: this.toyMeshStatus.get(model),
+          mine: true,
+        }
+      : defaultStamp(model);
     const prop: AuthoredProp = {
       id: `edit-${this.nextId++}`,
       model,
@@ -950,6 +1005,7 @@ export class LayoutStudio {
       ...extras,
       y,
     };
+    if (toy) clearPlazaHold();
     this.world.appendAuthored(prop);
     this.selectedPathId = null;
     this.world.pathLayer.setSelected(null);
@@ -963,7 +1019,10 @@ export class LayoutStudio {
   private showDropGhost(point: THREE.Vector3) {
     this.brush.visible = true;
     this.brush.position.set(point.x, point.y + 0.09, point.z);
-    const extras = defaultStamp(this.holdingModel ?? this.activeModel);
+    const model = this.holdingModel ?? this.activeModel;
+    const extras = isPlazaToyModel(model)
+      ? { height: this.toyHeights.get(model) ?? 2 }
+      : defaultStamp(model);
     this.brush.scale.setScalar(Math.max(0.55, extras.height * 0.2));
   }
 
@@ -1044,7 +1103,6 @@ export class LayoutStudio {
 
   private pickProp(clientX: number, clientY: number): string | null {
     const group = this.world.root.getObjectByName('idyllic-nature');
-    if (!group) return null;
     this.setPointer(clientX, clientY);
     // Triangle tests against 15k-face Meshy flowers freeze the editor.
     // A sphere per instance is enough to grab a stamp.
@@ -1056,7 +1114,7 @@ export class LayoutStudio {
     const quaternion = new THREE.Quaternion();
     const sphere = new THREE.Sphere();
     const hit = new THREE.Vector3();
-    group.traverse((object) => {
+    group?.traverse((object) => {
       const mesh = object as THREE.InstancedMesh;
       if (!mesh.isInstancedMesh) return;
       const ids = mesh.userData.propIds as string[] | undefined;
@@ -1075,6 +1133,18 @@ export class LayoutStudio {
         bestId = ids[i] ?? null;
       }
     });
+    const toyId = this.world.pickToy(this.raycaster);
+    if (toyId) {
+      const selected = this.world.authoredProps.find((prop) => prop.id === toyId);
+      if (selected) {
+        const origin = this.raycaster.ray.origin;
+        const toyDist =
+          (selected.x - origin.x) ** 2 +
+          (this.stampWorldY(selected) - origin.y) ** 2 +
+          (selected.z - origin.z) ** 2;
+        if (!bestId || toyDist < bestDist) return toyId;
+      }
+    }
     return bestId;
   }
 

@@ -125,6 +125,7 @@ export function WorldPicker({ worlds, onOpen, onError, onVitrine, onPlaza }: Pro
   }, []);
 
   useEffect(() => {
+    if (!onPlaza) return;
     let stop = false;
     const load = () => {
       void fetchPlazaStatus().then((count) => {
@@ -137,7 +138,7 @@ export function WorldPicker({ worlds, onOpen, onError, onVitrine, onPlaza }: Pro
       stop = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [onPlaza]);
 
   const promoForPay = () => quote?.promo_code || promo.trim() || undefined;
 
@@ -249,11 +250,6 @@ export function WorldPicker({ worlds, onOpen, onError, onVitrine, onPlaza }: Pro
         <h1 className="worlds-sign">
           <img className="worlds-sign-art" src={assetUrl('/ui/worlds/plaque.png')} alt="Мои миры" />
         </h1>
-        {onVitrine ? (
-          <button className="worlds-buy-top" type="button" onClick={onVitrine}>
-            <span className="worlds-buy-label">♥ Витрина</span>
-          </button>
-        ) : null}
         {showTopBuy ? (
           <button className="worlds-buy-top" type="button" disabled={busy} onClick={startBuy}>
             <img className="worlds-buy-plus" src={assetUrl('/ui/worlds/plus.png')} alt="" />
@@ -264,15 +260,7 @@ export function WorldPicker({ worlds, onOpen, onError, onVitrine, onPlaza }: Pro
 
         <div className="worlds-panel">
           {onPlaza ? (
-            <button
-              className="plaza-banner"
-              type="button"
-              onPointerDown={(event) => {
-                if (event.button !== 0) return;
-                onPlaza();
-              }}
-              onClick={onPlaza}
-            >
+            <button className="plaza-banner" type="button" onClick={onPlaza}>
               <img className="plaza-banner-art" src={assetUrl('/ui/magic-island.jpg')} alt="" />
               <span className="plaza-banner-copy">
                 <span className="plaza-banner-title">
@@ -282,6 +270,12 @@ export function WorldPicker({ worlds, onOpen, onError, onVitrine, onPlaza }: Pro
                 <span className="plaza-banner-count">{plazaOnlineLabel(plazaOnline)}</span>
               </span>
               <span className="plaza-banner-go">Войти</span>
+            </button>
+          ) : null}
+          {onVitrine ? (
+            <button className="vitrine-banner" type="button" onClick={onVitrine}>
+              <span className="vitrine-banner-title">Витрина зоопарков</span>
+              <span className="vitrine-banner-go">Смотреть</span>
             </button>
           ) : null}
           <section className="worlds-section">

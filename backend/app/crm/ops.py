@@ -1,6 +1,6 @@
 """Operator workbench: family timeline, abandoned checkout, stuck meshes, mail effect.
 
-No open-tracking pixels. Effect is login / draw / pay in the 48h after send.
+No open-tracking pixels. Effect is hop click / login / draw / pay in the 48h after send.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ EMPTY_EFFECT = {
     "returned": 0,
     "drew": 0,
     "paid": 0,
+    "clicked": 0,
 }
 
 _TIMELINE_EVENTS = (
@@ -75,6 +76,17 @@ _TIMELINE_EVENTS = (
     "friend.invite",
     "arcade.start",
     "arcade.done",
+    "plaza.open",
+    "plaza.enter",
+    "plaza.emote",
+    "plaza.dig",
+    "world.dig",
+    "plaza.toy_draw",
+    "plaza.toy_start",
+    "plaza.toy_preview",
+    "plaza.toy_commit",
+    "plaza.toy_pay",
+    "mail.click",
 )
 
 
@@ -356,6 +368,17 @@ def family_timeline(parent_id: str) -> list[dict]:
             "friend.invite": "Пригласили друга",
             "arcade.start": "Начал аркаду",
             "arcade.done": "Прошёл аркаду",
+            "plaza.open": "Открыл общий зоопарк",
+            "plaza.enter": "Зашёл на поляну",
+            "plaza.emote": "Смайлик на поляне",
+            "plaza.dig": "Копал на поляне",
+            "world.dig": "Копал кристалл в саду",
+            "plaza.toy_draw": "Рисует штуку",
+            "plaza.toy_start": "Начал штуку",
+            "plaza.toy_preview": "Превью штуки",
+            "plaza.toy_commit": "Оставил штуку",
+            "plaza.toy_pay": "Оплата штуки",
+            "mail.click": "Открыл письмо (ссылка)",
         }
         for event in clicks:
             events.append(
@@ -426,19 +449,27 @@ def family_timeline(parent_id: str) -> list[dict]:
                 }
             )
         mails = db.execute(
-            select(MailDeliveryRow.created_at, MailCampaignRow.subject, MailDeliveryRow.status)
+            select(
+                MailDeliveryRow.created_at,
+                MailCampaignRow.subject,
+                MailDeliveryRow.status,
+                MailDeliveryRow.click_count,
+            )
             .join(MailCampaignRow, MailCampaignRow.id == MailDeliveryRow.campaign_id)
             .where(MailDeliveryRow.parent_id == parent_id)
             .order_by(MailDeliveryRow.created_at.desc())
             .limit(12)
         ).all()
-        for created_at, subject, status in mails:
+        for created_at, subject, status, click_count in mails:
+            detail = "отправлено" if status == "sent" else status
+            if status == "sent" and int(click_count or 0) > 0:
+                detail = f"клик {int(click_count)}"
             events.append(
                 {
                     "ts": created_at,
                     "kind": "mail",
                     "title": subject,
-                    "detail": "отправлено" if status == "sent" else status,
+                    "detail": detail,
                 }
             )
     events.sort(key=lambda row: float(row["ts"]), reverse=True)
@@ -458,10 +489,13 @@ def campaign_effects(campaigns: Sequence[MailCampaignRow]) -> dict[str, dict]:
             )
         ).all()
         recips: dict[str, set[str]] = {}
+        clicks: dict[str, set[str]] = {}
         all_parents: set[str] = set()
         for delivery in deliveries:
             recips.setdefault(delivery.campaign_id, set()).add(delivery.parent_id)
             all_parents.add(delivery.parent_id)
+            if int(delivery.click_count or 0) > 0:
+                clicks.setdefault(delivery.campaign_id, set()).add(delivery.parent_id)
         if not all_parents:
             for row in sent:
                 out[row.id]["recipients"] = 0
@@ -517,5 +551,6 @@ def campaign_effects(campaigns: Sequence[MailCampaignRow]) -> dict[str, dict]:
                 "returned": len(returned),
                 "drew": len(drew),
                 "paid": len(paid),
+                "clicked": len(clicks.get(row.id, set())),
             }
     return out

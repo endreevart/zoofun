@@ -45,6 +45,22 @@ export function isHereCard(card: { id: string }, hereId?: string | null): boolea
   return Boolean(hereId && card.id === hereId);
 }
 
+/** Витрина сидит в том же слое, что и выбор миров. Пока она открыта, пикер не должен ловить тапы. */
+export function vitrineCoversWorlds(screen: string): boolean {
+  return screen === 'vitrine';
+}
+
+/** Own-vitrine tap must not remount the garden the child is already playing as owner. */
+export function ownVitrineRemountsGarden(
+  currentWorld: string | null,
+  destWorld: string | null | undefined,
+  guest: boolean,
+): boolean {
+  if (!destWorld) return Boolean(currentWorld);
+  if (currentWorld !== destWorld) return true;
+  return guest;
+}
+
 export function arrangeVitrine<
   T extends {
     id: string;

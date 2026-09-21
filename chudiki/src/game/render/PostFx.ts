@@ -169,9 +169,10 @@ export class PostFx {
     this.composer.addPass(this.grading);
 
     this.composer.addPass(new OutputPass());
-    if (settings.tier === 'low') {
+    if (settings.fxaa) {
       // FXAA's edge thresholds expect display-referred sRGB, after OutputPass
-      // (the order used by Three r169's official FXAA example).
+      // (the order used by Three r169's official FXAA example). One blit, not
+      // a second MSAA target.
       this.fxaa = new ShaderPass(FXAAShader);
       this.composer.addPass(this.fxaa);
     }

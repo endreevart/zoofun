@@ -10,7 +10,7 @@ import {
 import { blankEggDrawing, imageToChudik, styledToChudik } from './game/drawing/imageToChudik';
 import { portraitFromImage, portraitUrlOf, displayStillUrl, rosterPhoto } from './game/drawing/portrait';
 import { stylizeDrawing, startMesh, waitForMesh, waitForPostcard, downloadCreatureGlb } from './game/drawing/stylizeDrawing';
-import { eggCanOpen } from './game/creatures/hatch';
+import { eggCanOpen, staysInAlbum } from './game/creatures/hatch';
 import { paperizeCanvas } from './game/drawing/paperize';
 import { preloadMeshyModel } from './game/creatures/DrawingChudikBuilder';
 import {
@@ -25,6 +25,7 @@ import { PlazaToyPreview } from './ui/PlazaToyPreview';
 import { HatchPuzzle } from './ui/HatchPuzzle';
 import { CareRoom } from './ui/CareRoom';
 import { FeedFrenzy } from './ui/FeedFrenzy';
+import { assetUrl } from './assetUrl';
 import { CreatureCard } from './ui/CreatureCard';
 import { RosterSheet } from './ui/RosterSheet';
 import { TuningPanel } from './ui/TuningPanel';
@@ -68,7 +69,7 @@ import {
 } from './game/world/gardens';
 import { isConstructionSku, isDiyWorld, isHangingShell, isStudioKind, kindOfWorld, usesChildBuild } from './game/world/kinds';
 import { childCatalogForShell } from './game/world/layoutCatalog';
-import { saveLayout } from './game/world/layoutAuthored';
+import { saveLayout, type AuthoredProp } from './game/world/layoutAuthored';
 import { WalkPad } from './ui/WalkPad';
 import { CareHud } from './ui/CareHud';
 import { HudIcon } from './ui/HudIcon';
@@ -99,6 +100,7 @@ import {
 } from './game/visits/visitApi';
 import { shouldKeepFriendLawn, shouldOfferFirstDraw, shouldOfferFriendInvite } from './ui/firstDraw';
 import { hatchCanDrawAnother, hatchGardenOpensShop, hatchGardenStartsPaidMesh, hatchMeshCooking } from './ui/hatchView';
+import { rosterGardenStartsMesh } from './ui/rosterView';
 import {
   applyArcadeStamp,
   bootWorldAfterArcade,
@@ -152,6 +154,7 @@ import { greetPlazaLawn } from './game/plaza/plazaVoice';
 import {
   isPlazaToyPreparing,
   isPlazaToySku,
+  peekPlazaHold,
   rememberPlazaHold,
   type PlazaLawnToy,
 } from './game/plaza/plazaToy';
@@ -165,7 +168,16 @@ import {
   type PlazaToyDraft,
 } from './game/plaza/plazaToyDraft';
 import { commitPlazaToy, previewPlazaToy } from './game/plaza/plazaToyJob';
-import { plazaCoversWorlds, plazaKeepsGardenBed } from './game/plaza/plazaCues';
+import { PLAZA_PUBLIC, plazaCoversWorlds, plazaKeepsGardenBed } from './game/plaza/plazaCues';
+import {
+  GARDEN_TICKETS_PER_DAY,
+  localGardenMounds,
+  refillGardenMounds,
+  PLAZA_FIND_MS,
+  type PlazaMound,
+} from './game/plaza/plazaDig';
+import { digGardenCrystal, fetchGardenCrystals } from './game/garden/gardenApi';
+import { ownVitrineRemountsGarden, vitrineCoversWorlds } from './game/visits/vitrineSort';
 import { InstallHint } from './ui/InstallHint';
 
 type Screen = 'zoo' | 'draw' | 'roster' | 'preview' | 'vitrine' | 'plaza';
@@ -498,6 +510,15 @@ export function App() {
   });
   const [diyBuild, setDiyBuild] = useState(false);
   const [diyPicking, setDiyPicking] = useState(false);
+  const [crystalMounds, setCrystalMounds] = useState<PlazaMound[]>([]);
+  const [nearCrystal, setNearCrystal] = useState<string | null>(null);
+  const [crystalFound, setCrystalFound] = useState(false);
+  const [crystalFinding, setCrystalFinding] = useState(false);
+  const crystalLocal = useRef(false);
+  const crystalWins = useRef(0);
+  const crystalDigging = useRef(false);
+  const crystalFindTimer = useRef(0);
+  const crystalHinted = useRef<string | null>(null);
   const [soundOpen, setSoundOpen] = useState(false);
   const [moveDest, setMoveDest] = useState<string | null>(null);
   const [moveFrom, setMoveFrom] = useState<ChudikSpec[]>([]);
@@ -626,158 +647,200 @@ export function App() {
     if (!stage || !world) return;
 
     let cancelled = false;
-    const game = new Game(stage, {
-      onRosterChanged: (next) => setSpecs(next),
-      onCreatureTapped: (spec) => {
-        if (guestVisit) {
-          setScreen('roster');
-          return;
-        }
-        setOfferSpec(spec);
-      },
-      onCreatureHeld: (spec) => {
-        if (guestVisit) {
-          void likeCreature(spec.id);
-          return;
-        }
-        setCardSpec(spec);
-      },
-      onCareChanged: (state) => {
-        setJoy(state.joy);
-        setFeeding(state.feeding);
-      },
-    });
-    gameRef.current = game;
+    let game: Game | null = null;
+    let bootRaf = 0;
+    let bootRaf2 = 0;
 
-    void (async () => {
-      let diyProps = guestVisit
-        ? (guestVisit.props as typeof diyProps)
-        : loadDiyLayout(world);
-      if (!guestVisit && isDiyWorld(world)) {
-        const remote = await fetchRemoteDiyLayout(world);
-        if (remote) {
-          diyProps = remote;
-          saveDiyLayout(remote, world);
+    const failOpen = (live: Game | null) => {
+      live?.dispose();
+      if (gameRef.current === live) gameRef.current = null;
+      setReady(false);
+      setWorld(null);
+      if (guestVisit) {
+        setGuestVisit(null);
+        setShareId(null);
+        clearVisitUrl();
+      }
+      flash('Сад не открылся.');
+    };
+
+    const runStart = (live: Game) => {
+      void (async () => {
+        let diyProps: AuthoredProp[] = guestVisit
+          ? ((guestVisit.props as AuthoredProp[] | undefined) ?? [])
+          : loadDiyLayout(world);
+        if (!guestVisit && isDiyWorld(world)) {
+          const remote = await fetchRemoteDiyLayout(world);
+          if (remote) {
+            diyProps = remote;
+            saveDiyLayout(remote, world);
+          }
         }
-      }
-      if (cancelled) {
-        game.dispose();
-        return;
-      }
-      const kind = kindOfWorld(world);
-      const hangingStudio = isAuthoringStudio() && isHangingShell(kind.shell) && !isDiyWorld(world);
-      try {
-        await game.start({
-          world: isDiyWorld(world) ? 'diy' : 'authored',
+        if (cancelled) {
+          live.dispose();
+          return;
+        }
+        const kind = kindOfWorld(world);
+        const hangingStudio = isAuthoringStudio() && isHangingShell(kind.shell) && !isDiyWorld(world);
+        try {
+          await live.start({
+            world: isDiyWorld(world) ? 'diy' : 'authored',
+            worldId: world,
+            shell: kind.shell,
+            layoutKind: usesChildBuild(world) || hangingStudio ? 'child' : 'studio',
+            catalog: isDiyWorld(world) ? [...childCatalogForShell(kind.shell)] : undefined,
+            diyProps: isDiyWorld(world) ? diyProps : undefined,
+            guestRecords: guestVisit
+              ? guestVisit.creatures.map((row) => ({
+                  spec: guestToSpec(row),
+                  lastPosition: row.lastPosition ?? undefined,
+                }))
+              : undefined,
+            onDiyPersist: (props) => {
+              if (guestVisit) return;
+              if (isDiyWorld(world)) {
+                saveDiyLayout(props, world);
+                void putRemoteDiyLayout(props, world);
+                return;
+              }
+              if (isHangingShell(kindOfWorld(world).shell)) {
+                saveLayout(props, [], [], kindOfWorld(world).shell);
+              }
+            },
+            onProgress: (fraction) => setLoadProgress(fraction),
+          });
+        } catch (error) {
+          console.error('[world] start failed', error);
+          if (!cancelled) failOpen(live);
+          return;
+        }
+        if (cancelled) {
+          live.dispose();
+          return;
+        }
+        setReady(true);
+        if (guestVisit) {
+          setDiyBuild(false);
+          if (usesChildBuild(world)) live.setDiyBuild(false);
+          setRecordedIds(new Set());
+          return;
+        }
+        const planted = arcadeLawnPlanted(diyProps.map((prop) => prop.model));
+        const questNow = isArcadeGardenId(world)
+          ? ensurePlayableArcadeQuest(world, planted)
+          : loadOrStartArcadeQuest(world);
+        setArcadeQuest(questNow);
+        const arcadeNow = shouldRunArcade({
           worldId: world,
-          shell: kind.shell,
-          layoutKind: usesChildBuild(world) || hangingStudio ? 'child' : 'studio',
-          catalog: isDiyWorld(world) ? [...childCatalogForShell(kind.shell)] : undefined,
-          diyProps: isDiyWorld(world) ? diyProps : undefined,
-          guestRecords: guestVisit
-            ? guestVisit.creatures.map((row) => ({
-                spec: guestToSpec(row),
-                lastPosition: row.lastPosition ?? undefined,
-              }))
-            : undefined,
-          onDiyPersist: (props) => {
-            if (guestVisit) return;
-            if (isDiyWorld(world)) {
-              saveDiyLayout(props, world);
-              void putRemoteDiyLayout(props, world);
+          studio: isAuthoringStudio(),
+          force: forceArcade,
+          quest: questNow,
+        });
+        const arcadeStep = questNow.step;
+        if (arcadeNow && arcadeStep !== 'settle' && arcadeStep !== 'done') {
+          setDiyBuild(true);
+          live.setDiyBuild(true);
+        } else {
+          setDiyBuild(false);
+          if (usesChildBuild(world)) live.setDiyBuild(false);
+        }
+        setRecordedIds(new Set(live.getRecordedIds()));
+        for (const pending of live.pendingHatches()) {
+          void waitForMesh(pending.jobId)
+            .then(async (mesh) => {
+              if (!eggCanOpen(mesh.mesh, mesh.modelUrl)) {
+                if (mesh.mesh === 'deferred') {
+                  const spec = live.getSpecs().find((row) => row.id === pending.id);
+                  if (spec) {
+                    void live.keepInAlbum({
+                      ...spec,
+                      drawing: { ...pending.drawing, meshDeferred: true },
+                    });
+                  }
+                }
+                return;
+              }
+              if (mesh.modelUrl) await preloadMeshyModel(mesh.modelUrl);
+              let painted = pending.drawing;
+              if (mesh.image) {
+                const fromStyle = await styledToChudik(mesh.image);
+                if (fromStyle.ok) painted = fromStyle.drawing;
+                const portraitUrl = portraitFromImage(mesh.image);
+                if (portraitUrl) painted = { ...painted, portraitUrl };
+              }
+              const drawing = {
+                ...painted,
+                ...(mesh.modelUrl ? { modelUrl: mesh.modelUrl, placeholder: undefined } : {}),
+                ...(mesh.postcardUrl ? { postcardUrl: mesh.postcardUrl } : {}),
+                ...(mesh.mesh === 'deferred' ? { meshDeferred: true } : {}),
+              };
+              live.prepareHatch(
+                pending.id,
+                { drawing },
+                { open: eggCanOpen(mesh.mesh, mesh.modelUrl) },
+              );
+            })
+            .catch(() => {
+              // Keep the egg. The next visit polls the same job until the GLB lands.
+            });
+        }
+      })();
+    };
+
+    const boot = () => {
+      if (cancelled) return;
+      try {
+        game = new Game(stage, {
+          onRosterChanged: (next) => setSpecs(next),
+          onCreatureTapped: (spec) => {
+            if (guestVisit) {
+              setScreen('roster');
               return;
             }
-            if (isHangingShell(kindOfWorld(world).shell)) {
-              saveLayout(props, [], [], kindOfWorld(world).shell);
-            }
+            setOfferSpec(spec);
           },
-          onProgress: (fraction) => setLoadProgress(fraction),
+          onCreatureHeld: (spec) => {
+            if (guestVisit) {
+              void likeCreature(spec.id);
+              return;
+            }
+            setCardSpec(spec);
+          },
+          onCareChanged: (state) => {
+            setJoy(state.joy);
+            setFeeding(state.feeding);
+          },
+          onNearCrystal: (id) => {
+            setNearCrystal(id);
+            if (id && crystalHinted.current !== id) {
+              crystalHinted.current = id;
+              const audio = getIslandAudio();
+              void audio.unlock();
+              void audio.playCue('plaza_dig');
+            }
+            if (!id) crystalHinted.current = null;
+          },
         });
       } catch (error) {
-        console.error('[world] start failed', error);
-        if (!cancelled) {
-          game.dispose();
-          gameRef.current = null;
-          setReady(false);
-          setWorld(null);
-          if (guestVisit) {
-            setGuestVisit(null);
-            setShareId(null);
-            clearVisitUrl();
-          }
-          flash('Сад не открылся.');
-        }
+        console.error('[world] webgl failed', error);
+        if (!cancelled) failOpen(null);
         return;
       }
-      if (cancelled) {
-        game.dispose();
-        return;
-      }
-      setReady(true);
-      if (guestVisit) {
-        setDiyBuild(false);
-        if (usesChildBuild(world)) game.setDiyBuild(false);
-        setRecordedIds(new Set());
-        return;
-      }
-      const planted = arcadeLawnPlanted(diyProps.map((prop) => prop.model));
-      const questNow = isArcadeGardenId(world)
-        ? ensurePlayableArcadeQuest(world, planted)
-        : loadOrStartArcadeQuest(world);
-      setArcadeQuest(questNow);
-      const arcadeNow = shouldRunArcade({
-        worldId: world,
-        studio: isAuthoringStudio(),
-        force: forceArcade,
-        quest: questNow,
-      });
-      const arcadeStep = questNow.step;
-      if (arcadeNow && arcadeStep !== 'settle' && arcadeStep !== 'done') {
-        setDiyBuild(true);
-        game.setDiyBuild(true);
-      } else {
-        setDiyBuild(false);
-        if (usesChildBuild(world)) game.setDiyBuild(false);
-      }
-      setRecordedIds(new Set(game.getRecordedIds()));
-      for (const pending of game.pendingHatches()) {
-        if (pending.drawing.meshDeferred && !pending.drawing.modelUrl) {
-          game.prepareHatch(pending.id, { drawing: pending.drawing }, { open: true });
-          continue;
-        }
-        void waitForMesh(pending.jobId)
-          .then(async (mesh) => {
-            if (!eggCanOpen(mesh.mesh, mesh.modelUrl)) return;
-            if (mesh.modelUrl) await preloadMeshyModel(mesh.modelUrl);
-            let painted = pending.drawing;
-            if (mesh.image) {
-              const fromStyle = await styledToChudik(mesh.image);
-              if (fromStyle.ok) painted = fromStyle.drawing;
-              const portraitUrl = portraitFromImage(mesh.image);
-              if (portraitUrl) painted = { ...painted, portraitUrl };
-            }
-            const drawing = {
-              ...painted,
-              ...(mesh.modelUrl ? { modelUrl: mesh.modelUrl, placeholder: undefined } : {}),
-              ...(mesh.postcardUrl ? { postcardUrl: mesh.postcardUrl } : {}),
-              ...(mesh.mesh === 'deferred' ? { meshDeferred: true } : {}),
-            };
-            game.prepareHatch(
-              pending.id,
-              { drawing },
-              { open: eggCanOpen(mesh.mesh, mesh.modelUrl) },
-            );
-          })
-          .catch(() => {
-            // Keep the egg. The next visit polls the same job until the GLB lands.
-          });
-      }
-    })();
+      gameRef.current = game;
+      runStart(game);
+    };
+
+    // iPad Safari often refuses a second WebGL context in the same turn as dispose().
+    bootRaf = window.requestAnimationFrame(() => {
+      bootRaf2 = window.requestAnimationFrame(boot);
+    });
 
     return () => {
       cancelled = true;
+      window.cancelAnimationFrame(bootRaf);
+      window.cancelAnimationFrame(bootRaf2);
       setReady(false);
-      game.dispose();
+      game?.dispose();
       gameRef.current = null;
     };
   }, [world, guestVisit?.id]);
@@ -881,6 +944,50 @@ export function App() {
   );
   const arcadeSettle = Boolean(arcadeOn && arcadeQuest?.step === 'settle');
 
+  useEffect(() => {
+    return () => window.clearTimeout(crystalFindTimer.current);
+  }, []);
+
+  useEffect(() => {
+    setCrystalMounds([]);
+    setNearCrystal(null);
+    setNearPath(false);
+    setPathOpen(false);
+    setPathSpec(null);
+    setCrystalFound(false);
+    setCrystalFinding(false);
+    crystalWins.current = 0;
+    crystalLocal.current = false;
+    crystalHinted.current = null;
+    crystalDigging.current = false;
+    window.clearTimeout(crystalFindTimer.current);
+  }, [world]);
+
+  useEffect(() => {
+    if (!ready || !world || guestOn || arcadeBuilding) {
+      gameRef.current?.setCrystalMounds([]);
+      return;
+    }
+    let dead = false;
+    void (async () => {
+      const remote = await fetchGardenCrystals(world);
+      if (dead) return;
+      if (remote) {
+        crystalLocal.current = false;
+        setCrystalMounds(remote.mounds);
+        gameRef.current?.setCrystalMounds(remote.mounds);
+        return;
+      }
+      crystalLocal.current = true;
+      const local = localGardenMounds(world.length + 1);
+      setCrystalMounds(local);
+      gameRef.current?.setCrystalMounds(local);
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [arcadeBuilding, guestOn, ready, world]);
+
   const clearVisitUrl = useCallback(() => {
     try {
       const url = new URL(window.location.href);
@@ -894,18 +1001,23 @@ export function App() {
   const goHome = useCallback(
     (homeId?: string | null) => {
       const home = homeId || homeWorldRef.current || pickerWorlds[0]?.id || null;
+      const guest = Boolean(guestVisit);
       if (guestVisit) {
         trackAction('visit.close', { share_id: guestVisit.id, code: guestVisit.code || 0 });
       }
+      setScreen('zoo');
+      clearVisitUrl();
       setGuestVisit(null);
       setShareId(null);
       setZooCode(0);
-      setScreen('zoo');
-      clearVisitUrl();
-      if (home) setWorld(home);
-      else setWorld(null);
+      if (!home) {
+        setWorld(null);
+        return;
+      }
+      if (!ownVitrineRemountsGarden(world, home, guest)) return;
+      setWorld(home);
     },
-    [clearVisitUrl, guestVisit, pickerWorlds],
+    [clearVisitUrl, guestVisit, pickerWorlds, world],
   );
 
   const leaveToWorlds = useCallback(() => {
@@ -1259,7 +1371,7 @@ export function App() {
     gameRef.current?.focusOn(id);
     if (payMesh) {
       const spec = gameRef.current?.getSpecs().find((row) => row.id === id);
-      if (spec && !spec.drawing?.modelUrl) {
+      if (spec && staysInAlbum(spec.drawing)) {
         reviveCreatureRef.current(spec);
         return;
       }
@@ -1522,7 +1634,7 @@ export function App() {
           });
           if (isPlazaToySku(sku) || Boolean(loadPlazaToyDraft()?.jobId)) {
             trackAction('pay.result', { kind: 'plaza_toy', pending: settled.pending });
-            setScreen('plaza');
+            setScreen('zoo');
             const draft = loadPlazaToyDraft();
             if (draft?.jobId) {
               plazaToyBusy.current = true;
@@ -1705,6 +1817,82 @@ export function App() {
     return true;
   }, [flash, friendDraft, friendDraw, friendInvite, pendingBirth, remainingNow, speak, specs, stillRemainingNow, world]);
 
+  const bumpQuotaRemaining = useCallback(
+    (remaining: number) => {
+      setQuota((current) => {
+        const next = applyRemaining(current, remaining);
+        if (!next) return next;
+        const quotaTotal = Math.max(next.quotaTotal, next.used + remaining);
+        const stillQuota = stillQuotaOf(quotaTotal);
+        return {
+          ...next,
+          quotaTotal,
+          stillQuota,
+          stillRemaining: Math.max(0, stillQuota - next.stillUsed),
+        };
+      });
+      void refreshQuota();
+    },
+    [refreshQuota],
+  );
+
+  const smashGardenCrystal = useCallback(() => {
+    const id = nearCrystal;
+    const gardenId = world;
+    if (!id || !gardenId || crystalDigging.current || crystalFound || crystalFinding || diyBuild) return;
+    const hit = crystalMounds.find((item) => item.id === id);
+    crystalDigging.current = true;
+    getIslandAudio().playSfx('smash');
+    const celebrate = (remaining?: number) => {
+      speak('plaza_found');
+      if (remaining != null) bumpQuotaRemaining(remaining);
+      setCrystalFinding(true);
+      window.clearTimeout(crystalFindTimer.current);
+      crystalFindTimer.current = window.setTimeout(() => {
+        setCrystalFinding(false);
+        setCrystalFound(true);
+      }, PLAZA_FIND_MS);
+    };
+    void (async () => {
+      if (crystalLocal.current) {
+        const next = refillGardenMounds(crystalMounds.filter((item) => item.id !== id));
+        setCrystalMounds(next);
+        gameRef.current?.setCrystalMounds(next);
+        setNearCrystal(null);
+        crystalDigging.current = false;
+        if (hit && crystalWins.current < GARDEN_TICKETS_PER_DAY) {
+          crystalWins.current += 1;
+          celebrate();
+        }
+        return;
+      }
+      const body = await digGardenCrystal(gardenId, id);
+      crystalDigging.current = false;
+      if (!body) {
+        const next = refillGardenMounds(crystalMounds.filter((item) => item.id !== id));
+        setCrystalMounds(next);
+        gameRef.current?.setCrystalMounds(next);
+        setNearCrystal(null);
+        return;
+      }
+      setCrystalMounds(body.mounds);
+      gameRef.current?.setCrystalMounds(body.mounds);
+      setNearCrystal(null);
+      trackAction('world.dig', { found: body.found, world_id: gardenId });
+      if (!body.found) return;
+      celebrate(body.remaining);
+    })();
+  }, [
+    bumpQuotaRemaining,
+    crystalFinding,
+    crystalFound,
+    crystalMounds,
+    diyBuild,
+    nearCrystal,
+    speak,
+    world,
+  ]);
+
   const drawAnotherFromHatch = useCallback(() => {
     if (!canCreate()) return;
     hatchLookRef.current = null;
@@ -1736,7 +1924,7 @@ export function App() {
       setPlazaToyShop(false);
       setPlazaToyDraw(false);
       setPlazaToyLook({ src: null, toy: null });
-      setScreen('plaza');
+      setScreen('zoo');
       let signedIn = Boolean(bootstrapParentSession().token);
       if (!signedIn) {
         const token = await ensureLocalParentSession();
@@ -1792,7 +1980,7 @@ export function App() {
     setPlazaToyLook(null);
     setPlazaToyShop(false);
     setPlazaToyDraw(true);
-    setScreen('plaza');
+    setScreen('zoo');
   }, []);
 
   const holdPlazaToy = useCallback(
@@ -1832,12 +2020,20 @@ export function App() {
     [flash],
   );
 
+  useEffect(() => {
+    if (!ready || !world || guestOn || !usesChildBuild(world)) return;
+    const hold = peekPlazaHold();
+    if (!hold) return;
+    setDiyBuilding(true);
+    gameRef.current?.layoutStudio.holdToy(hold.model, hold.still_url, hold.height, hold.model_url);
+  }, [guestOn, plazaHoldRev, ready, setDiyBuilding, world]);
+
   const bakePlazaToyJob = useCallback(
     async (jobId: string, painted?: string | null) => {
       plazaToyBusy.current = true;
       setPlazaToyShop(false);
       setPlazaToyLook({ src: painted ?? null, jobId, toy: null, baking: true });
-      setScreen('plaza');
+      setScreen('zoo');
       const token = await ensureLocalParentSession();
       if (token) setParentEntry((prev) => (prev.token === token ? prev : { ...prev, token }));
       const result = await commitPlazaToy(jobId);
@@ -1988,7 +2184,7 @@ export function App() {
         };
 
         const styled = await stylizeDrawing(source, {
-          onAccepted: async ({ remaining, stillRemaining, jobId }) => {
+          onAccepted: async ({ remaining, stillRemaining, jobId, mesh }) => {
             accepted = true;
             spec.hatchJobId = jobId;
             if (typeof remaining === 'number') {
@@ -2000,7 +2196,13 @@ export function App() {
             if (typeof remaining !== 'number' && typeof stillRemaining !== 'number') {
               void refreshQuota();
             }
-            await game.addCreature(spec);
+            if (mesh === 'deferred') {
+              spec.hatching = false;
+              spec.drawing = { ...(spec.drawing ?? blankEggDrawing()), meshDeferred: true };
+              await game.keepInAlbum(spec);
+            } else {
+              await game.addCreature(spec);
+            }
             pendingBirthRef.current = false;
             setPendingBirth(false);
           },
@@ -2081,7 +2283,7 @@ export function App() {
               styled.modelUrl
                 ? 'Почти! Постучи — или подожди чуть-чуть.'
                 : styled.mesh === 'deferred'
-                  ? 'Открытка в саду. Оживить можно потом.'
+                  ? 'Открытка в «Мои зуфики». В сад — когда захочешь.'
                   : 'Картинка готова. Объём долепится в саду.',
             );
           }
@@ -2209,15 +2411,22 @@ export function App() {
         return;
       }
       if (spec.drawing?.modelUrl) return;
+      const goToEgg = () => {
+        setCardSpec(null);
+        setScreen('zoo');
+        gameRef.current?.focusOn(spec.id);
+      };
       if ((quotaRef.current?.remaining ?? 0) <= 0) {
         speak('revive_need');
         saveReviveJob(jobId);
-        setCardSpec(null);
-        setScreen('zoo');
+        goToEgg();
         setShopOpen(true);
         return;
       }
-      if (revivingJobs.current.has(jobId)) return;
+      if (revivingJobs.current.has(jobId)) {
+        goToEgg();
+        return;
+      }
       revivingJobs.current.add(jobId);
       clearReviveJob();
       setQuota((current) => spendOneCredit(current));
@@ -2232,6 +2441,7 @@ export function App() {
           if (started.reason === 'no_credits') {
             speak('revive_need');
             saveReviveJob(jobId);
+            goToEgg();
             setShopOpen(true);
             return;
           }
@@ -2242,7 +2452,14 @@ export function App() {
         if (typeof started.remaining === 'number') {
           setQuota((current) => applyRemaining(current, started.remaining ?? 0));
         }
+        const cooking = {
+          ...(spec.drawing ?? blankEggDrawing()),
+          meshDeferred: false,
+        };
+        spec.drawing = cooking;
         const game = gameRef.current;
+        await game?.plantEgg({ ...spec, drawing: cooking });
+        goToEgg();
         const openMesh = async (modelUrl: string) => {
           await preloadMeshyModel(modelUrl);
           const drawing = {
@@ -2266,8 +2483,6 @@ export function App() {
             });
           flash('Лепится в саду.');
         }
-        setCardSpec(null);
-        setScreen('zoo');
       } catch {
         release();
         speak('error');
@@ -2492,40 +2707,34 @@ export function App() {
     Boolean(busy) ||
     plazaToyDraw ||
     Boolean(plazaToyLook) ||
-    plazaToyShop;
-
-  const showSiteNav =
-    Boolean(world) &&
-    ready &&
-    screen === 'zoo' &&
-    (!overlayOpen || arcadeSettle || arcadeBuilding);
+    plazaToyShop ||
+    crystalFound ||
+    crystalFinding;
 
   return (
     <div className={cinema ? 'app is-cinema' : 'app'} ref={appRef}>
       <div className="stage" ref={stageRef} />
-      {showSiteNav || (ready && world && !arcadeBuilding) ? (
+      {ready && world && !arcadeBuilding && screen === 'zoo' ? (
         <div className="island-top">
-          {ready && world ? (
-            <HeartHud
-              hearts={gardenJoy}
-              code={zooCode}
-              guest={guestOn}
-              catchup={heartCatchup}
-              onWorlds={leaveToWorlds}
-              onHeart={arcadeBuilding ? undefined : () => likeGarden()}
-              onShare={arcadeBuilding || guestOn ? undefined : () => void shareGarden()}
-              onVitrine={
-                arcadeBuilding
-                  ? undefined
-                  : () => {
-                      setToast(null);
-                      void refreshVitrine();
-                      setScreen('vitrine');
-                    }
-              }
-              onLogout={parentEntry.token ? () => setLogoutGate(true) : undefined}
-            />
-          ) : null}
+          <HeartHud
+            hearts={gardenJoy}
+            code={zooCode}
+            guest={guestOn}
+            catchup={heartCatchup}
+            onWorlds={leaveToWorlds}
+            onHeart={arcadeBuilding ? undefined : () => likeGarden()}
+            onShare={arcadeBuilding || guestOn ? undefined : () => void shareGarden()}
+            onVitrine={
+              arcadeBuilding
+                ? undefined
+                : () => {
+                    setToast(null);
+                    void refreshVitrine();
+                    setScreen('vitrine');
+                  }
+            }
+            onLogout={parentEntry.token ? () => setLogoutGate(true) : undefined}
+          />
         </div>
       ) : null}
 
@@ -2541,7 +2750,9 @@ export function App() {
         />
       ) : null}
 
-      {!world && !plazaCoversWorlds(screen, plazaToyDraw, Boolean(plazaToyLook) || plazaToyShop) ? (
+      {!world &&
+      !vitrineCoversWorlds(screen) &&
+      !plazaCoversWorlds(screen, plazaToyDraw, Boolean(plazaToyLook) || plazaToyShop) ? (
         <WorldPicker
           worlds={pickerWorlds}
           onOpen={(id) => {
@@ -2562,11 +2773,15 @@ export function App() {
             void refreshVitrine();
             setScreen('vitrine');
           }}
-          onPlaza={() => {
-            setToast(null);
-            greetPlazaLawn();
-            setScreen('plaza');
-          }}
+          onPlaza={
+            PLAZA_PUBLIC
+              ? () => {
+                  setToast(null);
+                  greetPlazaLawn();
+                  setScreen('plaza');
+                }
+              : undefined
+          }
         />
       ) : null}
 
@@ -2623,28 +2838,14 @@ export function App() {
         />
       ) : null}
 
-      {screen === 'plaza' ? (
+      {PLAZA_PUBLIC && screen === 'plaza' ? (
         <PlazaYard
           holdRev={plazaHoldRev}
           onLeave={() => {
             setScreen('zoo');
           }}
           onError={flash}
-          onCredit={(remaining) => {
-            setQuota((current) => {
-              const next = applyRemaining(current, remaining);
-              if (!next) return next;
-              const quotaTotal = Math.max(next.quotaTotal, next.used + remaining);
-              const stillQuota = stillQuotaOf(quotaTotal);
-              return {
-                ...next,
-                quotaTotal,
-                stillQuota,
-                stillRemaining: Math.max(0, stillQuota - next.stillUsed),
-              };
-            });
-            void refreshQuota();
-          }}
+          onCredit={bumpQuotaRemaining}
           onDraw={() => {
             const home = readHomeWorld() || WORLD_AUTHORED;
             writeHomeWorld(home);
@@ -2765,6 +2966,46 @@ export function App() {
             <WalkPad onWalk={walkPad} />
           )}
 
+          {nearCrystal &&
+          !guestOn &&
+          !diyBuild &&
+          !diyPicking &&
+          !arcadeBuilding &&
+          !arcadeSettle &&
+          !crystalFound &&
+          !crystalFinding &&
+          !offerSpec &&
+          !cardSpec &&
+          !showDrawPrompt ? (
+            <button className="plaza-dig garden-dig" type="button" aria-label="Ломать" onClick={smashGardenCrystal}>
+              🔨
+            </button>
+          ) : null}
+
+          {crystalFound && !showDrawPrompt ? (
+            <FirstDrawPrompt
+              again
+              onDraw={() => {
+                if (!canCreate()) return;
+                setCrystalFound(false);
+                speak('draw');
+                trackAction('first_draw.draw', { from: 'crystal' });
+                setScreen('draw');
+              }}
+              onPhoto={() => {
+                if (!canCreate()) return;
+                setCrystalFound(false);
+                speak('photo');
+                trackAction('photo.open', { from: 'crystal' });
+                fileInputRef.current?.click();
+              }}
+              onClose={() => {
+                setCrystalFound(false);
+                trackAction('first_draw.close', { from: 'crystal' });
+              }}
+            />
+          ) : null}
+
           {offerSpec && !driving && !cardSpec && !guestOn && (
             <PilotChoice
               spec={offerSpec}
@@ -2832,9 +3073,19 @@ export function App() {
               game={gameRef.current}
               building={diyBuild}
               arcade={arcadeBuilding || arcadeSettle}
+              toysWant={plazaHoldRev}
               onSetBuild={setDiyBuilding}
               onPicking={setDiyPicking}
               onSpeak={speak}
+              onDrawToy={
+                usesChildBuild(world)
+                  ? () => {
+                      setPlazaToyDraw(true);
+                      speak('plaza_draw');
+                      trackAction('plaza.toy_draw');
+                    }
+                  : undefined
+              }
               onSave={async () => {
                 const gardenId = world;
                 const game = gameRef.current;
@@ -2978,14 +3229,14 @@ export function App() {
 
       {(screen === 'draw' || plazaToyDraw) && (
         <DrawPad
-          title={plazaToyDraw ? 'Нарисуй штуку для поляны' : undefined}
+          title={plazaToyDraw ? 'Нарисуй штуку для сада' : undefined}
           doneLabel={plazaToyDraw ? 'Далее' : undefined}
           onCancel={() => {
             friendDrawRef.current = false;
             setFriendDraw(false);
             if (plazaToyDraw) {
               setPlazaToyDraw(false);
-              setScreen('plaza');
+              setScreen('zoo');
               return;
             }
             setScreen('zoo');
@@ -3114,6 +3365,7 @@ export function App() {
             track('roster.garden', { id: spec.id });
             setScreen('zoo');
             gameRef.current?.focusOn(spec.id);
+            if (rosterGardenStartsMesh(spec)) void reviveCreature(spec);
           }}
           onDownloadGlb={(spec) => void saveCreatureGlb(spec)}
         />

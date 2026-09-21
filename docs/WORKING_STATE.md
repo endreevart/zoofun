@@ -4,7 +4,7 @@ Operational snapshot for agents and humans continuing the commercial web launch.
 Product truth stays in `PRODUCT.md`, `DECISIONS.md`, and `docs/adr/`.
 If this file and those disagree, stop and surface the mismatch.
 
-Last assembled: 2026-09-19.
+Last assembled: 2026-09-20.
 
 ## What we are shipping
 
@@ -72,7 +72,7 @@ bank state, Alembic logging, Tripo EU proxy, Flux + Tripo 3.0 hatch.
 2. Safety gate (OpenRouter / Gemini) labels `drawing` or `pet` (D-025 / ADR-0025). Uncertain → drawing. Gate down → drawing.
 3. Flux.2 Pro still: contour clay-felt for drawings; silly silhouette for a clear real pet photo.
 4. Egg in the garden + 4 then 9 piece puzzle while the **first** mesh runs.
-5. Mesh: Tripo 3.0 → one retry Tripo 2.5 → Meshy 7. RU host uses `OPENROUTER_HTTP_PROXY` (Tripo can override `TRIPO_HTTP_PROXY`). A transport timeout counts as a Tripo failure. The first free 3D starts Tripo with the still. Later drawings stop at a volumetric postcard (`mesh_status=deferred`) until hatch «В сад!» or «Оживить» spends leftover 3D (D-031). A delayed paid mesh must not open that standee as the 3D result.
+5. Mesh: Tripo 3.0 → one retry Tripo 2.5 → Meshy 7. RU host uses `OPENROUTER_HTTP_PROXY` (Tripo can override `TRIPO_HTTP_PROXY`). A transport timeout counts as a Tripo failure. The first free 3D starts Tripo with the still and waits as an egg. Later drawings stop at a hatch postcard (`mesh_status=deferred`) and stay in «Мои зуфики» until hatch «В сад!», roster «В сад», or «Оживить» spends leftover 3D (D-031); the lawn egg appears then. No 3D remaining → PackSheet. A delayed paid mesh must not open a cookie cutout as the 3D result.
 6. Quiet extra still: garden postcard (`postcard.png`). Original upload is deleted after the still.
 7. Public marketing strip may show those postcards only (`GET /v1/public/garden`, D-022). Never the original drawing or pet photo. Not a social gallery.
 
@@ -94,7 +94,7 @@ Arcade (D-027): built, hidden on prod (`ARCADE_PUBLIC = false`). First garden is
 
 Guest visits (D-028): `GET /v1/public/zoos`, `?visit=`, hearts on garden and Zufiks, joy lighting + air, vitrine. No original drawings, no guest download. A guest walk does not write host toys into the visitor's zoo; `PUT /v1/zoo` drops a mesh whose stylize job belongs to another family.
 
-Shared lawn (D-029 / ADR-0029, D-030 / ADR-0030, D-032 / ADR-0032): «Общий зоопарк» from the worlds picker, living Zufik, rooms of 8, pictograms (`hello` `hooray` `wow` `love` `laugh` `play`). Other seated toys load the hosted mesh (`GET /v1/plaza/models/{spec_id}`) when it exists, else a stylized still; original drawings stay hidden. iPad/tablet uses the cheap quality tier on this lawn. Picker cards use garden postcards. No living Zufik → draw/photo pad and `plaza_need`. One global catalog lawn: everyone sees catalog stamps and anyone seated may place/move/delete those (`GET/POST/PATCH/DELETE /v1/plaza/stamps`, `stamps_rev` on heartbeat). Cap 400; oldest catalog stamps vanish so a later tree can land; paid toys stay. The island loads meshes and draws shadows only near the walking child. Personal drawing-toys (`plaza_toy_1` 59 ₽, tray «Моё») are owner-only lawn objects: OpenRouter still, then Tripo GLB, cap 10 purchased toys per family; a toy in «Моё» stays pickable and may be stamped many times, and those copies count toward 400. Paint preview is free; «Разместить за 59 ₽» always opens the parent gate, then T-Bank (or a local `granted` slot). After pay the island commits the standee, puts it in «Моё», holds a preparing ghost on the lawn, and grows the mesh. Local `ENVIRONMENT=development` grants that slot without T-Bank so paint → gift → Tripo can be tested on the lawn. Stamps auto-save (no Save button). Personal crystals (`crystal.glb`): 30 scattered across a ~280 m walkable lawn, smash refill through the day, tickets only in eight of them; smash in the centre; 8 generation credits per Moscow day for everyone (`POST /v1/plaza/dig`, `TICKETS_PER_DAY`). A find lifts a glowing ticket on the lawn for a few seconds (everyone sees it), then opens the garden draw/photo pad. Hop on this lawn; no jump into another garden. Not a shop biome. Large grass plane until a small `plaza.glb` exists. Record `plaza_*.mp3` from `chudiki/src/game/audio/cues.ts`; missing files stay silent. Walk / jump / emoji / stamp / smash hits are synth (`plazaSfx.ts`).
+Shared lawn (D-029 / ADR-0029, D-030 / ADR-0030, D-032 / ADR-0032): APIs stay; «Общий зоопарк» is hidden from the worlds picker (`PLAZA_PUBLIC=false`). Personal drawing-toys (`plaza_toy_1` 59 ₽, tray «Моё») are owner-only objects in purchased DIY construction zoos: OpenRouter still, then Tripo GLB, cap 10 purchased toys per family; a toy in «Моё» stays pickable and may be stamped many times in that garden layout. Paint preview is free; «Разместить за 59 ₽» always opens the parent gate, then T-Bank (or a local `granted` slot). After pay the island commits the standee, puts it in «Моё», holds a preparing ghost in the garden, and grows the mesh. Local `ENVIRONMENT=development` grants that slot without T-Bank so paint → gift → Tripo can be tested in a DIY zoo. Guest walks and the heart vitrine are D-028. A tap on your own vitrine card must not remount that garden or wait forever on layout GET. Family islands (authored and owned DIY) keep five smashable crystals; two 3D credits a day per zoo (`GET/POST /v1/zoo/crystals`, table `world_tickets`). Guests do not smash. Arcade and DIY-build hide the hammer.
 
 Chudiki still has a local **cove** mock (`world_diy_cove`) that is **not** in `backend/app/worlds.py` and must not be sold (D-021).
 
@@ -113,19 +113,19 @@ Seed packs in `backend/app/persistence/db.py`:
 
 D-024 / island UI (`chudiki/src/ui/packShop.ts`): after the free Zufik, offer `pack_1` and `pack_5` («Выгоднее»). Larger packs stay behind a quiet expand. **DB `featured` on pack_10 and the island UI disagree** until an operator/catalog fix.
 
-D-026 / ADR-0026: hatch «Нарисовать ещё» stays while stills remain. Leftover 3D starts Tripo on «В сад!»; when 3D remaining is 0 that button opens PackSheet (`pack_1` / `pack_5`). After the last still, a huge «Создать друга» still opens the pad with remaining 0. Closing it leaves a lawn chip until they draw or pay. «Оживить» stores a local draft and then opens PackSheet. Decline leaves a waiting paper («Ему будет скучно»). Stylize/egg wait for a credit. Later empty-quota visits draw the friend first; the parent `+` still opens the shop.
+D-026 / ADR-0026: hatch «Нарисовать ещё» stays while stills remain. Leftover 3D starts Tripo on «В сад!» (hatch or roster) and plants the egg then; when 3D remaining is 0 that button opens PackSheet (`pack_1` / `pack_5`) and does not plant. After the last still, a huge «Создать друга» still opens the pad with remaining 0. Closing it leaves a lawn chip until they draw or pay. «Оживить» stores a local draft and then opens PackSheet. Decline leaves a waiting paper («Ему будет скучно»). Stylize/egg wait for a credit. Later empty-quota visits draw the friend first; the parent `+` still opens the shop.
 
 D-027 / ADR-0027: first empty garden is free. Arcade voice leads a short build, then the same settle path. Catalog is still D-024 (`pack_1` / `pack_5`). Authored lawns stay in the picker.
 
-Promocodes (D-023): percent or fixed RUB on generation packs, DIY worlds, and `plaza_toy_1`. Quote must error instead of silently charging full price. CRM CRUD on the same Postgres. SQLAdmin `/staff` remains the write console for credits and list prices.
+Promocodes (D-023): percent or fixed RUB on generation packs, DIY worlds, and `plaza_toy_1`. Quote must error instead of silently charging full price. CRM CRUD on the same Postgres. SQLAdmin `/staff` remains the write console for credits and list prices. API startup keeps `PRIVET` (25%, not `pack_1`, not `plaza_toy_1`).
 
 Settlement trusts T-Bank `GetState`, not the notification alone (commits `e0408c6`, `35d469d`).
 
 ## CRM and analytics
 
 - `crm.zooo.fun` — Vue 3, operator login, same ledger.
-- Funnels, traffic, usage, parents, creatures, packs, promos, payments, mail, ops (stuck meshes, abandoned checkout, family timeline). Return funnel + 1/7/30 % and a days control. Growth speed is how fast new families appear.
-- Consented parent mail, cooldown rules, 48h effect **without** open-pixels.
+- Funnels, traffic, usage, parents, creatures, packs, promos, payments, mail, ops (stuck meshes, abandoned checkout, family timeline). Return funnel + 1/7/30 % and a days control. Growth speed is how fast new families appear. Plaza funnel + a features page for the shared lawn, drawing-toys (Штуки), and postcard-only stills. Plaza and island cards count families (accounts); sessions are a separate visit number. Live plaza is who sits on the lawn now; live island is a recent heartbeat minus those on the plaza.
+- Consented parent mail, cooldown rules, 48h effect **without** open-pixels. Each sent mail has a personal hop link; CRM counts clicks, island return, draw, and pay. Return offers are drafts; the operator sends. Seeded code `PRIVET` is 25% on packs 5/10/15/20 and DIY worlds; it does not apply to `pack_1` or `plaza_toy_1`. Offer templates already name that code.
 - Cookie banner + first-party site visits. `/play`, `/zoo`, `/island` hide the banner. `/island` loads Metrika webvisor unless the parent chose necessary-only. `/play` still posts a first-party `play.open` hop.
 - Island always sends product events (screens, shop, draw blocks/fails, visit, care, friend, arcade). The API also writes `auth.*`, `shop.checkout` / `shop.paid` / `shop.pay_fail` into the same `analytics_events` so cookie refusal or a closed tab does not hide the money path. No names, drawings, or mail in the payload.
 
@@ -205,7 +205,7 @@ Clients must never hold provider, T-Bank, SMTP, or operator secrets.
 
 ## Hard constraints (do not “helpfully” add)
 
-- No friends list, chat, account discovery, StoreKit, subscriptions, foreign acquiring. Guest hearts/vitrine are D-028. Shared lawn emoji is D-029. Personal lawn 3D toys are D-032.
+- No friends list, chat, account discovery, StoreKit, subscriptions, foreign acquiring. Guest hearts/vitrine are D-028. Shared lawn emoji is D-029 (picker hidden). Personal DIY 3D toys are D-032.
 - No new island kind without assets + a decision.
 - No OpenRouter / T-Bank / SMTP keys in Unity, island, website bundle, or MCP.
 - Do not publish, deploy, merge, or change production data without an explicit ask.

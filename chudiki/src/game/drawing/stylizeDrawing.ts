@@ -254,6 +254,7 @@ export async function stylizeDrawing(
       remaining?: number;
       stillRemaining?: number;
       jobId: string;
+      mesh: MeshStatus;
     }) => void | Promise<void>;
   },
 ): Promise<StylizeResult> {
@@ -282,6 +283,7 @@ export async function stylizeDrawing(
       remaining: remainingFromJob(created),
       stillRemaining: stillRemainingFromJob(created),
       jobId: created.job_id,
+      mesh: meshFromJob(created),
     });
     const deadline = performance.now() + MAX_WAIT_MS;
     let job = created;

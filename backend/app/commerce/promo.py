@@ -18,6 +18,12 @@ CODE_RE = re.compile(r"^[A-Z0-9_-]{3,24}$")
 GENERATION_PACK_IDS = tuple(f"pack_{n}" for n in PACK_SIZES)
 WORLD_SKUS = tuple(kind.construction_sku for kind in ISLAND_KINDS)
 SHOP_SKU_IDS = (*GENERATION_PACK_IDS, *WORLD_SKUS, PLAZA_TOY_1)
+PRIVET_CODE = "PRIVET"
+PRIVET_PERCENT = 25
+PRIVET_EXCLUDED = frozenset({"pack_1", PLAZA_TOY_1})
+PRIVET_NOTE = (
+    "25% на пакеты 5–20 и острова. Не на одного зуфика и не на штуки для поляны."
+)
 
 
 class QuoteError(ValueError):
@@ -40,6 +46,10 @@ class Quote:
     discount_rub: int
     promo_code: str
     list_price_rub: int
+
+
+def privet_pack_ids() -> list[str]:
+    return [sku for sku in SHOP_SKU_IDS if sku not in PRIVET_EXCLUDED]
 
 
 def normalize_code(raw: object) -> str:
@@ -149,6 +159,33 @@ def quote_pack(pack, promo_code: str | None) -> Quote:
         promo_code=code,
         list_price_rub=list_price,
     )
+
+
+def ensure_named_promos() -> None:
+    """Keep the return-mail code PRIVET on the same ledger as packs."""
+    packs = privet_pack_ids()
+    with session() as db:
+        row = db.get(PromoCodeRow, PRIVET_CODE)
+        if row is None:
+            db.add(
+                PromoCodeRow(
+                    code=PRIVET_CODE,
+                    kind="percent",
+                    value=PRIVET_PERCENT,
+                    max_redemptions=0,
+                    starts_at=None,
+                    ends_at=None,
+                    active=True,
+                    created_at=time.time(),
+                    note=PRIVET_NOTE,
+                    pack_ids=packs,
+                )
+            )
+            return
+        row.kind = "percent"
+        row.value = PRIVET_PERCENT
+        row.pack_ids = packs
+        row.note = PRIVET_NOTE
 
 
 def list_promos() -> list[dict]:

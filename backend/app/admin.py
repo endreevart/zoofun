@@ -97,8 +97,24 @@ class ParentAdmin(UnixDates, ModelView, model=ParentRow):
         ParentRow.last_login_at: "Последний вход",
         ParentRow.children: "Дети",
         ParentRow.payments: "Платежи",
+        ParentRow.worlds: "Острова",
+        ParentRow.owned_worlds: "Купленные SKU",
+        ParentRow.diy_layouts: "Расстановки",
+        ParentRow.plaza_toy_quota: "Лимит штук поляны",
+        ParentRow.plaza_toy_used: "Штук поляны",
+        ParentRow.plaza_credit_at: "Кредит поляны",
+        ParentRow.marketing_consent_at: "Согласие на письма",
+        ParentRow.utm_source: "UTM source",
+        ParentRow.utm_campaign: "UTM campaign",
+        ParentRow.utm_content: "UTM content",
     }
     form_include_pk = True
+    form_excluded_columns = [
+        ParentRow.children,
+        ParentRow.payments,
+        ParentRow.worlds,
+        ParentRow.diy_layouts,
+    ]
     can_export = True
 
     async def on_model_change(self, data, model, is_created, request) -> None:
@@ -123,6 +139,7 @@ class ChildAdmin(UnixDates, ModelView, model=ChildRow):
         ChildRow.creatures: "Животные",
     }
     form_include_pk = True
+    form_excluded_columns = [ChildRow.creatures]
     can_export = True
 
 
@@ -150,6 +167,7 @@ class CreatureAdmin(UnixDates, ModelView, model=CreatureRow):
         CreatureRow.child: "Ребёнок",
     }
     form_include_pk = True
+    form_excluded_columns = [CreatureRow.payload]
     can_export = True
 
 
@@ -275,6 +293,7 @@ class FamilyWorldAdmin(UnixDates, ModelView, model=WorldRow):
         WorldRow.parent: "Родитель",
     }
     form_include_pk = True
+    form_excluded_columns = [WorldRow.layout]
     can_export = True
     can_create = False
     can_delete = False

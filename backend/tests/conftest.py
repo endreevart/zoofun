@@ -43,9 +43,11 @@ def _reset_rate_limits() -> None:
     otp.reset()
     reset_outbox()
     reset_plaza()
+    from app.garden.crystals import reset_crystals
     from app.plaza.digs import reset_digs
 
     reset_digs()
+    reset_crystals()
 
 
 @pytest.fixture(autouse=True)

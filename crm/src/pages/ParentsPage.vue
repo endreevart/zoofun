@@ -23,6 +23,7 @@
               <CrmSortTh label="Почта" :active="sort === 'email'" :dir="order" @sort="toggle('email')" />
               <CrmSortTh label="Кредиты" :active="sort === 'remaining'" :dir="order" @sort="toggle('remaining')" />
               <CrmSortTh label="Звери" :active="sort === 'creatures'" :dir="order" @sort="toggle('creatures')" />
+              <th>Штуки</th>
               <CrmSortTh label="Письма" :active="sort === 'consent'" :dir="order" @sort="toggle('consent')" />
               <CrmSortTh label="Последний вход" :active="sort === 'last_login'" :dir="order" @sort="toggle('last_login')" />
               <CrmSortTh label="Создан" :active="sort === 'created'" :dir="order" @sort="toggle('created')" />
@@ -77,6 +78,7 @@
                   />
                 </div>
               </th>
+              <th></th>
               <th>
                 <select v-model="consent" class="mail-input" @change="search">
                   <option value="">все</option>
@@ -110,6 +112,7 @@
               <td class="py-2">{{ row.email }}</td>
               <td>{{ row.remaining }} / {{ row.still_remaining ?? "—" }}</td>
               <td>{{ row.creatures }}</td>
+              <td>{{ row.plaza_toys ?? 0 }}</td>
               <td>{{ row.marketing_consent ? "да" : "нет" }}</td>
               <td>
                 <span class="login-flag" :class="'is-' + loginFlag(row.last_login_at)">
@@ -120,7 +123,7 @@
               <td>{{ formatWhen(row.created_at) }}</td>
             </tr>
             <tr v-if="!items.length">
-              <td colspan="6" class="text-muted py-3">Никого не нашли.</td>
+              <td colspan="7" class="text-muted py-3">Никого не нашли.</td>
             </tr>
           </tbody>
         </table>
@@ -136,7 +139,8 @@
             Кредиты
             <CrmHelp text="3D — сколько оживлений осталось. Картинки — гармонизации. Удаление зверя ничего не возвращает. Первый 3D бесплатный, с ним 10 картинок." />
           </span>
-          <br />{{ card.parent.remaining }} 3D · {{ card.parent.still_remaining ?? "—" }} картинок
+          <br />{{ card.parent.remaining }} 3D · {{ card.parent.still_remaining ?? "—" }} картинок ·
+          {{ card.parent.plaza_toys ?? 0 }} штук
         </p>
         <p class="m-0">
           <span class="parent-field-label">

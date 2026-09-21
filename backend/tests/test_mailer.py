@@ -33,6 +33,7 @@ def test_broadcast_mail_escapes_body_and_has_unsubscribe() -> None:
     assert "unsubscribe?t=abc" in html
     assert "{{BODY}}" not in html
     assert "{{SUBJECT}}" not in html
+    assert "{{HOP}}" not in html
 
 
 def test_broadcast_html_keeps_photo_and_strips_script() -> None:
@@ -49,3 +50,18 @@ def test_broadcast_html_keeps_photo_and_strips_script() -> None:
     assert "onerror" not in html
     assert "<script" not in html.lower().replace("&lt;script", "")
     assert "Привет" in html
+
+
+def test_broadcast_mail_personal_hop() -> None:
+    hop = "https://zooo.fun/api/zoo/v1/public/mail-go/" + ("ab" * 16)
+    subject, plain, html = broadcast_parts(
+        "Сад",
+        "Можно нарисовать ещё.\n\n{{link}}",
+        unsub="https://zooo.fun/api/zoo/v1/public/unsubscribe?t=abc",
+        hop=hop,
+    )
+    assert subject == "Сад"
+    assert hop in plain
+    assert "Открыть сад" in html
+    assert hop in html
+    assert "parent_id=" not in html

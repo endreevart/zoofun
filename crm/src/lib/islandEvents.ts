@@ -70,6 +70,19 @@ const LABELS: Record<string, string> = {
   "hud.actions": "Открыл действия",
   "page.view": "Открыл страницу",
   "play.open": "Нажал «играть» на сайте",
+  "plaza.open": "Открыл общий зоопарк",
+  "plaza.enter": "Зашёл на поляну",
+  "plaza.emote": "Смайлик на поляне",
+  "plaza.dig": "Копал на поляне",
+  "world.dig": "Копал кристалл в саду",
+  "path.open": "Открыл тропинку",
+  "path.done": "Прошёл тропинку",
+  "plaza.toy_draw": "Рисует штуку",
+  "plaza.toy_start": "Начал штуку",
+  "plaza.toy_preview": "Превью штуки",
+  "plaza.toy_commit": "Оставил штуку",
+  "plaza.toy_pay": "Оплата штуки",
+  "mail.click": "Открыл письмо (ссылка)",
 };
 
 export function eventLabel(event: string) {

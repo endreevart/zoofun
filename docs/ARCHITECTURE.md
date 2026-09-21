@@ -25,7 +25,7 @@
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Creation credits and a T-Bank purchase ledger are in scope (D-016 / ADR-0006). StoreKit stays out. The first `world_diy_garden` is granted on `GET /v1/auth/me` (D-027); later garden copies stay D-020. Further islands are D-021 kinds (authored shell + construction SKU); `garden`, `meadow`, and `grove` (Куболесье) are in the catalog. The island arcade is a quest layer on that first empty garden, not a new world. Guest walks and the heart vitrine are D-028 (`GET /v1/public/zoos`). The shared lawn is D-029 (`/v1/plaza`, rooms of 8, Redis seats, emoji only, hosted mesh or stylized still for other toys, one global stamp lawn via REST poll, cap 400 with oldest catalog stamps yielding). Personal drawing-toys are D-032 (`/v1/plaza/toys`, `plaza_toy_1` 59 ₽, still then Tripo mesh, owner-only stamps). Plaza mounds (D-030) are personal hunts of 30 crystals on a ~280 m walkable lawn; `POST /v1/plaza/dig` may grant a generation credit from a global pool of 8 per Moscow day (`plaza_meta.ticket_used`).
+Creation credits and a T-Bank purchase ledger are in scope (D-016 / ADR-0006). StoreKit stays out. The first `world_diy_garden` is granted on `GET /v1/auth/me` (D-027); later garden copies stay D-020. Further islands are D-021 kinds (authored shell + construction SKU); `garden`, `meadow`, and `grove` (Куболесье) are in the catalog. The island arcade is a quest layer on that first empty garden, not a new world. Guest walks and the heart vitrine are D-028 (`GET /v1/public/zoos`). The shared lawn is D-029 (`/v1/plaza`, rooms of 8, Redis seats, emoji only; picker banner hidden via `PLAZA_PUBLIC`). Personal drawing-toys are D-032 (`/v1/plaza/toys`, `plaza_toy_1` 59 ₽, still then Tripo mesh, placed in DIY construction layouts). Island crystals (D-030) are personal hunts of 5 prisms per family zoo; `POST /v1/zoo/crystals/dig` may grant a generation credit from that zoo's pool of 2 per Moscow day (`world_tickets`). Plaza mounds stay in `/v1/plaza/dig` (30 / 8 global) while that lawn is hidden.
 
 ## Client boundaries
 
@@ -59,7 +59,7 @@ The island is installable as a home-screen web app (D-033): Chromium prompt on `
 
 Cookie consent on the marketing site enables first-party `source=site` events and Yandex Metrika. Child paths `/play`, `/zoo`, and `/island` do not show the banner. The playable `/island` loads the same Metrika counter with webvisor unless the parent chose necessary-only. `/play` still posts a first-party hop (`play.open`) with the parent session so CRM can see the handoff. Island sessions also send product events (screens, shop, draw blocks/fails, visit, care, friend). The API records auth and checkout/paid/fail into the same table. Payloads are ids and counts, not names or drawings.
 
-CRM at `crm.zooo.fun` reads the same ledger. It may send consented parent mail (composite audience sets) and CRUD promocodes. SQLAdmin `/staff` stays the write console for credits and pack prices. There is no second cash register.
+CRM at `crm.zooo.fun` reads the same ledger. Plaza and island cards count families; sessions stay a separate visit number; live seats show who is on the lawn or in the garden now. It may send consented parent mail (composite audience sets, personal hop links, no open-pixels) and CRUD promocodes. SQLAdmin `/staff` stays the write console for credits and pack prices. There is no second cash register.
 
 ## Backend boundaries
 
@@ -89,7 +89,7 @@ In scope for the web API: generation-credit ledger and T-Bank payments. StoreKit
 - `creatures`: one row per generated creature (drawing or pet photo). Queryable facts are columns (`world_id`, painted, still, mesh, `still_url`, `model_url`, last position). `payload` is leftover island JSON. Stills are files under `creatures/{child_id}/{spec_id}.png`, served at `GET /v1/zoo/creatures/{id}/portrait` for the signed-in child. CRM never reads the still blob to list the gallery.
 - `analytics_events`: `world_id` and `path` are columns; JSON `p` stays for the rest of the event.
 - `mail_sets` / `mail_rules` / `mail_campaigns` / `mail_deliveries`: consented parent mail. Conditions are SQL filters; campaign recipes combine named sets. A rule sends one set on a cooldown.
-- `promo_codes`: pack and construction-world discounts. Empty `pack_ids` is all generation packs and `world_diy_*`; a list is a subset. `payments.promo_code` and `discount_rub` record what T-Bank charged.
+- `promo_codes`: pack, construction-world, and `plaza_toy_1` discounts. Empty `pack_ids` is every shop SKU; a list is a subset. Seeded `PRIVET` is 25% on packs 5–20 and DIY worlds, not `pack_1` or `plaza_toy_1`. `payments.promo_code` and `discount_rub` record what T-Bank charged.
 - `parent_sessions` / `operator_sessions`: bearer tokens with expiry.
 - `generation_jobs`: asynchronous state, attempts, provider metadata, and errors.
 - `artifacts`: original, normalized input, final texture, manifest, and narration references.
@@ -113,7 +113,7 @@ Any processing state → retry_wait → same/next safe state
 Any terminal validation failure → failed
 ```
 
-Transitions are persisted. Worker retries must be idempotent. Duplicate client submission must not create a second job. A signed-in parent reserves one 3D credit on the first job, or one still credit on later jobs, after the drawing safety gate (D-031). Plaza-toy jobs (`purpose=plaza_toy`) skip postcard. Preview paints without mesh. `POST /v1/plaza/toys/commit` spends `plaza_toy_used`, stores the standee, and starts Tripo without spending `quota_total`. The gate also labels the upload `drawing` or `pet` (D-025). The job payload echoes `remaining` and `still_remaining` after that reserve and a `mesh_status` (`pending` / `ready` / `skipped` / `failed` / `deferred`) so the island can lock the chips immediately. The still marks the job ready; the first egg stays until the GLB is stored. Later jobs may stay `deferred` as a postcard until Revive. Mesh retries and broker redelivery must not substitute a 2.5D standee for a paid mesh that is only delayed.
+Transitions are persisted. Worker retries must be idempotent. Duplicate client submission must not create a second job. A signed-in parent reserves one 3D credit on the first job, or one still credit on later jobs, after the drawing safety gate (D-031). Plaza-toy jobs (`purpose=plaza_toy`) skip postcard. Preview paints without mesh. `POST /v1/plaza/toys/commit` spends `plaza_toy_used`, stores the standee, and starts Tripo without spending `quota_total`. The gate also labels the upload `drawing` or `pet` (D-025). The job payload echoes `remaining` and `still_remaining` after that reserve and a `mesh_status` (`pending` / `ready` / `skipped` / `failed` / `deferred`) so the island can lock the chips immediately. The still marks the job ready; the first egg stays until the GLB is stored. Later jobs may stay `deferred` as a hatch postcard in «Мои зуфики» until leftover 3D starts; the lawn does not extrude that still. Mesh retries and broker redelivery must not substitute a 2.5D standee for a paid mesh that is only delayed.
 
 ## Runtime creature structure
 

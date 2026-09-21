@@ -31,13 +31,21 @@
       />
       <StatCard icon="pi pi-globe" label="Визиты сайта" :value="data.site_sessions" help="Заходы на маркетинговый сайт. Сад и страница «играть» Метрику не грузят." :delay="280" clickable @click="go('traffic')" />
       <StatCard icon="pi pi-eye" label="Просмотры" :value="data.pageviews" help="Сколько страниц открыли. Одна сессия может дать несколько просмотров." :delay="320" />
-      <StatCard icon="pi pi-map" label="Сессии острова" :value="data.island_sessions" help="Заходы в сад. Это не кнопка «играть» на сайте." :delay="360" clickable @click="go('usage')" />
-      <StatCard icon="pi pi-wallet" label="Оплаты" :value="data.paid_orders" help="Прошедшие оплаты. Созданные и незавершённые сюда не входят." :delay="400" clickable @click="go('payments')" />
+      <StatCard icon="pi pi-map" label="Семьи в саду" :value="data.island_parents ?? 0" :hint="`${data.island_sessions} заходов`" help="Сколько разных семей заходили в сад. Заходы — отдельные сессии, одна семья может зайти несколько раз." :delay="360" clickable @click="go('usage')" />
+      <StatCard icon="pi pi-sign-in" label="Заходы в сад" :value="data.island_sessions" help="Сессии острова. Это не число семей и не кнопка «играть» на сайте." :delay="380" clickable @click="go('usage')" />
+      <StatCard icon="pi pi-circle-fill" label="Сейчас в саду" :value="data.live_island ?? 0" help="Семьи, у которых прямо сейчас открыт сад. Кто на поляне — в соседней карточке." :delay="400" clickable @click="go('usage')" />
+      <StatCard icon="pi pi-wallet" label="Оплаты" :value="data.paid_orders" help="Прошедшие оплаты. Созданные и незавершённые сюда не входят." :delay="420" clickable @click="go('payments')" />
       <StatCard icon="pi pi-money-bill" label="Выручка, ₽" :value="data.revenue_rub.toLocaleString('ru-RU')" help="Сколько заплатили за эти дни. Возвраты отдельно." :delay="440" />
       <StatCard icon="pi pi-box" label="Пакеты, ₽" :value="(data.pack_revenue_rub ?? 0).toLocaleString('ru-RU')" :hint="`${data.pack_orders ?? 0} оплат`" help="Только пакеты 1/5/10/15/20 зверей. Острова здесь не считаются." :delay="480" />
       <StatCard icon="pi pi-map" label="Луга, ₽" :value="(data.world_revenue_rub ?? 0).toLocaleString('ru-RU')" :hint="`${data.world_orders ?? 0} оплат`" help="Собери сам, Висячий луг и Куболесье. Повторные копии тоже." :delay="520" />
       <StatCard icon="pi pi-clock" label="Бросили оплату" :value="data.abandoned_checkouts ?? 0" help="Начали платить и не закончили, или открыли магазин и не пошли в банк." :delay="560" clickable @click="go('payments')" />
       <StatCard icon="pi pi-exclamation-triangle" label="Яйца без 3D" :value="data.stuck_meshes ?? 0" help="Картинка есть, модель не собралась больше 10 минут. Исходный рисунок не показываем." :delay="600" clickable @click="go('creatures')" />
+      <StatCard icon="pi pi-sun" label="Семьи на поляне" :value="data.plaza_parents ?? 0" :hint="`${data.plaza_visits ?? 0} заходов`" help="Сколько разных семей открывали общий зоопарк. Заходы — отдельные сессии." :delay="640" clickable @click="go('features')" />
+      <StatCard icon="pi pi-sign-in" label="Заходы на поляну" :value="data.plaza_visits ?? 0" help="Сессии общего зоопарка. Одна семья может зайти несколько раз." :delay="650" clickable @click="go('features')" />
+      <StatCard icon="pi pi-circle-fill" label="Сейчас на поляне" :value="data.live_plaza ?? 0" help="Кто сидит в общем зоопарке прямо сейчас. Не заходы за день." :delay="660" clickable @click="go('features')" />
+      <StatCard icon="pi pi-sparkles" label="Штуки" :value="data.plaza_toys ?? 0" :hint="`${data.plaza_toy_orders ?? 0} оплат`" help="Новые штуки за эти дни. 59 ₽, не кредит на зуфика." :delay="680" clickable @click="go('features')" />
+      <StatCard icon="pi pi-image" label="Открытки без 3D" :value="data.deferred_stills ?? 0" help="Нарисовали и пока не оживили. Не зависшая сетка." :delay="720" clickable @click="go('features')" />
+      <StatCard icon="pi pi-gift" label="Только бесплатный" :value="data.only_free_parents ?? 0" help="Первый зуфик есть, оплат нет. Им можно напомнить про десять картинок." :delay="760" clickable @click="go('mail')" />
     </div>
 
     <div v-if="data" class="crm-grid-charts-2 crm-stagger">

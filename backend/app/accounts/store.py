@@ -35,8 +35,9 @@ from app.persistence.models import (
     PlazaMetaRow,
     StylizeJobRow,
     WorldRow,
+    WorldTicketRow,
 )
-from app.plaza.tickets import TICKETS_PER_DAY, plaza_day
+from app.plaza.tickets import TICKETS_PER_DAY, WORLD_TICKETS_PER_DAY, plaza_day
 
 _CHILDREN = selectinload(ParentRow.children)
 
@@ -783,6 +784,55 @@ class AccountStore:
                 "animals": 1,
                 "quota_total": account.quota_total,
                 "source": "plaza",
+                "day": day,
+            },
+        )
+        return account
+
+    def world_tickets_left(self, parent_id: str, world_id: str) -> int:
+        day = plaza_day()
+        with session() as db:
+            row = db.get(WorldTicketRow, (parent_id, world_id))
+            if row is None or (row.ticket_day or "") != day:
+                return WORLD_TICKETS_PER_DAY
+            return max(0, WORLD_TICKETS_PER_DAY - int(row.ticket_used or 0))
+
+    def claim_world_credit(self, parent_id: str, world_id: str) -> ParentAccount | None:
+        day = plaza_day()
+        with session() as db:
+            row = db.get(WorldTicketRow, (parent_id, world_id), with_for_update=True)
+            if row is None:
+                row = WorldTicketRow(
+                    parent_id=parent_id,
+                    world_id=world_id,
+                    ticket_day=day,
+                    ticket_used=0,
+                )
+                db.add(row)
+                db.flush()
+            if (row.ticket_day or "") != day:
+                row.ticket_day = day
+                row.ticket_used = 0
+            if int(row.ticket_used or 0) >= WORLD_TICKETS_PER_DAY:
+                return None
+            parent = db.get(ParentRow, parent_id, with_for_update=True, options=[_CHILDREN])
+            if parent is None:
+                raise ValueError("missing_parent")
+            row.ticket_used = int(row.ticket_used or 0) + 1
+            parent.plaza_credit_at = time.time()
+            parent.quota_total += 1
+            parent.updated_at = time.time()
+            db.flush()
+            account = _parent_from_row(parent)
+        write_log(
+            "credit.grant",
+            "+1 garden",
+            parent_id=parent_id,
+            payload={
+                "animals": 1,
+                "quota_total": account.quota_total,
+                "source": "garden",
+                "world_id": world_id,
                 "day": day,
             },
         )

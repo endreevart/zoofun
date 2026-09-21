@@ -24,6 +24,7 @@ const router = createRouter({
         { path: "usage/copies", name: "usage-copies", component: () => import("@/pages/UsageCopiesPage.vue") },
         { path: "usage/buyers", name: "usage-buyers", component: () => import("@/pages/UsageBuyersPage.vue") },
         { path: "usage/events", name: "usage-events", component: () => import("@/pages/UsageEventsPage.vue") },
+        { path: "features", name: "features", component: () => import("@/pages/FeaturesPage.vue") },
         { path: "parents", name: "parents", component: () => import("@/pages/ParentsPage.vue") },
         { path: "creatures", name: "creatures", component: () => import("@/pages/CreaturesPage.vue") },
         { path: "packs", name: "packs", component: () => import("@/pages/PacksPage.vue") },

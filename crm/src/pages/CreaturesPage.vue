@@ -93,7 +93,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import Drawer from "primevue/drawer";
 import CreatureTile from "@/components/crm/CreatureTile.vue";
 import CreatureModelLink from "@/components/crm/CreatureModelLink.vue";
@@ -106,8 +106,10 @@ import { formatWhen } from "@/lib/when";
 import { usePeriodStore } from "@/stores/period";
 
 const PAGE = 24;
+const KINDS = new Set<CreatureKind>(["all", "image", "painted", "model", "postcard", "garden", "meadow", "grove", "diy"]);
 const period = usePeriodStore();
 const router = useRouter();
+const route = useRoute();
 const items = ref<CreatureRow[]>([]);
 const stuck = ref<StuckJob[]>([]);
 const total = ref(0);
@@ -124,6 +126,7 @@ const filters = [
   { key: "image" as const, label: "С картинкой" },
   { key: "painted" as const, label: "Нейросеть" },
   { key: "model" as const, label: "3D" },
+  { key: "postcard" as const, label: "Открытка" },
   { key: "garden" as const, label: "Остров" },
   { key: "meadow" as const, label: "Луг" },
   { key: "grove" as const, label: "Куболесье" },
@@ -199,6 +202,8 @@ async function load() {
 }
 
 onMounted(() => {
+  const kind = String(route.query.kind || "");
+  if (KINDS.has(kind as CreatureKind)) filter.value = kind as CreatureKind;
   void load();
 });
 

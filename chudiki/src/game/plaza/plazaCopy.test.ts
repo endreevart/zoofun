@@ -6,6 +6,7 @@ import {
   PLAZA_EMOTES,
   PLAZA_FOG,
   PLAZA_LOAD_R,
+  PLAZA_LOAD_R_PAD,
   PLAZA_SHADOW_R,
   PLAZA_STAMP_CAP,
   PLAZA_PICK_HINT,
@@ -28,9 +29,12 @@ import {
   PLAZA_TOY_WAIT,
   PLAZA_WALK,
   plazaEnterLabel,
+  plazaLoadRadius,
   plazaOnlineLabel,
   plazaPickMode,
   plazaPickWindow,
+  plazaViewCellSize,
+  plazaWalkSpeed,
   soloPlazaRoom,
 } from './plazaCopy.ts';
 import { PLAZA_CRYSTAL_COUNT, PLAZA_CRYSTAL_OUTER } from './plazaDig.ts';
@@ -59,6 +63,7 @@ const still = `data:image/png;base64,${'A'.repeat(800)}`;
 assert.equal(isPlazaReadySpec({ id: 'ch_1', drawing: { portraitUrl: still } }), true);
 assert.equal(isPlazaReadySpec({ id: 'ch_1', drawing: { placeholder: true, portraitUrl: still } }), false);
 assert.equal(isPlazaReadySpec({ id: 'ch_1', hatching: true, drawing: { portraitUrl: still } }), false);
+assert.equal(isPlazaReadySpec({ id: 'ch_1', drawing: { meshDeferred: true, portraitUrl: still } }), false);
 assert.equal(isPlazaReadySpec({ id: 'resident_0', drawing: { portraitUrl: still } }), false);
 assert.equal(isPlazaReadySpec({ id: 'ch_mesh', drawing: { modelUrl: '/v1/generation/stylize/j/model.glb' } }), true);
 
@@ -91,7 +96,13 @@ assert.ok(PLAZA_CRYSTAL_OUTER < PLAZA_WALK);
 assert.ok(PLAZA_FOG > 0);
 assert.equal(PLAZA_STAMP_CAP, 400);
 assert.ok(PLAZA_LOAD_R < PLAZA_WALK);
+assert.ok(PLAZA_LOAD_R_PAD > PLAZA_LOAD_R);
+assert.ok(PLAZA_LOAD_R_PAD < PLAZA_WALK);
 assert.ok(PLAZA_SHADOW_R < PLAZA_LOAD_R);
+assert.equal(plazaLoadRadius(false), PLAZA_LOAD_R);
+assert.equal(plazaLoadRadius(true), PLAZA_LOAD_R_PAD);
+assert.ok(plazaWalkSpeed(true) > plazaWalkSpeed(false));
+assert.ok(plazaViewCellSize(true) > plazaViewCellSize(false));
 
 assert.deepEqual(
   PLAZA_EMOTES.map((item) => item.id),
@@ -101,7 +112,7 @@ assert.deepEqual(
 assert.equal(PLAZA_PICK_TITLE, 'С кем пойдёшь гулять?');
 assert.equal(PLAZA_TOY_WAIT, 'Красим штуку');
 assert.equal(PLAZA_TOY_BAKE, 'Готовим штуку');
-assert.equal(PLAZA_TOY_PUT, 'Тапни поляну — поставь штуку.');
+assert.equal(PLAZA_TOY_PUT, 'Тапни сад — поставь штуку.');
 assert.equal(PLAZA_TOY_READY, 'Вот что получилось');
 assert.equal(PLAZA_TOY_PLACE, 'На поляну');
 assert.equal(PLAZA_TOY_FAIL, 'Не получилось покрасить.');

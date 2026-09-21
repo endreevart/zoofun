@@ -27,8 +27,15 @@ export type QualitySettings = {
   composerHalfFloat: boolean;
   /** MSAA on the composer target. Keep 0 on phones; it is not free there. */
   composerSamples: number;
+  /**
+   * Cheap fullscreen edge filter. True MSAA is a second buffer and is not
+   * free on iOS; FXAA is one extra blit after the grade.
+   */
+  fxaa: boolean;
   /** 0 = uncapped. Phones cap so Safari does not thermal-throttle into black. */
   maxFps: number;
+  /** CSS short side. Plaza uses it so an iPad does not take the phone 1.5×. */
+  shortSide: number;
 };
 
 export type QualityHints = {
@@ -86,7 +93,9 @@ export function settingsFromHints(
       grassReceivesShadow: false,
       composerHalfFloat: false,
       composerSamples: 0,
+      fxaa: true,
       maxFps: 30,
+      shortSide: hints.shortSide,
     };
   }
 
@@ -108,7 +117,9 @@ export function settingsFromHints(
     grassReceivesShadow: true,
     composerHalfFloat: true,
     composerSamples: 0,
+    fxaa: false,
     maxFps: 0,
+    shortSide: hints.shortSide,
   };
 }
 
@@ -187,14 +198,26 @@ export function lookForShell(base: QualitySettings, hanging: boolean): QualitySe
 /**
  * Shared lawn: a huge grass disk, crystals, catalog stamps, and other
  * toys. iPad used to sit on the desktop garden look and hitch.
+ *
+ * Pixelation on toys is a 1× retina blit. Canvas MSAA never reaches this
+ * frame (PostFx). More pixels plus FXAA is the cheap smooth; MSAA is not.
  */
+export function plazaPixelRatio(base: QualitySettings): number {
+  if (base.pixelRatio <= 1) return 1;
+  if (base.shortSide <= 520) return Math.min(base.pixelRatio, 1.5);
+  return Math.min(base.pixelRatio, 1.25);
+}
+
 export function lookForPlaza(base: QualitySettings): QualitySettings {
   return {
     ...lookForHeavyIsland(base),
-    pixelRatio: 1,
+    pixelRatio: plazaPixelRatio(base),
+    antialias: false,
     shadows: true,
     softShadows: false,
     shadowMapSize: 512,
+    composerSamples: 0,
+    fxaa: true,
     maxFps: 30,
   };
 }

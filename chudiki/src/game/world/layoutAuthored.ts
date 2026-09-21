@@ -13,6 +13,7 @@ import type { WorldShell } from './kinds';
 import { isAuthoredPath, type AuthoredPath } from './layoutPaths';
 import { isAuthoredSpawn, type AuthoredSpawn } from './layoutSpawns';
 import { authoredGroundY, stampGroundLift } from './layoutWalk';
+import { isPlazaToyModel } from '../plaza/plazaToy';
 
 export type { AuthoredPath, AuthoredSpawn };
 export {
@@ -193,6 +194,7 @@ export function parseDiyProps(raw: unknown): AuthoredProp[] {
 }
 
 export function defaultStamp(model: string): Pick<AuthoredProp, 'height' | 'fit' | 'sink'> {
+  if (isPlazaToyModel(model)) return { height: 2 };
   if (model === 'sunlit-canopy' || model.startsWith('lp_tree') || model.startsWith('lp_pine')) {
     return { height: 5.2 };
   }

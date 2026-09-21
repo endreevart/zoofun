@@ -10,12 +10,15 @@ from sqlalchemy import and_, exists, func, or_, select
 from app.commerce.store import PACK_SIZES
 from app.persistence.db import session
 from app.persistence.models import (
+    AnalyticsEventRow,
     AnalyticsSessionRow,
     ChildRow,
     CreatureRow,
     MailSetRow,
     ParentRow,
     PaymentRow,
+    PlazaToyRow,
+    StylizeJobRow,
     WorldRow,
 )
 from app.worlds import ISLAND_KINDS
@@ -49,6 +52,20 @@ FIELDS = {
     },
     "opened_island": {"ops": ("eq",), "type": "bool", "label": "Открывал остров"},
     "never_drew": {"ops": ("eq",), "type": "bool", "label": "Не рисовал"},
+    "only_free": {
+        "ops": ("eq",),
+        "type": "bool",
+        "label": "Только бесплатный зуфик, без оплаты",
+    },
+    "abandoned_pay": {"ops": ("eq",), "type": "bool", "label": "Начал оплату и не закончил"},
+    "has_deferred": {"ops": ("eq",), "type": "bool", "label": "Есть открытка без 3D"},
+    "opened_plaza": {"ops": ("eq",), "type": "bool", "label": "Был в общем зоопарке"},
+    "has_plaza_toy": {"ops": ("eq",), "type": "bool", "label": "Есть штука на поляне"},
+    "still_used": {
+        "ops": ("eq", "gt", "gte", "lt", "lte"),
+        "type": "int",
+        "label": "Нарисовано открыток",
+    },
     "email": {"ops": ("eq", "contains"), "type": "str", "label": "Почта"},
     "parent_id": {"ops": ("eq",), "type": "str", "label": "ID родителя"},
 }
@@ -278,6 +295,42 @@ def _island_exists():
     )
 
 
+def _plaza_exists():
+    return exists(
+        select(AnalyticsEventRow.id).where(
+            AnalyticsEventRow.parent_id == ParentRow.id,
+            AnalyticsEventRow.event.in_(("plaza.open", "plaza.enter")),
+        )
+    )
+
+
+def _deferred_exists():
+    return exists(
+        select(StylizeJobRow.id).where(
+            StylizeJobRow.parent_id == ParentRow.id,
+            StylizeJobRow.purpose == "creature",
+            StylizeJobRow.mesh_status == "deferred",
+        )
+    )
+
+
+def _toy_exists():
+    return exists(select(PlazaToyRow.id).where(PlazaToyRow.parent_id == ParentRow.id))
+
+
+def _abandoned_pay_exists():
+    from app.crm.ops import ABANDONED_PAYMENT_SEC
+
+    stale = time.time() - ABANDONED_PAYMENT_SEC
+    return exists(
+        select(PaymentRow.id).where(
+            PaymentRow.parent_id == ParentRow.id,
+            PaymentRow.status.in_(("created", "pending")),
+            PaymentRow.created_at < stale,
+        )
+    )
+
+
 def _clause(cond: dict):
     field = cond["field"]
     op = cond["op"]
@@ -324,6 +377,23 @@ def _clause(cond: dict):
     if field == "never_drew":
         expr = ParentRow.generation_used == 0
         return expr if value else ~expr
+    if field == "only_free":
+        expr = (ParentRow.generation_used >= 1) & ~_paid_exists()
+        return expr if value else ~expr
+    if field == "abandoned_pay":
+        expr = _abandoned_pay_exists()
+        return expr if value else ~expr
+    if field == "has_deferred":
+        expr = _deferred_exists()
+        return expr if value else ~expr
+    if field == "opened_plaza":
+        expr = _plaza_exists()
+        return expr if value else ~expr
+    if field == "has_plaza_toy":
+        expr = _toy_exists()
+        return expr if value else ~expr
+    if field == "still_used":
+        return _OPS[op](ParentRow.still_used, value)
     if field == "email":
         lowered = func.lower(ParentRow.email)
         needle = str(value).lower()

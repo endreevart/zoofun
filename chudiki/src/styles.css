@@ -1784,7 +1784,7 @@ html.is-cinema #root {
 .vitrine-sheet {
   position: absolute;
   inset: 0;
-  z-index: 30;
+  z-index: 80;
   display: grid;
   place-items: center;
   padding: 16px;
@@ -1945,8 +1945,7 @@ html.is-cinema #root {
   background: transparent;
   cursor: pointer;
   text-align: left;
-  content-visibility: auto;
-  contain-intrinsic-size: 180px;
+  touch-action: manipulation;
 }
 
 .vitrine-shot {
@@ -4602,6 +4601,17 @@ html.is-cinema #root {
   font-size: 22px;
 }
 
+.hatch-preview.is-painting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  grid-template-columns: none;
+  grid-template-rows: none;
+  grid-template-areas: none;
+}
+
 .hatch-preview-lead {
   margin: 0;
   font-size: 28px;
@@ -4628,6 +4638,14 @@ html.is-cinema #root {
     padding: 28px 36px 28px 40px;
     gap: 14px 28px;
     align-items: center;
+  }
+
+  .hatch-preview.is-painting {
+    display: flex;
+    grid-template-columns: none;
+    grid-template-rows: none;
+    grid-template-areas: none;
+    padding: 28px 36px;
   }
 
   .hatch-head {
@@ -7184,6 +7202,49 @@ html.is-cinema #root {
   font-weight: 900;
 }
 
+.vitrine-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffe8ec, #ffd4dc);
+  box-shadow: 0 8px 18px rgba(180, 60, 80, 0.14);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.vitrine-banner-title {
+  min-width: 0;
+  font-size: clamp(18px, 2.4vw, 24px);
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.vitrine-banner-go {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 112px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff8aa0, #ef4b63);
+  box-shadow: 0 4px 0 #c4334c;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+}
+
 .worlds-section {
   display: flex;
   flex-direction: column;
@@ -7744,6 +7805,23 @@ html.is-cinema #root {
     font-size: 16px;
   }
 
+  .vitrine-banner {
+    min-height: 64px;
+    padding: 12px 14px;
+    border-radius: 20px;
+  }
+
+  .vitrine-banner-title {
+    font-size: 18px;
+  }
+
+  .vitrine-banner-go {
+    min-width: 96px;
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 16px;
+  }
+
   .worlds-style {
     padding: 10px;
     align-items: end;
@@ -7976,6 +8054,19 @@ html.is-cinema #root {
     overflow: hidden;
     padding: 36px 14px 12px;
     border-radius: 28px;
+  }
+
+  .plaza-banner,
+  .vitrine-banner {
+    grid-column: 1 / -1;
+  }
+
+  .plaza-banner {
+    min-height: 96px;
+  }
+
+  .vitrine-banner {
+    min-height: 56px;
   }
 
   .worlds-section {
@@ -9224,6 +9315,10 @@ html.is-cinema #root {
 .plaza-dig:active {
   transform: translate(-50%, -46%);
   box-shadow: 0 4px 0 rgba(80, 60, 20, 0.2);
+}
+
+.garden-dig {
+  z-index: 25;
 }
 
 .plaza-emote-toggle,

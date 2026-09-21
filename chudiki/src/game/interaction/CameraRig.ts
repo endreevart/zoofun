@@ -182,6 +182,15 @@ export class CameraRig {
     return this.yaw;
   }
 
+  /** Walk look-at on the lawn. Smash crystals use this, not the lens. */
+  get lookX(): number {
+    return this.target.x;
+  }
+
+  get lookZ(): number {
+    return this.target.z;
+  }
+
   /**
    * Third-person: look-at sticks to this point (usually a creature). Orbit
    * and pinch still work; walking the park does not.

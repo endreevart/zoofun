@@ -4,6 +4,7 @@ import {
   plazaCastsShadow,
   plazaViewCell,
   plazaLawnLocked,
+  plazaLoadRadius,
   takePlazaStampRoom,
   PLAZA_STAMP_CAP,
 } from './plazaView.ts';
@@ -20,6 +21,14 @@ const rows = [
 assert.deepEqual(
   nearPlazaProps(rows, 0, 0, 10).map((row) => row.id),
   ['a', 'c'],
+);
+assert.deepEqual(
+  nearPlazaProps(rows, 0, 0, plazaLoadRadius(false)).map((row) => row.id),
+  ['a', 'c'],
+);
+assert.deepEqual(
+  nearPlazaProps(rows, 0, 0, plazaLoadRadius(true)).map((row) => row.id),
+  ['a', 'b', 'c'],
 );
 assert.equal(plazaCastsShadow(0, 0, 0, 0), true);
 assert.equal(plazaCastsShadow(80, 0, 0, 0), false);

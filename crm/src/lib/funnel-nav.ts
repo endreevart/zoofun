@@ -5,6 +5,7 @@ export const FUNNEL_NAV_TABS = [
   { label: "Продукт", name: "funnel-detail" as const, params: { key: "product" } },
   { label: "Бесплатный", name: "funnel-detail" as const, params: { key: "freemium" } },
   { label: "Остров", name: "funnel-detail" as const, params: { key: "island" } },
+  { label: "Поляна", name: "funnel-detail" as const, params: { key: "plaza" } },
   { label: "Оплата", name: "funnel-detail" as const, params: { key: "commerce" } },
   { label: "Повтор", name: "funnel-detail" as const, params: { key: "repeat" } },
   { label: "Возврат", name: "funnel-detail" as const, params: { key: "return" } },

@@ -21,6 +21,12 @@ from app.worlds import pack_label
 from . import retention as return_metrics
 from .window import TimeWindow, as_window, in_window
 
+TOY_DRAW_EVENTS = (
+    "plaza.toy_draw",
+    "plaza.toy_start",
+    "plaza.toy_preview",
+    "plaza.toy_commit",
+)
 PACK_PAYMENT = PaymentRow.pack_id.like("pack_%")
 
 SAMPLE_LIMIT = 100
@@ -63,6 +69,14 @@ FUNNELS = [
         "key": "island",
         "label": "Остров",
         "description": "Зашёл → открыл мир или зверя → нарисовал → поухаживал",
+        "entity": "session",
+        "group": "activation",
+        "group_label": "Активация",
+    },
+    {
+        "key": "plaza",
+        "label": "Общий зоопарк",
+        "description": "Зашёл на поляну → поиграл → нарисовал штуку → оплатил 59 ₽",
         "entity": "session",
         "group": "activation",
         "group_label": "Активация",
@@ -676,6 +690,57 @@ def island(period: int | TimeWindow = 30) -> dict:
     return _detail("island", steps)
 
 
+def plaza(period: int | TimeWindow = 30) -> dict:
+    window = as_window(period, 30)
+    with session() as db:
+        visits = _event_session_count(db, window, ("plaza.open", "plaza.enter"))
+        played = _event_session_count(db, window, ("plaza.emote", "plaza.dig"))
+        drew = _event_session_count(db, window, TOY_DRAW_EVENTS)
+        paid = db.scalar(
+            select(func.count()).select_from(PaymentRow).where(
+                PaymentRow.pack_id == "plaza_toy_1",
+                PaymentRow.status == "confirmed",
+                in_window(PaymentRow.created_at, window),
+            )
+        ) or 0
+        steps = [
+            _step(
+                "visit",
+                "Зашёл на поляну",
+                visits,
+                None,
+                _event_session_samples(db, window, ("plaza.open", "plaza.enter")),
+            ),
+            _step(
+                "played",
+                "Смайлик или копал",
+                played,
+                visits,
+                _event_session_samples(db, window, ("plaza.emote", "plaza.dig")),
+            ),
+            _step(
+                "drew",
+                "Рисует штуку",
+                drew,
+                played,
+                _event_session_samples(db, window, TOY_DRAW_EVENTS),
+            ),
+            _step(
+                "paid",
+                "Оплатил штуку",
+                paid,
+                drew,
+                _payment_samples(
+                    db,
+                    (PaymentRow.pack_id == "plaza_toy_1")
+                    & (PaymentRow.status == "confirmed")
+                    & in_window(PaymentRow.created_at, window),
+                ),
+            ),
+        ]
+    return _detail("plaza", steps)
+
+
 def commerce(period: int | TimeWindow = 30) -> dict:
     window = as_window(period, 30)
     with session() as db:
@@ -907,6 +972,7 @@ def build(key: str, period: int | TimeWindow = 30, days: int | None = None) -> d
         "pricing": pricing,
         "freemium": freemium,
         "island": island,
+        "plaza": plaza,
         "commerce": commerce,
         "repeat": repeat,
         "return": returned,

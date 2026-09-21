@@ -76,6 +76,7 @@ export const crmApi = {
     request<Paged<WorldBuyerRow>>(crmPath("/v1/crm/analytics/usage/buyers", period, page)),
   usageEvents: (period?: PeriodQuery, page?: ListQuery & { q?: string; sort?: string; order?: string }) =>
     request<Paged<{ event: string; count: number }>>(crmPath("/v1/crm/analytics/usage/events", period, page)),
+  features: (period?: PeriodQuery) => request<FeatureSnapshot>(crmPath("/v1/crm/analytics/features", period)),
   usagePeople: (
     period?: PeriodQuery,
     query?: ListQuery & {
@@ -162,6 +163,13 @@ export const crmApi = {
   },
   mailSend: (id: string) =>
     request<MailCampaign>(`/v1/crm/mail/campaigns/${encodeURIComponent(id)}/send`, { method: "POST" }),
+  mailOffers: () => request<{ items: MailOffer[]; note?: string }>("/v1/crm/mail/offers"),
+  mailOfferDraft: (id: string) =>
+    request<MailCampaign>(`/v1/crm/mail/offers/${encodeURIComponent(id)}/draft`, { method: "POST" }),
+  mailDeliveries: (id: string, page?: ListQuery) =>
+    request<Paged<MailDelivery> & { campaign_id: string; clicked: number }>(
+      crmPath(`/v1/crm/mail/campaigns/${encodeURIComponent(id)}/deliveries`, undefined, page),
+    ),
   mailRules: () => request<{ items: MailRule[] }>("/v1/crm/mail/rules"),
   mailRuleCreate: (body: MailRuleIn) =>
     request<MailRule>("/v1/crm/mail/rules", { method: "POST", body: JSON.stringify(body) }),
@@ -208,6 +216,7 @@ export type Overview = {
   dau_delta_pct: number | null;
   site_sessions: number;
   island_sessions: number;
+  island_parents?: number;
   pageviews: number;
   paid_orders: number;
   revenue_rub: number;
@@ -215,6 +224,15 @@ export type Overview = {
   world_orders?: number;
   pack_revenue_rub?: number;
   world_revenue_rub?: number;
+  plaza_toy_orders?: number;
+  plaza_toy_revenue_rub?: number;
+  plaza_visits?: number;
+  plaza_parents?: number;
+  plaza_toys?: number;
+  live_island?: number;
+  live_plaza?: number;
+  deferred_stills?: number;
+  only_free_parents?: number;
   abandoned_checkouts?: number;
   stuck_meshes?: number;
   charts: { parents: Point[]; dau: Point[] };
@@ -299,6 +317,7 @@ export type LawnRow = {
   creatures: number;
   creatures_new: number;
   visits: number;
+  parents?: number;
   time_sec: number;
   leading: boolean;
 };
@@ -346,8 +365,22 @@ export type UsagePersonRow = {
   id?: string;
 };
 
+export type LivePerson = {
+  parent_id: string;
+  email: string | null;
+  last_at: number;
+};
+
+export type LiveNow = {
+  count: number;
+  people: LivePerson[];
+};
+
 export type Usage = {
   island_sessions: number;
+  island_parents?: number;
+  live?: { plaza: LiveNow; island: LiveNow };
+  visitors?: { parent_id: string; email: string | null; visits: number; last_at: number }[];
   creatures_new: number;
   events: { event: string; count: number }[];
   lawns: LawnRow[];
@@ -431,7 +464,16 @@ export type Paged<T> = {
   offset: number;
 };
 
-export type CreatureKind = "all" | "image" | "painted" | "model" | "garden" | "meadow" | "grove" | "diy";
+export type CreatureKind =
+  | "all"
+  | "image"
+  | "painted"
+  | "model"
+  | "postcard"
+  | "garden"
+  | "meadow"
+  | "grove"
+  | "diy";
 
 export type ParentRow = {
   id: string;
@@ -441,6 +483,7 @@ export type ParentRow = {
   still_quota?: number;
   still_used?: number;
   creatures: number;
+  plaza_toys?: number;
   created_at: number;
   last_login_at: number | null;
   marketing_consent?: boolean;
@@ -570,6 +613,80 @@ export type CampaignEffect = {
   returned: number;
   drew: number;
   paid: number;
+  clicked?: number;
+};
+
+export type MailOffer = {
+  id: string;
+  set_id: string;
+  title: string;
+  why: string;
+  promo_hint: string;
+  subject: string;
+  body: string;
+  matching: number;
+  sendable: number;
+};
+
+export type MailDelivery = {
+  parent_id: string;
+  email: string;
+  status: string;
+  reason: string;
+  created_at: number;
+  hop_url: string;
+  clicked_at: number | null;
+  click_count: number;
+};
+
+export type FeatureToy = {
+  id: string;
+  parent_id: string | null;
+  email: string | null;
+  mesh_status: string;
+  has_mesh: boolean;
+  placed: boolean;
+  created_at: number;
+  title: string;
+};
+
+export type FeatureSnapshot = {
+  plaza: {
+    visits: number;
+    parents: number;
+    opens: number;
+    enters: number;
+    emotes: number;
+    digs: number;
+    stamps: number;
+    catalog_stamps: number;
+    toy_stamps: number;
+    visitors: { parent_id: string; email: string | null; visits: number; last_at: number }[];
+  };
+  live?: { plaza: LiveNow; island: LiveNow };
+  toys: {
+    total: number;
+    new: number;
+    parents: number;
+    preview_unpaid: number;
+    draws: number;
+    paid_orders: number;
+    revenue_rub: number;
+    ready: number;
+    pending: number;
+    skipped: number;
+    failed: number;
+    items: FeatureToy[];
+  };
+  stills: {
+    used_total: number;
+    jobs: number;
+    deferred: number;
+    deferred_parents: number;
+    only_free_parents: number;
+    items: { id: string; parent_id: string | null; email: string | null; mesh_status: string; created_at: number }[];
+  };
+  charts: { plaza_parents?: Point[]; plaza_visits: Point[] };
 };
 
 export type MailCampaignIn = {

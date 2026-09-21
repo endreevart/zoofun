@@ -2,7 +2,7 @@
   <div class="flex flex-col gap-6">
     <CrmPageHeader
       title="Промокоды"
-      subtitle="Скидка на пакеты зверей и на острова. Пустой список пакетов — на всё."
+      subtitle="Скидка на пакеты, острова и штуки. Пустой список — на всё. PRIVET: 25% без одного зуфика и без штук."
       help="Код снижает цену пакета при оплате. Выручка в списке — сколько реально заплатили с этим кодом."
     >
       <template #actions>
@@ -121,7 +121,7 @@
           <legend>На что действует</legend>
           <label class="promo-check">
             <input v-model="packScope" type="radio" value="all" />
-            все пакеты и острова
+            всё в магазине, включая штуки
           </label>
           <label class="promo-check">
             <input v-model="packScope" type="radio" value="some" />
@@ -167,6 +167,7 @@ const PACK_OPTIONS = [
   { id: "world_diy_garden", label: "Собери сам" },
   { id: "world_diy_meadow", label: "Собери луг" },
   { id: "world_diy_grove", label: "Собери куболесье" },
+  { id: "plaza_toy_1", label: "Штука для поляны" },
 ] as const;
 
 const items = ref<PromoRow[]>([]);

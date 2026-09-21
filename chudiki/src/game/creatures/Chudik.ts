@@ -6,6 +6,7 @@ import { buildDrawingChudik } from './DrawingChudikBuilder';
 import type { ChudikSpec, DrawingData } from './ChudikSpec';
 import {
   cracksFromHeat,
+  eggMeshCooking,
   hatchFill,
   hatchFromTap,
   hatchFromWait,
@@ -222,11 +223,13 @@ export class Chudik {
 
   private hatchLook(): HatchLook {
     const ready = this.hatchReady !== null;
+    const cooking = eggMeshCooking(this.spec.drawing);
     return {
       cracks: cracksFromHeat(this.hatchHeat, ready),
       fill: hatchFill(this.hatchAge, this.hatchPainted, ready),
-      spin: this.hatchAge,
+      spin: cooking ? this.hatchAge : 0,
       ready,
+      cooking,
     };
   }
 
@@ -654,14 +657,32 @@ export class Chudik {
   /** Swap the puppet after a neural restyle. Keeps place, heading, and scale. */
   replaceDrawing(drawing: ChudikSpec['drawing']) {
     if (!drawing) return;
+    this.spec.drawing = drawing;
+    this.spec.hatching = false;
+    this.hatchReady = null;
+    this.swapRig(drawing);
+  }
+
+  /** Cookie without a GLB goes back in its shell until the mesh lands. */
+  returnToEgg() {
+    if (!this.spec.drawing || this.spec.drawing.modelUrl) return false;
+    if (this.isHatching) return true;
+    this.spec.hatching = true;
+    this.hatchReady = null;
+    this.hatchWait = 0;
+    this.hatchHeat = 0;
+    this.hatchPainted = true;
+    this.setDriven(false);
+    this.swapRig(this.spec.drawing);
+    return true;
+  }
+
+  private swapRig(drawing: DrawingData) {
     const parent = this.rig.root.parent;
     const position = this.rig.root.position.clone();
     const oldRoot = this.rig.root;
     this.rig.dispose();
     oldRoot.removeFromParent();
-
-    this.spec.drawing = drawing;
-    this.spec.hatching = false;
     const next = buildDrawingChudik(this.spec, drawing);
     next.root.userData.chudik = this;
     next.root.position.copy(position);

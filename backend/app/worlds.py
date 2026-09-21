@@ -118,6 +118,16 @@ def is_diy_instance(world_id: str) -> bool:
     return world_id.startswith("world_diy_")
 
 
+def is_crystal_world(world_id: str) -> bool:
+    """True for a free authored lawn or a construction copy the family can hunt."""
+    value = (world_id or "").strip()
+    if not value:
+        return False
+    if value in _KINDS_BY_AUTHORED or value in _KINDS_BY_SKU:
+        return True
+    return is_diy_instance(value)
+
+
 def home_world_id(world_id: str | None) -> str:
     """Creatures without a world live on the free garden lawn."""
     value = (world_id or "").strip()

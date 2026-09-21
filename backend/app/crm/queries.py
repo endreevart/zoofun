@@ -21,10 +21,11 @@ from app.persistence.models import (
     PackRow,
     ParentRow,
     PaymentRow,
+    PlazaToyRow,
     StylizeJobRow,
     WorldRow,
 )
-from app.commerce.skus import sku_kind
+from app.commerce.skus import PLAZA_TOY_1, sku_kind
 from app.worlds import (
     ISLAND_KINDS,
     WORLD_AUTHORED,
@@ -39,7 +40,7 @@ from app.worlds import (
     pack_label,
 )
 
-from . import ops
+from . import ops, presence
 from . import retention as return_metrics
 from .window import (
     ALLOWED_PERIODS,
@@ -53,14 +54,14 @@ from .window import (
 
 PAGE_CAP = 100
 CREATURE_KINDS = frozenset(
-    {"all", "image", "painted", "model", "garden", "meadow", "grove", "diy"}
+    {"all", "image", "painted", "model", "postcard", "garden", "meadow", "grove", "diy"}
 )
 PAYMENT_STATUSES = frozenset({"created", "pending", "confirmed", "failed", "refunded"})
 PARENT_SORTS = frozenset({"email", "remaining", "creatures", "consent", "last_login", "created"})
 LOGIN_FLAGS = frozenset({"today", "week", "old", "never"})
 DIY_SORTS = frozenset({"title", "email", "creatures", "props", "visits", "time"})
 BUYER_SORTS = frozenset({"email", "bought", "copies", "spent", "last_bought"})
-LAWN_SORTS = frozenset({"email", "creatures", "visits", "time", "last_visit"})
+LAWN_SORTS = frozenset({"email", "creatures", "visits", "parents", "time", "last_visit"})
 HEARTBEAT_SEC = 30
 
 
@@ -84,6 +85,8 @@ def _creature_kind_clause(kind: str):
         return CreatureRow.painted.is_(True)
     if kind == "model":
         return CreatureRow.has_model.is_(True)
+    if kind == "postcard":
+        return and_(CreatureRow.has_still.is_(True), CreatureRow.has_model.is_(False))
     if kind == "image":
         jobs = select(StylizeJobRow.id).where(StylizeJobRow.image_base64.is_not(None))
         return or_(
@@ -104,7 +107,7 @@ def _creature_kind_clause(kind: str):
     return None
 
 
-def _parent_item(row: ParentRow, creatures: int) -> dict:
+def _parent_item(row: ParentRow, creatures: int, plaza_toys: int = 0) -> dict:
     used = int(getattr(row, "still_used", 0) or 0)
     return {
         "id": row.id,
@@ -116,6 +119,7 @@ def _parent_item(row: ParentRow, creatures: int) -> dict:
         "still_quota": still_quota(row.quota_total),
         "still_remaining": still_remaining(row.quota_total, used),
         "creatures": int(creatures),
+        "plaza_toys": int(plaza_toys),
         "created_at": row.created_at,
         "last_login_at": row.last_login_at,
         "marketing_consent": bool(row.marketing_consent_at),
@@ -308,6 +312,13 @@ def overview(period: int | TimeWindow = 30) -> dict:
                 in_window(AnalyticsSessionRow.started_at, window),
             )
         ) or 0
+        island_parents = db.scalar(
+            select(func.count(func.distinct(AnalyticsSessionRow.parent_id))).where(
+                AnalyticsSessionRow.source == "island",
+                AnalyticsSessionRow.parent_id.is_not(None),
+                in_window(AnalyticsSessionRow.started_at, window),
+            )
+        ) or 0
         pageviews = db.scalar(
             select(func.count()).select_from(AnalyticsEventRow).where(
                 AnalyticsEventRow.event == "page.view",
@@ -327,11 +338,13 @@ def overview(period: int | TimeWindow = 30) -> dict:
             )
         ) or 0
         world_where = PaymentRow.pack_id.like("world_%")
+        plaza_where = PaymentRow.pack_id == PLAZA_TOY_1
         pack_orders = db.scalar(
             select(func.count()).select_from(PaymentRow).where(
                 PaymentRow.status == "confirmed",
                 in_window(PaymentRow.created_at, window),
                 ~world_where,
+                ~plaza_where,
             )
         ) or 0
         world_orders = db.scalar(
@@ -341,11 +354,19 @@ def overview(period: int | TimeWindow = 30) -> dict:
                 world_where,
             )
         ) or 0
+        plaza_toy_orders = db.scalar(
+            select(func.count()).select_from(PaymentRow).where(
+                PaymentRow.status == "confirmed",
+                in_window(PaymentRow.created_at, window),
+                plaza_where,
+            )
+        ) or 0
         pack_revenue = db.scalar(
             select(func.coalesce(func.sum(PaymentRow.amount_rub), 0)).where(
                 PaymentRow.status == "confirmed",
                 in_window(PaymentRow.created_at, window),
                 ~world_where,
+                ~plaza_where,
             )
         ) or 0
         world_revenue = db.scalar(
@@ -353,6 +374,13 @@ def overview(period: int | TimeWindow = 30) -> dict:
                 PaymentRow.status == "confirmed",
                 in_window(PaymentRow.created_at, window),
                 world_where,
+            )
+        ) or 0
+        plaza_toy_revenue = db.scalar(
+            select(func.coalesce(func.sum(PaymentRow.amount_rub), 0)).where(
+                PaymentRow.status == "confirmed",
+                in_window(PaymentRow.created_at, window),
+                plaza_where,
             )
         ) or 0
         prev_dau = db.scalar(
@@ -378,6 +406,44 @@ def overview(period: int | TimeWindow = 30) -> dict:
             )
             .group_by(session_day)
         ).all()
+        plaza_visits = db.scalar(
+            select(func.count(func.distinct(AnalyticsEventRow.session_id))).where(
+                AnalyticsEventRow.event.in_(("plaza.open", "plaza.enter")),
+                in_window(AnalyticsEventRow.created_at, window),
+            )
+        ) or 0
+        plaza_parents = db.scalar(
+            select(func.count(func.distinct(AnalyticsEventRow.parent_id))).where(
+                AnalyticsEventRow.event.in_(("plaza.open", "plaza.enter")),
+                AnalyticsEventRow.parent_id.is_not(None),
+                in_window(AnalyticsEventRow.created_at, window),
+            )
+        ) or 0
+        plaza_toys_new = db.scalar(
+            select(func.count())
+            .select_from(PlazaToyRow)
+            .where(in_window(PlazaToyRow.created_at, window))
+        ) or 0
+        deferred_stills = db.scalar(
+            select(func.count()).select_from(StylizeJobRow).where(
+                StylizeJobRow.purpose == "creature",
+                StylizeJobRow.mesh_status == "deferred",
+                in_window(StylizeJobRow.created_at, window),
+            )
+        ) or 0
+        only_free_parents = db.scalar(
+            select(func.count()).select_from(ParentRow).where(
+                ParentRow.generation_used >= 1,
+                ~ParentRow.id.in_(
+                    select(PaymentRow.parent_id).where(PaymentRow.status == "confirmed")
+                ),
+            )
+        ) or 0
+        plaza_live = presence.plaza_now(db)
+        island_live = presence.island_now(
+            db,
+            exclude_ids={row["parent_id"] for row in plaza_live["people"]},
+        )
 
     parent_days = {str(day): int(count) for day, count in parent_rows if day}
     dau_days = {str(day): int(count) for day, count in dau_rows if day}
@@ -401,13 +467,23 @@ def overview(period: int | TimeWindow = 30) -> dict:
             "parents_delta_pct": _delta_pct(new_parents, prev_parents),
             "site_sessions": site_sessions,
             "island_sessions": island_sessions,
+            "island_parents": int(island_parents),
             "pageviews": pageviews,
             "paid_orders": paid,
             "revenue_rub": int(revenue),
             "pack_orders": int(pack_orders),
             "world_orders": int(world_orders),
+            "plaza_toy_orders": int(plaza_toy_orders),
             "pack_revenue_rub": int(pack_revenue),
             "world_revenue_rub": int(world_revenue),
+            "plaza_toy_revenue_rub": int(plaza_toy_revenue),
+            "plaza_visits": int(plaza_visits),
+            "plaza_parents": int(plaza_parents),
+            "plaza_toys": int(plaza_toys_new),
+            "live_island": island_live["count"],
+            "live_plaza": plaza_live["count"],
+            "deferred_stills": int(deferred_stills),
+            "only_free_parents": int(only_free_parents),
             "abandoned_checkouts": queues["abandoned_checkouts"],
             "stuck_meshes": queues["stuck_meshes"],
             "retention": retention,
@@ -422,6 +498,7 @@ def overview(period: int | TimeWindow = 30) -> dict:
                 {"key": "payments", "label": "Платежи"},
                 {"key": "packs", "label": "Пакеты"},
                 {"key": "usage", "label": "Острова"},
+                {"key": "features", "label": "Поляна и штуки"},
             ],
         },
     )
@@ -668,6 +745,13 @@ def _usage_snapshot(window: TimeWindow) -> dict:
                 in_window(AnalyticsSessionRow.started_at, window),
             )
         ) or 0
+        island_parents = db.scalar(
+            select(func.count(func.distinct(AnalyticsSessionRow.parent_id))).where(
+                AnalyticsSessionRow.source == "island",
+                AnalyticsSessionRow.parent_id.is_not(None),
+                in_window(AnalyticsSessionRow.started_at, window),
+            )
+        ) or 0
         creatures = db.scalar(
             select(func.count())
             .select_from(CreatureRow)
@@ -691,6 +775,17 @@ def _usage_snapshot(window: TimeWindow) -> dict:
                 .where(
                     in_window(AnalyticsEventRow.created_at, window),
                     event_world != "",
+                )
+                .group_by(event_world)
+            ).all()
+        )
+        parents = _count_by_world(
+            db.execute(
+                select(event_world, func.count(func.distinct(AnalyticsEventRow.parent_id)))
+                .where(
+                    in_window(AnalyticsEventRow.created_at, window),
+                    event_world != "",
+                    AnalyticsEventRow.parent_id.is_not(None),
                 )
                 .group_by(event_world)
             ).all()
@@ -785,6 +880,27 @@ def _usage_snapshot(window: TimeWindow) -> dict:
             .order_by(func.max(PaymentRow.created_at).desc())
         ).all()
         emails = dict(db.execute(select(ParentRow.id, ParentRow.email)).all())
+        island_visitors = db.execute(
+            select(
+                ParentRow.id,
+                ParentRow.email,
+                func.count(),
+                func.max(AnalyticsSessionRow.started_at),
+            )
+            .join(AnalyticsSessionRow, AnalyticsSessionRow.parent_id == ParentRow.id)
+            .where(
+                AnalyticsSessionRow.source == "island",
+                in_window(AnalyticsSessionRow.started_at, window),
+            )
+            .group_by(ParentRow.id, ParentRow.email)
+            .order_by(func.max(AnalyticsSessionRow.started_at).desc())
+            .limit(40)
+        ).all()
+        plaza_live = presence.plaza_now(db)
+        island_live = presence.island_now(
+            db,
+            exclude_ids={row["parent_id"] for row in plaza_live["people"]},
+        )
 
     lawns: list[dict] = []
     for kind in ISLAND_KINDS:
@@ -797,6 +913,7 @@ def _usage_snapshot(window: TimeWindow) -> dict:
                 "creatures": creature_all.get(kind.authored_id, 0),
                 "creatures_new": creature_new.get(kind.authored_id, 0),
                 "visits": visits.get(kind.authored_id, 0),
+                "parents": parents.get(kind.authored_id, 0),
                 "time_sec": beats.get(kind.authored_id, 0) * HEARTBEAT_SEC,
                 "leading": False,
             }
@@ -871,6 +988,17 @@ def _usage_snapshot(window: TimeWindow) -> dict:
     return {
         "window": window,
         "island_sessions": island,
+        "island_parents": int(island_parents),
+        "live": {"plaza": plaza_live, "island": island_live},
+        "visitors": [
+            {
+                "parent_id": parent_id,
+                "email": email,
+                "visits": int(visits),
+                "last_at": float(last_at or 0),
+            }
+            for parent_id, email, visits, last_at in island_visitors
+        ],
         "creatures_new": creatures,
         "events": [{"event": name, "count": int(count)} for name, count in events],
         "lawns": lawns,
@@ -892,6 +1020,9 @@ def usage(period: int | TimeWindow = 30) -> dict:
         snap["window"],
         {
             "island_sessions": snap["island_sessions"],
+            "island_parents": snap["island_parents"],
+            "live": snap["live"],
+            "visitors": snap["visitors"],
             "creatures_new": snap["creatures_new"],
             "events": snap["events"],
             "lawns": snap["lawns"],
@@ -1055,7 +1186,9 @@ def usage_people(
         title = kind.authored_title if kind else "Луг"
         if needle:
             items = [item for item in items if needle in item["email"].lower()]
-        lawn_sort = sort or ("time" if metric == "time" else metric)
+        lawn_sort = sort or (
+            "time" if metric == "time" else "visits" if metric == "parents" else metric
+        )
         body = _page_sorted(
             items,
             sort=lawn_sort if lawn_sort in LAWN_SORTS else "creatures",
@@ -1066,6 +1199,7 @@ def usage_people(
                 "email": lambda row: row["email"].lower(),
                 "creatures": lambda row: row["creatures"],
                 "visits": lambda row: row["visits"],
+                "parents": lambda row: row["visits"],
                 "time": lambda row: row["time_sec"],
                 "last_visit": lambda row: row["last_visit_at"] or 0,
             },
@@ -1320,6 +1454,7 @@ def parents_table(
         )
         ids = [row.id for row in rows]
         creature_counts: dict[str, int] = {}
+        plaza_counts: dict[str, int] = {}
         if ids:
             creature_counts = dict(
                 db.execute(
@@ -1329,7 +1464,17 @@ def parents_table(
                     .group_by(ChildRow.parent_id)
                 ).all()
             )
-        items = [_parent_item(row, creature_counts.get(row.id, 0)) for row in rows]
+            plaza_counts = dict(
+                db.execute(
+                    select(PlazaToyRow.parent_id, func.count())
+                    .where(PlazaToyRow.parent_id.in_(ids))
+                    .group_by(PlazaToyRow.parent_id)
+                ).all()
+            )
+        items = [
+            _parent_item(row, creature_counts.get(row.id, 0), plaza_counts.get(row.id, 0))
+            for row in rows
+        ]
     return _paged(items, total, cap, skip)
 
 
@@ -1348,7 +1493,10 @@ def parent_card(
             .join(ChildRow, ChildRow.id == CreatureRow.child_id)
             .where(ChildRow.parent_id == parent_id)
         ) or 0
-        parent = _parent_item(row, creature_count)
+        plaza_count = db.scalar(
+            select(func.count()).select_from(PlazaToyRow).where(PlazaToyRow.parent_id == parent_id)
+        ) or 0
+        parent = _parent_item(row, creature_count, plaza_count)
         lawn_counts = _count_by_world(
             db.execute(
                 select(_creature_world_col(), func.count())

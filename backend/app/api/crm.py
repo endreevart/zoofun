@@ -12,7 +12,7 @@ from app.api.deps import require_operator, require_operator_image
 from app.api.operator import LoginIn, LoginOut, login as operator_login
 from app.commerce import promo as promo_codes
 from app.commerce.promo import PromoError
-from app.crm import audience, funnels, growth, ops, queries
+from app.crm import audience, features, funnels, growth, ops, queries
 from app.crm import mail as crm_mail
 from app.crm.audience import AudienceError
 from app.crm.mail import MailCampaignError
@@ -100,6 +100,11 @@ async def usage_events(
     window: TimeWindow = Depends(crm_window),
 ) -> dict:
     return queries.usage_events(limit, window, offset, q, sort, order)
+
+
+@guarded.get("/analytics/features")
+async def feature_snapshot(window: TimeWindow = Depends(crm_window)) -> dict:
+    return features.snapshot(window)
 
 
 @guarded.get("/analytics/usage/people")
@@ -503,9 +508,35 @@ async def mail_render(body: MailRenderIn) -> dict:
         subject,
         body.body,
         unsub="#",
+        hop=f"{get_settings().public_site_url.rstrip('/') or 'https://zooo.fun'}/play?utm_source=crm_mail",
         for_preview=True,
     )
     return {"html": html_body}
+
+
+@guarded.get("/mail/offers")
+async def mail_offers() -> dict:
+    return crm_mail.list_offers()
+
+
+@guarded.post("/mail/offers/{offer_id}/draft")
+async def mail_offer_draft(offer_id: str) -> dict:
+    try:
+        return crm_mail.create_offer_campaign(offer_id)
+    except MailCampaignError as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "unknown_offer") from exc
+
+
+@guarded.get("/mail/campaigns/{campaign_id}/deliveries")
+async def mail_deliveries(
+    campaign_id: str,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> dict:
+    row = crm_mail.list_deliveries(campaign_id, limit, offset)
+    if row is None:
+        raise HTTPException(status_code=404, detail="unknown_campaign")
+    return row
 
 
 @guarded.post("/mail/images")

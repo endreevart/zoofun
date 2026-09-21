@@ -87,6 +87,7 @@ async def test_crm_overview_and_funnels(monkeypatch: pytest.MonkeyPatch) -> None
             "pricing",
             "freemium",
             "island",
+            "plaza",
             "commerce",
             "repeat",
             "return",
@@ -495,6 +496,7 @@ async def test_crm_islands_packs_geo_and_payment_time(monkeypatch: pytest.Monkey
             {"e": "session.heartbeat", "ts": now, "p": {"worldId": "authored"}},
             {"e": "session.heartbeat", "ts": now, "p": {"worldId": "authored"}},
         ],
+        parent_id=parent.id,
         ip="77.88.8.8",
     )
     ingest_batch(
@@ -505,6 +507,7 @@ async def test_crm_islands_packs_geo_and_payment_time(monkeypatch: pytest.Monkey
             {"e": "world.open", "ts": now, "p": {"worldId": WORLD_AUTHORED_MEADOW}},
             {"e": "session.heartbeat", "ts": now, "p": {"worldId": WORLD_AUTHORED_MEADOW}},
         ],
+        parent_id=parent.id,
         ip="8.8.8.8",
     )
 
@@ -535,6 +538,10 @@ async def test_crm_islands_packs_geo_and_payment_time(monkeypatch: pytest.Monkey
         assert lawns["meadow"]["creatures"] >= 1
         assert lawns["garden"]["visits"] >= 1
         assert lawns["meadow"]["visits"] >= 1
+        assert lawns["garden"]["parents"] >= 1
+        assert lawns["meadow"]["parents"] >= 1
+        assert body["island_parents"] >= 1
+        assert any(item["email"] == "islands@example.com" for item in body["visitors"])
         assert lawns["garden"]["time_sec"] >= 60
         assert lawns["meadow"]["time_sec"] >= 30
         assert lawns["garden"]["leading"] is True
@@ -616,7 +623,7 @@ async def test_crm_islands_packs_geo_and_payment_time(monkeypatch: pytest.Monkey
 
         summary = await client.get("/v1/crm/analytics/funnels/summary?period=0", headers=headers)
         assert summary.status_code == 200
-        assert summary.json()["cards"]["total_funnels"] == 9
+        assert summary.json()["cards"]["total_funnels"] == 10
 
     with db_session() as db:
         kazakh = db.get(AnalyticsSessionRow, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")

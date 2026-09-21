@@ -1,6 +1,22 @@
-import { PLAZA_LOAD_R, PLAZA_SHADOW_R, PLAZA_STAMP_CAP, PLAZA_VIEW_CELL } from './plazaCopy';
+import {
+  PLAZA_LOAD_R,
+  PLAZA_LOAD_R_PAD,
+  PLAZA_SHADOW_R,
+  PLAZA_STAMP_CAP,
+  PLAZA_VIEW_CELL,
+  plazaLoadRadius,
+  plazaViewCellSize,
+} from './plazaCopy';
 
-export { PLAZA_LOAD_R, PLAZA_SHADOW_R, PLAZA_STAMP_CAP, PLAZA_VIEW_CELL };
+export {
+  PLAZA_LOAD_R,
+  PLAZA_LOAD_R_PAD,
+  PLAZA_SHADOW_R,
+  PLAZA_STAMP_CAP,
+  PLAZA_VIEW_CELL,
+  plazaLoadRadius,
+  plazaViewCellSize,
+};
 
 function isPaidPlazaToy(model: string): boolean {
   return model.startsWith('toy_') && model.length > 4;

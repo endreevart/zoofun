@@ -7,7 +7,7 @@ import { MoveCreaturesSheet } from './MoveCreaturesSheet';
 import { HatchPreview } from './HatchPreview';
 import { WorldFullPrompt } from './WorldFullPrompt';
 
-export type LayoutPreviewMode = 'hub' | 'pick' | 'move' | 'full' | 'hatch';
+export type LayoutPreviewMode = 'hub' | 'pick' | 'move' | 'full' | 'hatch' | 'paint';
 
 export function readLayoutPreview(
   search = typeof window === 'undefined' ? '' : window.location.search,
@@ -18,7 +18,15 @@ export function readLayoutPreview(
     const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
     if (!params.has('ui')) return null;
     const value = params.get('ui')?.trim() || 'hub';
-    if (value === 'pick' || value === 'move' || value === 'full' || value === 'hatch' || value === 'hub') return value;
+    if (
+      value === 'pick' ||
+      value === 'move' ||
+      value === 'full' ||
+      value === 'hatch' ||
+      value === 'paint' ||
+      value === 'hub'
+    )
+      return value;
     return 'hub';
   } catch {
     return null;
@@ -75,6 +83,15 @@ export function LayoutPreview({ mode }: Props) {
         specs={previewMoveSpecs()}
         onLater={() => go('hub')}
         onMove={() => go('hub')}
+      />
+    );
+  }
+  if (mode === 'paint') {
+    return (
+      <HatchPreview
+        src={null}
+        onDrawAnother={() => go('hub')}
+        onForward={() => go('hub')}
       />
     );
   }

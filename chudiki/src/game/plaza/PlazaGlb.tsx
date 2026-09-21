@@ -20,7 +20,17 @@ import { getIslandAudio } from '../audio/AudioBus';
 import { idleJump, stepJump } from './plazaJump';
 import { hintPlaza } from './plazaVoice';
 import { nearMound, PLAZA_TICKET, type PlazaMound, type PlazaTicket } from './plazaDig';
-import { PLAZA_EMOTES, PLAZA_FOG, PLAZA_PLANE, PLAZA_SHADOW_R, PLAZA_WALK, type PlazaEmoteId } from './plazaCopy';
+import {
+  PLAZA_EMOTES,
+  PLAZA_FOG,
+  PLAZA_PLANE,
+  PLAZA_SHADOW_R,
+  PLAZA_WALK,
+  plazaLoadRadius,
+  plazaViewCellSize,
+  plazaWalkSpeed,
+  type PlazaEmoteId,
+} from './plazaCopy';
 import { PLAZA_CRYSTAL, PLAZA_GLB, type PlazaPeer } from './plazaApi';
 import { seatWorld } from './plazaPeers';
 import { PlazaStudio } from './plazaStudio';
@@ -30,8 +40,8 @@ export type PlazaBurst = { id: number; kind: PlazaEmoteId };
 type Walk = { forward: number; right: number };
 export type PlazaCam = { yaw: number; zoom: number };
 
-const SPEED = 7;
 const TURN = 5.4;
+const TURN_PAD = 6.6;
 const CAM_MIN = 4.6;
 const CAM_MAX = 52;
 const CAM_PITCH_MIN = 0.32;
@@ -440,6 +450,9 @@ export function PlazaGlb({
     scene.fog = new THREE.FogExp2(haze.getHex(), PLAZA_FOG);
     const camera = new THREE.PerspectiveCamera(46, 1, 0.4, 1800);
     const lookSettings = lookForPlaza(quality());
+    const pad = lookSettings.tier === 'low';
+    const walkSpeed = plazaWalkSpeed(pad);
+    const turnRate = pad ? TURN_PAD : TURN;
     const lighting = new Lighting(lookSettings, true);
     lighting.apply(tuning.get());
     const sunLift = lighting.sun.position.clone().sub(lighting.sun.target.position);
@@ -779,11 +792,11 @@ export function PlazaGlb({
         const fx = -sin * forward + cos * right;
         const fz = -cos * forward - sin * right;
         const wantFace = Math.atan2(fx, fz);
-        const turn = THREE.MathUtils.clamp(wrapPi(wantFace - facing), -TURN * dt, TURN * dt);
+        const turn = THREE.MathUtils.clamp(wrapPi(wantFace - facing), -turnRate * dt, turnRate * dt);
         facing += turn;
         avatar.rotation.y = facing;
         const align = Math.max(0.38, 1 - Math.abs(wrapPi(wantFace - facing)) / 1.2);
-        speed = THREE.MathUtils.lerp(speed, SPEED * analog * align, dt * 8);
+        speed = THREE.MathUtils.lerp(speed, walkSpeed * analog * align, dt * 8);
         const step = speed * dt;
         const len = Math.hypot(fx, fz) || 1;
         avatar.position.x = THREE.MathUtils.clamp(avatar.position.x + (fx / len) * step, -PLAZA_WALK, PLAZA_WALK);
@@ -986,6 +999,8 @@ export function PlazaGlb({
           camera,
           canvas: renderer.domElement,
           renderer,
+          loadR: plazaLoadRadius(pad),
+          viewCell: plazaViewCellSize(pad),
         });
         studioHold.current = studio;
         studio.setEnabled(buildingRef.current);
@@ -1023,6 +1038,11 @@ export function PlazaGlb({
         }
       });
       postFx.dispose();
+      try {
+        renderer.forceContextLoss();
+      } catch {
+        /* iPad Safari keeps one WebGL context; drop it before the garden boots. */
+      }
       renderer.dispose();
       node.replaceChildren();
     };

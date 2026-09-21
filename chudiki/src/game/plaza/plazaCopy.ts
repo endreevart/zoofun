@@ -21,9 +21,30 @@ export const PLAZA_PLANE = 960;
 export const PLAZA_STAMP_CAP = 400;
 /** Load and draw catalog meshes inside this radius of the child. */
 export const PLAZA_LOAD_R = 78;
+/** Phone/tablet camera sits farther back; keep trees in that view. */
+export const PLAZA_LOAD_R_PAD = 160;
+/** Walk metres per second on a mouse. */
+export const PLAZA_WALK_SPEED = 7;
+/** Stick walk on a phone or tablet. */
+export const PLAZA_WALK_SPEED_PAD = 10;
 /** Shadow casters only this close; farther trees stay unshaded. */
 export const PLAZA_SHADOW_R = 26;
 export const PLAZA_VIEW_CELL = 18;
+/** Wider cells on a pad so a faster walk does not rebuild the grove more often. */
+export const PLAZA_VIEW_CELL_PAD = 26;
+
+export function plazaLoadRadius(pad: boolean): number {
+  return pad ? PLAZA_LOAD_R_PAD : PLAZA_LOAD_R;
+}
+
+export function plazaWalkSpeed(pad: boolean): number {
+  return pad ? PLAZA_WALK_SPEED_PAD : PLAZA_WALK_SPEED;
+}
+
+export function plazaViewCellSize(pad: boolean): number {
+  return pad ? PLAZA_VIEW_CELL_PAD : PLAZA_VIEW_CELL;
+}
+
 /** Plaza-only haze so the disk rim melts into the sky. */
 export const PLAZA_FOG = 0.0025;
 
@@ -45,7 +66,7 @@ export function plazaPickMode(count: number): 'none' | 'one' | 'many' {
 
 export const PLAZA_TOY_WAIT = 'Красим штуку';
 export const PLAZA_TOY_BAKE = 'Готовим штуку';
-export const PLAZA_TOY_PUT = 'Тапни поляну — поставь штуку.';
+export const PLAZA_TOY_PUT = 'Тапни сад — поставь штуку.';
 export const PLAZA_TOY_READY = 'Вот что получилось';
 export const PLAZA_TOY_PLACE = 'На поляну';
 export const PLAZA_TOY_FAIL = 'Не получилось покрасить.';
@@ -104,6 +125,7 @@ export type PlazaReadySpec = {
     textureUrl?: string;
     postcardUrl?: string;
     modelUrl?: string;
+    meshDeferred?: boolean;
   };
 };
 
@@ -112,6 +134,7 @@ export function isPlazaReadySpec(spec: PlazaReadySpec | undefined): boolean {
   if (spec.hatching) return false;
   const drawing = spec.drawing;
   if (!drawing || drawing.placeholder) return false;
+  if (drawing.meshDeferred && !drawing.modelUrl?.trim()) return false;
   return hasPersistedStill(drawing) || Boolean(drawing.modelUrl && drawing.modelUrl.trim());
 }
 

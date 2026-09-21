@@ -8,6 +8,7 @@ assert.equal(readLayoutPreview('?ui=', true), 'hub');
 assert.equal(readLayoutPreview('?ui=pick', true), 'pick');
 assert.equal(readLayoutPreview('?ui=move', true), 'move');
 assert.equal(readLayoutPreview('?ui=hatch', true), 'hatch');
+assert.equal(readLayoutPreview('?ui=paint', true), 'paint');
 assert.equal(readLayoutPreview('?ui=pick', false), null);
 assert.equal(PREVIEW_TOYS.length >= 4, true);
 assert.equal(previewMoveSpecs().length, 10);

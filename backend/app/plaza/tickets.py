@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-# Shared among every family. Moscow calendar day.
+# Shared among every family on the plaza. Moscow calendar day.
 TICKETS_PER_DAY = 8
+# Each island (authored or DIY copy) may grant this many 3D credits a day.
+WORLD_TICKETS_PER_DAY = 2
 _MSK = timezone(timedelta(hours=3))
 
 

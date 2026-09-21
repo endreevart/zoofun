@@ -64,6 +64,9 @@ export function plazaKeepsGardenBed(screen: string, world?: string | null): bool
   return screen === 'plaza' || Boolean(world);
 }
 
+/** Shared lawn stays in code; the worlds picker hides the banner until this is true. */
+export const PLAZA_PUBLIC = false;
+
 /** Lawn-toy paper stays on the shared lawn. Do not show the world picker. */
 export function plazaCoversWorlds(screen: string, drawingToy = false, toyLook = false): boolean {
   return screen === 'plaza' || drawingToy || toyLook;

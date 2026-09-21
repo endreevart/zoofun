@@ -10,12 +10,15 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.accounts.creatures import slim_for_wire
 from app.accounts.store import MAX_CREATURES, ChildProfile, ParentAccount, store
-from app.accounts.worlds import read_diy_layout, write_diy_layout
+from app.accounts.worlds import parent_owns_world, read_diy_layout, write_diy_layout
 from app.analytics.actions import record_action
 from app.api.deps import require_session, require_session_image
 from app.crm.queries import creature_image, creature_model_bytes
 from app.crm.queries import creature_postcard as postcard_bytes
-from app.worlds import WORLD_DIY_GARDEN
+from app.garden import crystals as garden_crystals
+from app.persistence.db import session
+from app.persistence.models import ParentRow
+from app.worlds import WORLD_AUTHORED, WORLD_DIY_GARDEN, is_crystal_world, kind_for_world_id
 
 router = APIRouter(prefix="/v1/zoo", tags=["zoo"])
 
@@ -58,6 +61,24 @@ class ZooIn(BaseModel):
 class LayoutIn(BaseModel):
     world_id: str = WORLD_DIY_GARDEN
     props: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CrystalDigIn(BaseModel):
+    world_id: str = WORLD_AUTHORED
+    id: str = Field(min_length=1, max_length=32)
+
+
+def _crystal_hunt_world(parent_id: str, world_id: str) -> str:
+    value = (world_id or "").strip()
+    if not is_crystal_world(value):
+        raise HTTPException(status_code=400, detail="bad_world")
+    if kind_for_world_id(value).authored_id == value:
+        return value
+    with session() as db:
+        parent = db.get(ParentRow, parent_id)
+        if parent is None or not parent_owns_world(parent, value):
+            raise HTTPException(status_code=403, detail="world_locked")
+    return value
 
 
 def _as_record(body: CreatureIn) -> dict[str, Any]:
@@ -233,3 +254,54 @@ async def read_zoo_hearts(
         return owner_hearts(parent.id, world_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/crystals")
+async def read_world_crystals(
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
+    world_id: str = WORLD_AUTHORED,
+) -> dict:
+    parent, _child = pair
+    dest = _crystal_hunt_world(parent.id, world_id)
+    left = store.world_tickets_left(parent.id, dest)
+    return {
+        "mounds": garden_crystals.public_mounds(parent.id, dest, allow_prize=left > 0),
+        "tickets_left": left,
+    }
+
+
+@router.post("/crystals/dig")
+async def dig_world_crystal(
+    body: CrystalDigIn,
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
+) -> dict:
+    parent, child = pair
+    dest = _crystal_hunt_world(parent.id, body.world_id)
+    left = store.world_tickets_left(parent.id, dest)
+    kind, mounds, x, z = garden_crystals.smash(
+        parent.id, dest, body.id, allow_prize=left > 0
+    )
+    if kind == "gone":
+        raise HTTPException(status_code=404, detail="no_mound")
+    found = False
+    remaining = parent.remaining
+    ticket: dict | None = None
+    if kind == "prize":
+        account = store.claim_world_credit(parent.id, dest)
+        if account is not None:
+            found = True
+            remaining = account.remaining
+            ticket = {"id": f"t{int(x * 10)}{int(z * 10)}", "x": x, "z": z}
+    record_action(
+        "world.dig",
+        parent_id=parent.id,
+        child_id=child.id,
+        payload={"found": found, "world_id": dest},
+    )
+    return {
+        "found": found,
+        "remaining": remaining,
+        "mounds": mounds,
+        "ticket": ticket,
+        "tickets_left": store.world_tickets_left(parent.id, dest),
+    }

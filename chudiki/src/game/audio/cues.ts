@@ -419,12 +419,12 @@ export const UI_CUES: Record<CueId, CueSpec> = {
   plaza_draw: {
     file: 'plaza_draw.mp3',
     line: 'Нарисуем дерево или штуку для этого зоопарка.',
-    when: 'Тап «Нарисовать» в лотке «Моё» на общей поляне.',
+    when: 'Тап «Нарисовать» в лотке «Моё» в своём зоопарке для стройки.',
   },
   plaza_toy_wait: {
     file: 'plaza_toy_wait.mp3',
     line: 'Поставь картинку на поляну. Подожди чуть-чуть — и тут будет настоящая штука.',
-    when: 'Картинка штуки уже в «Моём» или на поляне, а Tripo ещё лепит GLB.',
+    when: 'Картинка штуки уже в «Моём» или в саду, а Tripo ещё лепит GLB.',
   },
   still_after_first: {
     file: 'still_after_first.mp3',

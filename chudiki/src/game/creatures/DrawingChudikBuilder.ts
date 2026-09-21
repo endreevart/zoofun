@@ -6,6 +6,7 @@ import { bakePaintables, blobGeometry, createToyMaterial } from '../core/geometr
 import { displayStillUrl, portraitUrlOf } from '../drawing/portrait';
 import type { ChudikSpec, DrawingData } from './ChudikSpec';
 import type { ChudikRig } from './ChudikBuilder';
+import { eggMeshCooking, hatchRingVisible } from './hatch';
 
 const meshyLoader = new GLTFLoader();
 const meshyCache = new Map<string, Promise<GLTF>>();
@@ -444,6 +445,7 @@ function buildEggChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.04;
   ring.userData.chudikId = spec.id;
+  ring.visible = hatchRingVisible(false, eggMeshCooking(drawing));
   bounce.add(ring);
   disposables.push(ring.geometry, ring.material, ringTex);
 
@@ -471,7 +473,8 @@ function buildEggChudik(spec: ChudikSpec, drawing: DrawingData): ChudikRig {
         crack.userData.pop = Math.max(0, pop - 0.05);
       }
       shown = next;
-      if (ringCtx) {
+      ring.visible = hatchRingVisible(look.ready, look.cooking);
+      if (ring.visible && ringCtx) {
         paintWaitRing(ringCtx, look.fill, look.spin, look.ready);
         ringTex.needsUpdate = true;
       }

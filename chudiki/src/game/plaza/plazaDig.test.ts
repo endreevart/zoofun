@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import {
   localPlazaMounds,
+  localGardenMounds,
   moundsFromRoom,
   nearMound,
   refillPlazaMounds,
+  refillGardenMounds,
   ticketsFromRoom,
+  GARDEN_CRYSTAL_COUNT,
+  GARDEN_CRYSTAL_INNER,
+  GARDEN_CRYSTAL_OUTER,
+  GARDEN_TICKETS_PER_DAY,
   PLAZA_CRYSTAL_COUNT,
   PLAZA_CRYSTAL_INNER,
   PLAZA_CRYSTAL_MAX,
@@ -43,3 +49,16 @@ assert.deepEqual(
 assert.deepEqual(moundsFromRoom(undefined), []);
 assert.deepEqual(ticketsFromRoom([{ id: 't1', x: 4, z: -2 }]), [{ id: 't1', x: 4, z: -2 }]);
 assert.deepEqual(ticketsFromRoom(undefined), []);
+
+assert.equal(GARDEN_TICKETS_PER_DAY, 2);
+const garden = localGardenMounds();
+assert.equal(garden.length, GARDEN_CRYSTAL_COUNT);
+assert.equal(new Set(garden.map((item) => item.id)).size, garden.length);
+for (const mound of garden) {
+  const radius = Math.hypot(mound.x - 0, mound.z - -5);
+  assert.ok(radius >= GARDEN_CRYSTAL_INNER - 0.01);
+  assert.ok(radius <= GARDEN_CRYSTAL_OUTER + 0.5);
+}
+assert.equal(nearMound(garden[0].x, garden[0].z, garden), garden[0].id);
+const gardenLeft = garden.slice(0, 2);
+assert.equal(refillGardenMounds(gardenLeft).length, GARDEN_CRYSTAL_COUNT);
