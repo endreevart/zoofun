@@ -3,6 +3,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { assetUrl } from '../../assetUrl';
 import { PLAZA_CRYSTAL } from '../plaza/plazaApi';
 import { PLAZA_TICKET, type PlazaMound, type PlazaTicket } from '../plaza/plazaDig';
+import { contactBlobTexture, contactShadowOffset } from '../world/contactShadows';
+import { tuning } from '../render/tuning';
+import { crystalUmbra, markHuntCaster, seatOnGround } from './crystalUmbra';
 
 const SPAN = 1.55;
 
@@ -40,16 +43,12 @@ function prepareCrystal(scene: THREE.Object3D): THREE.Group {
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   const span = Math.max(size.x, size.z, 0.01);
-  scene.scale.setScalar(SPAN / span);
+  const scale = SPAN / span;
+  scene.scale.setScalar(scale);
   scene.updateMatrixWorld(true);
   const fitted = new THREE.Box3().setFromObject(root);
-  scene.position.y -= fitted.min.y;
-  scene.traverse((node) => {
-    if (node instanceof THREE.Mesh) {
-      node.castShadow = false;
-      node.receiveShadow = false;
-    }
-  });
+  scene.position.y -= fitted.min.y / Math.max(scale, 1e-6);
+  markHuntCaster(root);
   return root;
 }
 
@@ -67,6 +66,7 @@ function fallbackCrystal(): THREE.Group {
   );
   mesh.position.y = 0.72;
   root.add(mesh);
+  markHuntCaster(root);
   return root;
 }
 
@@ -76,19 +76,35 @@ function plant(
   x: number,
   z: number,
   y: number,
+  hanging: boolean,
+  umbraMap: THREE.Texture | null,
 ): THREE.Object3D {
   const bump = proto.clone(true);
-  bump.position.set(x, y, z);
   bump.rotation.y = spinOf(id);
   bump.scale.setScalar(0.92 + (spinOf(`${id}-s`) / (Math.PI * 2)) * 0.14);
-  bump.name = `crystal:${id}`;
-  return bump;
+  bump.position.set(0, 0, 0);
+  seatOnGround(bump);
+  const root = new THREE.Group();
+  root.position.set(x, y, z);
+  root.name = `crystal:${id}`;
+  const offset = contactShadowOffset(tuning.get().sunAzimuth, hanging ? 0.55 : 0.32);
+  const disc = crystalUmbra(umbraMap, hanging ? 1.28 : 1.02);
+  disc.position.set(offset.x, 0.05, offset.z);
+  root.add(disc, bump);
+  return root;
 }
 
 function disposeObject(child: THREE.Object3D, shared: boolean) {
-  if (shared) return;
   child.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
+    if (node.name === 'crystal-umbra') {
+      node.geometry.dispose();
+      const material = node.material as THREE.MeshBasicMaterial;
+      material.map = null;
+      material.dispose();
+      return;
+    }
+    if (shared) return;
     node.geometry.dispose();
     const material = node.material;
     if (Array.isArray(material)) material.forEach((item) => item.dispose());
@@ -115,14 +131,17 @@ export class CrystalField {
   private paintKey = '';
   private ticketKey = '';
   private heightAt: (x: number, z: number) => number;
+  private hanging: boolean;
   private loader = new GLTFLoader();
   private textures = new THREE.TextureLoader();
   private ticketMap: THREE.Texture | null = null;
   private glowMap = glowTexture();
+  private umbraMap = contactBlobTexture();
   private dead = false;
 
-  constructor(heightAt: (x: number, z: number) => number) {
+  constructor(heightAt: (x: number, z: number) => number, hanging = false) {
     this.heightAt = heightAt;
+    this.hanging = hanging;
     this.group.name = 'garden-crystals';
     this.moundsGroup.name = 'garden-crystal-mounds';
     this.ticketGroup.name = 'garden-crystal-tickets';
@@ -193,6 +212,7 @@ export class CrystalField {
     this.ticketMap?.dispose();
     this.ticketMap = null;
     this.glowMap.dispose();
+    this.umbraMap.dispose();
     this.group.removeFromParent();
   }
 
@@ -206,7 +226,17 @@ export class CrystalField {
     this.paintKey = key;
     for (const item of this.mounds) {
       const y = this.heightAt(item.x, item.z);
-      this.moundsGroup.add(plant(proto, item.id, item.x, item.z, Number.isFinite(y) ? y : 0));
+      this.moundsGroup.add(
+        plant(
+          proto,
+          item.id,
+          item.x,
+          item.z,
+          Number.isFinite(y) ? y : 0,
+          this.hanging,
+          this.umbraMap,
+        ),
+      );
     }
   }
 

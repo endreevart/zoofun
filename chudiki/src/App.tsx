@@ -74,6 +74,7 @@ import { WalkPad } from './ui/WalkPad';
 import { CareHud } from './ui/CareHud';
 import { HudIcon } from './ui/HudIcon';
 import { FirstDrawPrompt } from './ui/FirstDrawPrompt';
+import { DiscoverySheet } from './ui/DiscoverySheet';
 import { FriendInvite } from './ui/FriendInvite';
 import { StillHint } from './ui/StillHint';
 import { WaitingFriend } from './ui/WaitingFriend';
@@ -178,6 +179,7 @@ import {
   type PlazaTicket,
 } from './game/plaza/plazaDig';
 import { digGardenCrystal, fetchGardenCrystals } from './game/garden/gardenApi';
+import { fetchGardenChest, openGardenChest, type GardenChestFact } from './game/garden/chestApi';
 import { ownVitrineRemountsGarden, vitrineCoversWorlds } from './game/visits/vitrineSort';
 import { InstallHint } from './ui/InstallHint';
 
@@ -521,6 +523,10 @@ export function App() {
   const crystalFindTimer = useRef(0);
   const crystalHinted = useRef<string | null>(null);
   const crystalTicketTimer = useRef(0);
+  const [nearChest, setNearChest] = useState<string | null>(null);
+  const [chestFact, setChestFact] = useState<GardenChestFact | null>(null);
+  const chestOpening = useRef(false);
+  const chestHinted = useRef<string | null>(null);
   const [soundOpen, setSoundOpen] = useState(false);
   const [moveDest, setMoveDest] = useState<string | null>(null);
   const [moveFrom, setMoveFrom] = useState<ChudikSpec[]>([]);
@@ -822,6 +828,16 @@ export function App() {
             }
             if (!id) crystalHinted.current = null;
           },
+          onNearChest: (id) => {
+            setNearChest(id);
+            if (id && chestHinted.current !== id) {
+              chestHinted.current = id;
+              const audio = getIslandAudio();
+              void audio.unlock();
+              void audio.playCue('plaza_dig');
+            }
+            if (!id) chestHinted.current = null;
+          },
         });
       } catch (error) {
         console.error('[world] webgl failed', error);
@@ -965,11 +981,17 @@ export function App() {
     window.clearTimeout(crystalFindTimer.current);
     window.clearTimeout(crystalTicketTimer.current);
     gameRef.current?.setCrystalTickets([]);
+    setNearChest(null);
+    setChestFact(null);
+    chestOpening.current = false;
+    chestHinted.current = null;
+    gameRef.current?.setChest(null);
   }, [world]);
 
   useEffect(() => {
     if (!ready || !world || guestOn || arcadeBuilding) {
       gameRef.current?.setCrystalMounds([]);
+      gameRef.current?.setChest(null);
       return;
     }
     let dead = false;
@@ -986,6 +1008,24 @@ export function App() {
       const local = localGardenMounds(world.length + 1);
       setCrystalMounds(local);
       gameRef.current?.setCrystalMounds(local);
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [arcadeBuilding, guestOn, ready, world]);
+
+  useEffect(() => {
+    if (!ready || !world || guestOn || arcadeBuilding) {
+      setNearChest(null);
+      gameRef.current?.setChest(null);
+      return;
+    }
+    let dead = false;
+    void (async () => {
+      const remote = await fetchGardenChest(world);
+      if (dead) return;
+      gameRef.current?.setChest(remote?.chest ?? null);
+      if (remote?.chest) gameRef.current?.lookAtChest();
     })();
     return () => {
       dead = true;
@@ -1911,6 +1951,28 @@ export function App() {
     world,
   ]);
 
+  const openGardenTreasure = useCallback(() => {
+    const id = nearChest;
+    const gardenId = world;
+    if (!id || !gardenId || chestOpening.current || chestFact || diyBuild) return;
+    chestOpening.current = true;
+    getIslandAudio().playSfx('smash');
+    void (async () => {
+      const body = await openGardenChest(gardenId, id);
+      chestOpening.current = false;
+      if (!body) {
+        const remote = await fetchGardenChest(gardenId);
+        gameRef.current?.setChest(remote?.chest ?? null);
+        setNearChest(null);
+        return;
+      }
+      gameRef.current?.setChest(null);
+      setNearChest(null);
+      setChestFact(body);
+      trackAction('world.chest', { world_id: gardenId });
+    })();
+  }, [chestFact, diyBuild, nearChest, world]);
+
   const drawAnotherFromHatch = useCallback(() => {
     if (!canCreate()) return;
     hatchLookRef.current = null;
@@ -2727,7 +2789,8 @@ export function App() {
     Boolean(plazaToyLook) ||
     plazaToyShop ||
     crystalFound ||
-    crystalFinding;
+    crystalFinding ||
+    Boolean(chestFact);
 
   return (
     <div className={cinema ? 'app is-cinema' : 'app'} ref={appRef}>
@@ -2980,11 +3043,30 @@ export function App() {
             />
           ) : null}
 
-          {offerSpec || cardSpec || pickFrom || arcadeBuilding || arcadeSettle ? null : (
+          {offerSpec || cardSpec || pickFrom || arcadeBuilding || arcadeSettle || chestFact ? null : (
             <WalkPad onWalk={walkPad} />
           )}
 
+          {nearChest &&
+          !guestOn &&
+          !diyBuild &&
+          !isAuthoringStudio() &&
+          !diyPicking &&
+          !arcadeBuilding &&
+          !arcadeSettle &&
+          !chestFact &&
+          !crystalFound &&
+          !crystalFinding &&
+          !offerSpec &&
+          !cardSpec &&
+          !showDrawPrompt ? (
+            <button className="plaza-dig garden-dig" type="button" aria-label="Открыть" onClick={openGardenTreasure}>
+              📦
+            </button>
+          ) : null}
+
           {nearCrystal &&
+          !nearChest &&
           !guestOn &&
           !diyBuild &&
           !isAuthoringStudio() &&
@@ -2993,12 +3075,23 @@ export function App() {
           !arcadeSettle &&
           !crystalFound &&
           !crystalFinding &&
+          !chestFact &&
           !offerSpec &&
           !cardSpec &&
           !showDrawPrompt ? (
             <button className="plaza-dig garden-dig" type="button" aria-label="Ломать" onClick={smashGardenCrystal}>
               🔨
             </button>
+          ) : null}
+
+          {chestFact ? (
+            <DiscoverySheet
+              title={chestFact.title}
+              body={chestFact.body}
+              opened={chestFact.opened}
+              total={chestFact.total}
+              onClose={() => setChestFact(null)}
+            />
           ) : null}
 
           {crystalFound && !showDrawPrompt ? (
@@ -3129,7 +3222,7 @@ export function App() {
             />
           ) : null}
 
-          {offerSpec || cardSpec || pickFrom || arcadeBuilding || arcadeSettle ? null : (
+          {offerSpec || cardSpec || pickFrom || arcadeBuilding || arcadeSettle || chestFact ? null : (
             <div className={`toolbar-dock${actionsOpen ? ' is-open' : ''}`}>
             <button
               className="toolbar-scrim"

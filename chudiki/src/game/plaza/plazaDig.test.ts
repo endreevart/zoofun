@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   gardenSmashId,
+  gardenChestId,
   localPlazaMounds,
   localGardenMounds,
   moundsFromRoom,
@@ -68,5 +69,8 @@ assert.equal(gardenSmashId(garden[0].x, garden[0].z, 46, garden), null, 'overvie
 assert.equal(gardenSmashId(0, -5, 8, garden), null, 'island centre is not next to a crystal');
 assert.ok(GARDEN_DIG_NEAR <= 2.5);
 assert.ok(GARDEN_DIG_MAX_CAMERA < 40);
+assert.equal(gardenChestId(garden[0].x, garden[0].z, 8, garden[0]), garden[0].id);
+assert.equal(gardenChestId(garden[0].x, garden[0].z, 46, garden[0]), null);
+assert.equal(gardenChestId(0, -5, 8, garden[0]), null);
 const gardenLeft = garden.slice(0, 2);
 assert.equal(refillGardenMounds(gardenLeft).length, GARDEN_CRYSTAL_COUNT);

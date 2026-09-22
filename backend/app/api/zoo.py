@@ -15,6 +15,7 @@ from app.analytics.actions import record_action
 from app.api.deps import require_session, require_session_image
 from app.crm.queries import creature_image, creature_model_bytes
 from app.crm.queries import creature_postcard as postcard_bytes
+from app.garden import chests as garden_chests
 from app.garden import crystals as garden_crystals
 from app.persistence.db import session
 from app.persistence.models import ParentRow
@@ -64,6 +65,11 @@ class LayoutIn(BaseModel):
 
 
 class CrystalDigIn(BaseModel):
+    world_id: str = WORLD_AUTHORED
+    id: str = Field(min_length=1, max_length=32)
+
+
+class ChestOpenIn(BaseModel):
     world_id: str = WORLD_AUTHORED
     id: str = Field(min_length=1, max_length=32)
 
@@ -305,3 +311,32 @@ async def dig_world_crystal(
         "ticket": ticket,
         "tickets_left": store.world_tickets_left(parent.id, dest),
     }
+
+
+@router.get("/chest")
+async def read_world_chest(
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
+    world_id: str = WORLD_AUTHORED,
+) -> dict:
+    parent, _child = pair
+    dest = _crystal_hunt_world(parent.id, world_id)
+    return garden_chests.public_on_world(parent.id, dest)
+
+
+@router.post("/chest/open")
+async def open_world_chest(
+    body: ChestOpenIn,
+    pair: Annotated[tuple[ParentAccount, ChildProfile], Depends(require_session)],
+) -> dict:
+    parent, child = pair
+    dest = _crystal_hunt_world(parent.id, body.world_id)
+    found = garden_chests.open_chest(parent.id, dest, body.id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="no_chest")
+    record_action(
+        "world.chest",
+        parent_id=parent.id,
+        child_id=child.id,
+        payload={"world_id": dest},
+    )
+    return found

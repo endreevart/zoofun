@@ -108,6 +108,7 @@ const primaryNav = [
   { key: "packs", label: "Пакеты", icon: "pi pi-box", routes: ["packs"] },
   { key: "promos", label: "Промокоды", icon: "pi pi-percentage", routes: ["promos"] },
   { key: "payments", label: "Платежи", icon: "pi pi-money-bill", routes: ["payments"] },
+  { key: "discoveries", label: "Открытия ЗУФАН", icon: "pi pi-compass", routes: ["discovery-drafts"] },
 ];
 
 const pageKey = computed(() => {
@@ -123,6 +124,9 @@ const sectionTabs = computed((): SectionTab[] => {
     return USAGE_NAV_TABS;
   }
   if (route.name === "mail") return MAIL_NAV_TABS;
+  if (route.name === "discovery-drafts") {
+    return [{ name: "discovery-drafts", label: "Открытия ЗУФАН" }];
+  }
   return [];
 });
 

@@ -40,7 +40,7 @@ export function buildContactShadows(
 
   const geometry = new THREE.CircleGeometry(1, 24);
   geometry.rotateX(-Math.PI / 2);
-  const blob = blobTexture();
+  const blob = contactBlobTexture();
   const material = new THREE.MeshBasicMaterial({
     map: blob,
     transparent: true,
@@ -97,7 +97,7 @@ export function disposeContactShadows(root: THREE.Object3D) {
   group.removeFromParent();
 }
 
-function blobTexture(): THREE.DataTexture {
+export function contactBlobTexture(): THREE.DataTexture {
   const size = 64;
   const mid = (size - 1) / 2;
   const data = new Uint8Array(size * size * 4);

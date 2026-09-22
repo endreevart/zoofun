@@ -31,6 +31,7 @@ const router = createRouter({
         { path: "promos", name: "promos", component: () => import("@/pages/PromosPage.vue") },
         { path: "payments", name: "payments", component: () => import("@/pages/PaymentsPage.vue") },
         { path: "mail", name: "mail", component: () => import("@/pages/MailPage.vue") },
+        { path: "content/discovery-drafts", name: "discovery-drafts", component: () => import("@/pages/DiscoveriesPage.vue") },
       ],
     },
   ],

@@ -37,7 +37,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (response.status === 503) {
     throw new Error("Оператор не настроен. Задайте OPERATOR_LOGIN и OPERATOR_PASSWORD в .env");
   }
-  if (!response.ok) throw new Error(`crm_failed (${response.status})`);
+  if (!response.ok) {
+    let message = `crm_failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === "string" && body.detail) message = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message);
+  }
   return (await response.json()) as T;
 }
 
@@ -200,6 +209,35 @@ export const crmApi = {
     request<PromoRow>(`/v1/crm/promos/${encodeURIComponent(code)}/deactivate`, { method: "POST" }),
   promoActivate: (code: string) =>
     request<PromoRow>(`/v1/crm/promos/${encodeURIComponent(code)}/activate`, { method: "POST" }),
+  discoveries: (page?: ListQuery & { status?: string; provider?: string; kind?: string; category?: string; q?: string }) => {
+    const query = new URLSearchParams();
+    if (page?.limit != null) query.set("limit", String(page.limit));
+    if (page?.offset != null) query.set("offset", String(page.offset));
+    if (page?.status) query.set("status", page.status);
+    if (page?.provider) query.set("provider", page.provider);
+    if (page?.kind) query.set("kind", page.kind);
+    if (page?.category) query.set("category", page.category);
+    if (page?.q) query.set("q", page.q);
+    const suffix = query.toString() ? `?${query}` : "";
+    return request<Paged<DiscoveryRow> & { status_counts: DiscoveryStatusCounts }>(`/v1/crm/discoveries${suffix}`);
+  },
+  discovery: (id: string) => request<DiscoveryRow>(`/v1/crm/discoveries/${encodeURIComponent(id)}`),
+  discoveryCreate: (body: DiscoveryWrite) =>
+    request<DiscoveryRow>("/v1/crm/discoveries", { method: "POST", body: JSON.stringify(body) }),
+  discoveryUpdate: (id: string, body: DiscoveryWrite) =>
+    request<DiscoveryRow>(`/v1/crm/discoveries/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  discoveryPublish: (id: string) =>
+    request<DiscoveryPublishResult>(`/v1/crm/discoveries/${encodeURIComponent(id)}/publish`, { method: "POST" }),
+  discoveryReject: (id: string, body?: { reason?: string }) =>
+    request<DiscoveryRow>(`/v1/crm/discoveries/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
+  discoveryDelete: (id: string) =>
+    request<{ ok: boolean }>(`/v1/crm/discoveries/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 export type Overview = {
@@ -794,4 +832,47 @@ export type PromoWrite = {
 
 export type PromoIn = PromoWrite & {
   code: string;
+};
+
+export type DiscoveryStatusCounts = {
+  all: number;
+  needs_review: number;
+  fetched: number;
+  approved: number;
+  rejected: number;
+};
+
+export type DiscoveryRow = {
+  id: string;
+  title: string;
+  title_ru: string;
+  title_en: string;
+  body: string;
+  kind: string;
+  suggested_type: string;
+  age: string;
+  suggested_age_group: string;
+  category: string;
+  suggested_category: string;
+  status: string;
+  is_active: boolean;
+  provider: string;
+  sort_order: number;
+  rejection_reason: string;
+  created_at: number;
+  updated_at: number;
+};
+
+export type DiscoveryWrite = {
+  title: string;
+  body: string;
+  kind: string;
+  age: string;
+  category: string;
+  sort_order?: number;
+};
+
+export type DiscoveryPublishResult = {
+  discovery: { id: string; title: string };
+  draft: DiscoveryRow;
 };

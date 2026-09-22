@@ -43,7 +43,8 @@ import { JoyAir } from './visits/joyAir';
 import { joyFromHearts } from './visits/joy';
 import { mayWriteFamilyZoo } from './visits/guestPersist';
 import { CrystalField } from './garden/crystalField';
-import { gardenSmashId, type PlazaMound, type PlazaTicket } from './plaza/plazaDig';
+import { ChestField } from './garden/chestField';
+import { gardenChestId, gardenSmashId, type PlazaMound, type PlazaTicket } from './plaza/plazaDig';
 
 export type CareState = {
   joy: number;
@@ -60,6 +61,8 @@ export type GameCallbacks = {
   onReady?(): void;
   /** Camera (or driven Zufik) is close enough to smash this crystal. */
   onNearCrystal?(id: string | null): void;
+  /** Close enough to open the daily ЗУФАН chest. */
+  onNearChest?(id: string | null): void;
 };
 
 export type GameStartOptions = {
@@ -111,6 +114,9 @@ export class Game {
   private crystalMounds: PlazaMound[] = [];
   private crystalTickets: PlazaTicket[] = [];
   private lastNearCrystal: string | null | undefined;
+  private chests: ChestField | null = null;
+  private chest: PlazaMound | null = null;
+  private lastNearChest: string | null | undefined;
   private held = false;
 
   private creatures = new Map<string, Chudik>();
@@ -294,10 +300,16 @@ export class Game {
     this.world = world;
     this.joyAir = new JoyAir();
     this.world.root.add(this.joyAir.group);
-    this.crystals = new CrystalField((x, z) => this.world.heightAt(x, z));
+    this.crystals = new CrystalField(
+      (x, z) => this.world.heightAt(x, z),
+      isHangingShell(this.world.shell),
+    );
     this.world.root.add(this.crystals.group);
     if (this.crystalMounds.length) this.crystals.setMounds(this.crystalMounds);
     if (this.crystalTickets.length) this.crystals.setTickets(this.crystalTickets);
+    this.chests = new ChestField((x, z) => this.world.heightAt(x, z));
+    this.world.root.add(this.chests.group);
+    if (this.chest) this.chests.setChest(this.chest);
     this.scene.add(this.world.root);
     this.scene.fog = this.world.root.userData.fog as THREE.FogExp2;
     this.planetCore = this.world.root.getObjectByName('planet-core') ?? null;
@@ -1025,6 +1037,18 @@ export class Game {
     this.crystals?.setTickets(this.crystalTickets);
   }
 
+  setChest(chest: PlazaMound | null) {
+    this.chest = chest;
+    this.chests?.setChest(this.chest);
+    this.lastNearChest = undefined;
+    this.emitNearChest();
+  }
+
+  lookAtChest() {
+    if (!this.rig || !this.chest) return;
+    this.rig.flyTo(new THREE.Vector3(this.chest.x, 0.4, this.chest.z), 9.4, 0.9);
+  }
+
   get library() {
     return this.world.library;
   }
@@ -1174,6 +1198,7 @@ export class Game {
     this.sparkles.update(dt);
     this.joyAir?.update(dt);
     this.crystals?.update(this.elapsed);
+    this.chests?.update(this.elapsed);
 
     // The stylized shading and the light shafts both need the key light
     // expressed relative to this frame's camera.
@@ -1219,6 +1244,7 @@ export class Game {
     }
     this.emitCare();
     this.emitNearCrystal();
+    this.emitNearChest();
 
     this.updateNameplate(dt);
     if (this.mobileShadowCadence > 0) {
@@ -1266,6 +1292,29 @@ export class Game {
     if (id === this.lastNearCrystal) return;
     this.lastNearCrystal = id;
     this.callbacks.onNearCrystal?.(id);
+  }
+
+  private emitNearChest() {
+    if (!this.rig || !this.chest) {
+      if (this.lastNearChest) {
+        this.lastNearChest = null;
+        this.callbacks.onNearChest?.(null);
+      }
+      return;
+    }
+    let x = this.rig.lookX;
+    let z = this.rig.lookZ;
+    if (this.drivenId) {
+      const driver = this.creatures.get(this.drivenId);
+      if (driver) {
+        x = driver.position.x;
+        z = driver.position.z;
+      }
+    }
+    const id = gardenChestId(x, z, this.rig.orbitDistance, this.chest);
+    if (id === this.lastNearChest) return;
+    this.lastNearChest = id;
+    this.callbacks.onNearChest?.(id);
   }
 
   private emitCare(force = false) {
@@ -1436,6 +1485,8 @@ export class Game {
     this.joyAir?.dispose();
     this.crystals?.dispose();
     this.crystals = null;
+    this.chests?.dispose();
+    this.chests = null;
     this.world?.dispose();
     this.stopTvFeed();
     this.audio.setGardenPaused(true);

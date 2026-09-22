@@ -18,6 +18,7 @@ export const GARDEN_TICKETS_PER_DAY = 2;
 export const GARDEN_CRYSTAL_INNER = 6;
 export const GARDEN_CRYSTAL_OUTER = 18;
 export const GARDEN_DIG_NEAR = 2.5;
+export const GARDEN_CHEST_NEAR = 3.2;
 /** Bird's-eye of the whole lawn must not count as standing on a crystal. */
 export const GARDEN_DIG_MAX_CAMERA = 18;
 const MIN_R = PLAZA_CRYSTAL_INNER;
@@ -150,6 +151,16 @@ export function gardenSmashId(
 ): string | null {
   if (cameraDistance > GARDEN_DIG_MAX_CAMERA) return null;
   return nearMound(x, z, mounds, GARDEN_DIG_NEAR);
+}
+
+export function gardenChestId(
+  x: number,
+  z: number,
+  cameraDistance: number,
+  chest: PlazaMound | null,
+): string | null {
+  if (!chest || cameraDistance > GARDEN_DIG_MAX_CAMERA) return null;
+  return nearMound(x, z, [chest], GARDEN_CHEST_NEAR);
 }
 
 export function nearMound(

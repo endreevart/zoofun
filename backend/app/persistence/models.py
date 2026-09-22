@@ -523,3 +523,53 @@ class WorldTicketRow(Base):
 
     def __str__(self) -> str:
         return f"{self.world_id} · {self.ticket_used}/{self.ticket_day or '—'}"
+
+
+class ZufanDiscoveryRow(Base):
+    """Readable «Открытия ЗУФАН» copied from approved MIO facts (D-036)."""
+
+    __tablename__ = "zufan_discoveries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(16), default="fact")
+    age: Mapped[str] = mapped_column(String(16), default="preschool")
+    category: Mapped[str] = mapped_column(String(32), default="animals")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(16), default="approved")
+    provider: Mapped[str] = mapped_column(String(16), default="seed")
+    rejection_reason: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class ZufanDiscoveryOpenRow(Base):
+    __tablename__ = "zufan_discovery_opens"
+
+    parent_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("parents.id", ondelete="CASCADE"), primary_key=True
+    )
+    discovery_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    opened_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class ZufanChestRow(Base):
+    """One family chest. Stays until opened; a new one may spawn the next Moscow day."""
+
+    __tablename__ = "zufan_chests"
+
+    parent_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("parents.id", ondelete="CASCADE"), primary_key=True
+    )
+    chest_id: Mapped[str] = mapped_column(String(24), default="")
+    world_id: Mapped[str] = mapped_column(String(80), default="")
+    x: Mapped[float] = mapped_column(Float, default=0)
+    z: Mapped[float] = mapped_column(Float, default=0)
+    discovery_id: Mapped[str] = mapped_column(String(36), default="")
+    spawn_day: Mapped[str] = mapped_column(String(16), default="")
+    opened_at: Mapped[float | None] = mapped_column(Float, nullable=True)

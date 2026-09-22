@@ -69,6 +69,11 @@ assert.ok(gardenBaked.props.some((prop: { model: string }) => prop.model === 'ga
 assert.ok(gardenBaked.props.some((prop: { model: string }) => prop.model === 'lotus-pond'));
 assert.ok(gardenBaked.props.some((prop: { model: string }) => prop.model === 'timber-bridge'));
 assert.equal(gardenBaked.props.some((prop: { model: string }) => prop.model === 'grass_a'), false);
+const fence = gardenBaked.props.find((prop: { id: string }) => prop.id === 'h-10') as
+  | { model: string; x: number; z: number }
+  | undefined;
+assert.equal(fence?.model, 'wooden-fence');
+assert.ok(fence && fence.x > 8 && fence.z > 3.5);
 
 const meadowBaked = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../public/layout/meadow-layout.json'), 'utf8'),

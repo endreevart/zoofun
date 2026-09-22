@@ -137,6 +137,9 @@ def init_schema() -> None:
                 apply_migrations()
                 with session() as db:
                     seed_packs(db)
+                    from app.garden.chests import seed_catalog
+
+                    seed_catalog(db)
                 from app.commerce.promo import ensure_named_promos
 
                 ensure_named_promos()
@@ -147,6 +150,9 @@ def init_schema() -> None:
     apply_migrations()
     with session() as db:
         seed_packs(db)
+        from app.garden.chests import seed_catalog
+
+        seed_catalog(db)
     from app.commerce.promo import ensure_named_promos
 
     ensure_named_promos()

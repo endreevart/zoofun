@@ -4,4 +4,5 @@ It is not a shop biome. Until the file exists the island paints a large grass pl
 `reactions/` holds the six lawn pictograms (hello, hooray, wow, love, laugh, play).
 `ticket.png` is the glowing find on the shared lawn.
 `crystal.glb` is the compact hunt prism (one mesh, cloned per mound).
+`chest.glb` is the daily ЗУФАН treasure (one on a random family island).
 `pick-sign.png` `pick-hint.png` `pick-prev.png` `pick-next.png` are the Zufik picker before the shared lawn.

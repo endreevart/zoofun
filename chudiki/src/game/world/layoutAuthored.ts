@@ -63,7 +63,7 @@ export type AuthoredProp = {
   tint?: [number, number, number];
 };
 
-export const LAYOUT_STORAGE_KEY = 'chudiki.layout.v14';
+export const LAYOUT_STORAGE_KEY = 'chudiki.layout.v15';
 export const MEADOW_LAYOUT_STORAGE_KEY = 'chudiki.layout.meadow.v4';
 export const GROVE_LAYOUT_STORAGE_KEY = 'chudiki.layout.grove.v4';
 
@@ -72,7 +72,7 @@ const SHELL_LAYOUT = {
     key: LAYOUT_STORAGE_KEY,
     file: 'island-layout.json',
     baked: 'layout/island-layout.json',
-    bust: 'park154',
+    bust: 'park5',
   },
   meadow: {
     key: MEADOW_LAYOUT_STORAGE_KEY,

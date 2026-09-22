@@ -24,6 +24,7 @@ from app.persistence.models import (
     PaymentRow,
     PromoCodeRow,
     WorldRow,
+    ZufanDiscoveryRow,
 )
 from app.settings import get_settings
 from app.worlds import WORLD_PREFIX, world_title
@@ -556,6 +557,60 @@ class PromoAdmin(UnixDates, ModelView, model=PromoCodeRow):
     can_export = True
 
 
+class ZufanDiscoveryAdmin(UnixDates, ModelView, model=ZufanDiscoveryRow):
+    name = "Открытие ЗУФАН"
+    name_plural = "Открытия ЗУФАН"
+    icon = "fa-solid fa-book"
+    category = "Семьи"
+    column_list = [
+        ZufanDiscoveryRow.title,
+        ZufanDiscoveryRow.kind,
+        ZufanDiscoveryRow.age,
+        ZufanDiscoveryRow.category,
+        ZufanDiscoveryRow.status,
+        ZufanDiscoveryRow.is_active,
+        ZufanDiscoveryRow.sort_order,
+    ]
+    column_searchable_list = [ZufanDiscoveryRow.title, ZufanDiscoveryRow.body, ZufanDiscoveryRow.id]
+    column_sortable_list = [
+        ZufanDiscoveryRow.title,
+        ZufanDiscoveryRow.kind,
+        ZufanDiscoveryRow.age,
+        ZufanDiscoveryRow.category,
+        ZufanDiscoveryRow.is_active,
+        ZufanDiscoveryRow.sort_order,
+    ]
+    column_labels = {
+        ZufanDiscoveryRow.id: "ID",
+        ZufanDiscoveryRow.title: "Заголовок",
+        ZufanDiscoveryRow.body: "Текст",
+        ZufanDiscoveryRow.kind: "Тип",
+        ZufanDiscoveryRow.age: "Возраст",
+        ZufanDiscoveryRow.category: "Категория",
+        ZufanDiscoveryRow.sort_order: "Порядок",
+        ZufanDiscoveryRow.is_active: "Активно",
+        ZufanDiscoveryRow.status: "Статус",
+        ZufanDiscoveryRow.provider: "Источник",
+        ZufanDiscoveryRow.rejection_reason: "Отклонение",
+        ZufanDiscoveryRow.created_at: "Создан",
+        ZufanDiscoveryRow.updated_at: "Обновлён",
+    }
+    form_columns = [
+        ZufanDiscoveryRow.title,
+        ZufanDiscoveryRow.body,
+        ZufanDiscoveryRow.kind,
+        ZufanDiscoveryRow.age,
+        ZufanDiscoveryRow.category,
+        ZufanDiscoveryRow.sort_order,
+        ZufanDiscoveryRow.status,
+        ZufanDiscoveryRow.is_active,
+        ZufanDiscoveryRow.rejection_reason,
+    ]
+    can_create = True
+    can_delete = True
+    can_export = True
+
+
 def mount_admin(app) -> Admin:
     settings = get_settings()
     admin = Admin(
@@ -575,6 +630,7 @@ def mount_admin(app) -> Admin:
     admin.add_view(FamilyWorldAdmin)
     admin.add_view(PaymentAdmin)
     admin.add_view(PromoAdmin)
+    admin.add_view(ZufanDiscoveryAdmin)
     admin.add_view(ParentSessionAdmin)
     admin.add_view(OperatorSessionAdmin)
     admin.add_view(AnalyticsSessionAdmin)

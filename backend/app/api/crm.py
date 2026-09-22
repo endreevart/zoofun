@@ -1,4 +1,4 @@
-"""Read-only CRM API for crm.zooo.fun, plus consented mail and promocodes."""
+"""CRM API for crm.zooo.fun: analytics, consented mail, promocodes, discoveries."""
 
 from __future__ import annotations
 
@@ -9,12 +9,15 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.api.deps import require_operator, require_operator_image
-from app.api.operator import LoginIn, LoginOut, login as operator_login
+from app.api.operator import LoginIn, LoginOut
+from app.api.operator import login as operator_login
 from app.commerce import promo as promo_codes
 from app.commerce.promo import PromoError
 from app.crm import audience, features, funnels, growth, ops, queries
+from app.crm import discoveries as crm_discoveries
 from app.crm import mail as crm_mail
 from app.crm.audience import AudienceError
+from app.crm.discoveries import DiscoveryError
 from app.crm.mail import MailCampaignError
 from app.crm.window import TimeWindow, resolve_window
 from app.ratelimit import enforce
@@ -341,6 +344,19 @@ class PromoIn(PromoWrite):
     code: str = Field(min_length=3, max_length=24)
 
 
+class DiscoveryWrite(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=12)
+    kind: str = "fact"
+    age: str = "preschool"
+    category: str = "animals"
+    sort_order: int = Field(default=0, ge=0)
+
+
+class DiscoveryRejectIn(BaseModel):
+    reason: str = Field(default="", max_length=500)
+
+
 @guarded.get("/mail/meta")
 async def mail_meta() -> dict:
     return audience.meta()
@@ -634,6 +650,108 @@ async def promo_activate(code: str) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail="unknown_promo")
     return row
+
+
+@guarded.get("/discoveries")
+async def discoveries_list(
+    status: str = "",
+    kind: str = "",
+    suggested_type: str = "",
+    category: str = "",
+    suggested_category: str = "",
+    provider: str = "",
+    q: str = "",
+    search: str = "",
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    page: int | None = Query(default=None, ge=1),
+) -> dict:
+    cap = limit
+    skip = offset
+    if page is not None:
+        skip = (page - 1) * cap
+    return crm_discoveries.list_discoveries(
+        status=status,
+        kind=kind or suggested_type,
+        category=category or suggested_category,
+        provider=provider,
+        q=q or search,
+        limit=cap,
+        offset=skip,
+    )
+
+
+@guarded.get("/discoveries/{discovery_id}")
+async def discoveries_get(discovery_id: str) -> dict:
+    row = crm_discoveries.get_discovery(discovery_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="unknown_discovery")
+    return row
+
+
+@guarded.post("/discoveries")
+async def discoveries_create(body: DiscoveryWrite) -> dict:
+    try:
+        return crm_discoveries.create_discovery(
+            title=body.title,
+            body=body.body,
+            kind=body.kind,
+            age=body.age,
+            category=body.category,
+            sort_order=body.sort_order,
+        )
+    except DiscoveryError as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
+
+
+@guarded.put("/discoveries/{discovery_id}")
+async def discoveries_update(discovery_id: str, body: DiscoveryWrite) -> dict:
+    try:
+        row = crm_discoveries.update_discovery(
+            discovery_id,
+            title=body.title,
+            body=body.body,
+            kind=body.kind,
+            age=body.age,
+            category=body.category,
+            sort_order=body.sort_order,
+        )
+    except DiscoveryError as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail="unknown_discovery")
+    return row
+
+
+@guarded.post("/discoveries/{discovery_id}/publish")
+async def discoveries_publish(discovery_id: str) -> dict:
+    try:
+        row = crm_discoveries.publish_discovery(discovery_id)
+    except DiscoveryError as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail="unknown_discovery")
+    return {"discovery": {"id": row["id"], "title": row["title"]}, "draft": row}
+
+
+@guarded.post("/discoveries/{discovery_id}/reject")
+async def discoveries_reject(discovery_id: str, body: DiscoveryRejectIn | None = None) -> dict:
+    reason = body.reason if body is not None else ""
+    row = crm_discoveries.reject_discovery(discovery_id, reason)
+    if row is None:
+        raise HTTPException(status_code=404, detail="unknown_discovery")
+    return row
+
+
+@guarded.delete("/discoveries/{discovery_id}")
+async def discoveries_delete(discovery_id: str) -> dict:
+    try:
+        ok = crm_discoveries.delete_discovery(discovery_id)
+    except DiscoveryError as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
+    if not ok:
+        raise HTTPException(status_code=404, detail="unknown_discovery")
+    return {"ok": True}
 
 
 router.include_router(guarded)

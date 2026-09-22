@@ -70,6 +70,7 @@ export type PlazaStampWrite = {
 
 export const PLAZA_GLB = '/plaza/plaza.glb';
 export const PLAZA_CRYSTAL = '/plaza/crystal.glb?v=tex1';
+export const GARDEN_CHEST = '/plaza/chest.glb?v=2';
 
 async function readJson<T>(path: string, init?: RequestInit): Promise<T | null> {
   try {
