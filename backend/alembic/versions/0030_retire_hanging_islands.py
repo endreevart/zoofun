@@ -10,7 +10,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.orm import Session
 
 from alembic import op
 
@@ -31,13 +30,8 @@ def upgrade() -> None:
                 "WHERE id IN ('world_diy_meadow', 'world_diy_grove') AND price_rub = 0"
             )
         )
-    if "creatures" not in tables or "parents" not in tables:
-        return
-    from app.garden.retire import evacuate_all
-
-    db = Session(bind=bind)
-    evacuate_all(db)
-    db.flush()
+    # Creature move is `GET /v1/auth/me` / evacuate_all, not this revision:
+    # ORM over every family here blocked API startup.
 
 
 def downgrade() -> None:
