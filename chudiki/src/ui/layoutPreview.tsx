@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { generateSpec, type ChudikSpec } from '../game/creatures/ChudikSpec';
 import type { PlazaToy } from '../game/plaza/plazaApi';
-import { WORLD_DIY_GROVE, WORLD_DIY_MEADOW, WORLD_DIY_SKU } from '../game/world/kinds';
+import { WORLD_DIY_SKU } from '../game/world/kinds';
 import type { GardenWorld } from '../game/world/gardens';
 import { PlazaPick } from './PlazaPick';
 import { MoveCreaturesSheet } from './MoveCreaturesSheet';
@@ -59,10 +59,8 @@ export function previewMoveSpecs(): ChudikSpec[] {
 }
 
 export const PREVIEW_FULL_WORLDS: GardenWorld[] = [
-  { id: WORLD_DIY_MEADOW, title: 'Висячий луг', sku: WORLD_DIY_MEADOW },
-  { id: WORLD_DIY_GROVE, title: 'Куболесье', sku: WORLD_DIY_GROVE },
   { id: WORLD_DIY_SKU, title: 'Сад 1', sku: WORLD_DIY_SKU },
-  { id: `${WORLD_DIY_GROVE}_copy`, title: 'Куболесье 1', sku: WORLD_DIY_GROVE },
+  { id: `${WORLD_DIY_SKU}_copy`, title: 'Сад 2', sku: WORLD_DIY_SKU },
 ];
 
 function go(mode: LayoutPreviewMode) {
@@ -103,7 +101,7 @@ export function LayoutPreview({ mode }: Props) {
   if (mode === 'move') {
     return (
       <MoveCreaturesSheet
-        destTitle="Куболесье"
+        destTitle="Волшебный остров"
         specs={previewMoveSpecs()}
         onLater={() => go('hub')}
         onMove={() => go('hub')}

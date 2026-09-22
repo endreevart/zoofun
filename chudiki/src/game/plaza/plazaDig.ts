@@ -14,11 +14,17 @@ export const PLAZA_TICKET_CRYSTALS = 8;
 export const PLAZA_CRYSTAL_INNER = 28;
 export const PLAZA_CRYSTAL_OUTER = 265;
 export const GARDEN_CRYSTAL_COUNT = 5;
+/** Family pool. The signed hunt sits on one random island (D-030). */
 export const GARDEN_TICKETS_PER_DAY = 2;
 export const GARDEN_CRYSTAL_INNER = 6;
 export const GARDEN_CRYSTAL_OUTER = 18;
 export const GARDEN_DIG_NEAR = 2.5;
 export const GARDEN_CHEST_NEAR = 3.2;
+/** Stone play-plinth on the free garden. */
+export const GARDEN_RUN_NEAR = 3.4;
+export const GARDEN_RUN_PLINTH: PlazaMound = { id: 'run', x: 4.2, z: -1.7 };
+/** Plinth stays in code (D-037). Off the public lawn until this is flipped. */
+export const RUN_PUBLIC = false;
 /** Bird's-eye of the whole lawn must not count as standing on a crystal. */
 export const GARDEN_DIG_MAX_CAMERA = 18;
 const MIN_R = PLAZA_CRYSTAL_INNER;
@@ -161,6 +167,21 @@ export function gardenChestId(
 ): string | null {
   if (!chest || cameraDistance > GARDEN_DIG_MAX_CAMERA) return null;
   return nearMound(x, z, [chest], GARDEN_CHEST_NEAR);
+}
+
+export function gardenRunId(
+  x: number,
+  z: number,
+  cameraDistance: number,
+  plinth: PlazaMound | null,
+): string | null {
+  if (!plinth || cameraDistance > GARDEN_DIG_MAX_CAMERA) return null;
+  return nearMound(x, z, [plinth], GARDEN_RUN_NEAR);
+}
+
+export function runPlinthForWorld(worldId: string | null | undefined, guest = false): PlazaMound | null {
+  if (!RUN_PUBLIC || guest || worldId !== 'authored') return null;
+  return GARDEN_RUN_PLINTH;
 }
 
 export function nearMound(

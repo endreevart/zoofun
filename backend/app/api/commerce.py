@@ -11,8 +11,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from app.analytics.actions import record_action
 from app.accounts.store import ChildProfile, ParentAccount, store
+from app.analytics.actions import record_action
 from app.api.deps import require_session
 from app.commerce.promo import QuoteError, quote_pack
 from app.commerce.settlement import reconcile_parent, verify_notification
@@ -23,7 +23,12 @@ from app.plaza import toys as plaza_toys
 from app.providers import tbank
 from app.ratelimit import enforce
 from app.settings import get_settings
-from app.worlds import checkout_description, is_world_sku, kind_for_sku, world_title
+from app.worlds import (
+    checkout_description,
+    is_world_sku,
+    kind_for_sku,
+    world_title,
+)
 
 router = APIRouter(prefix="/v1/commerce", tags=["commerce"])
 

@@ -67,7 +67,7 @@ import {
   worldIsFull,
   type GardenWorld,
 } from './game/world/gardens';
-import { isConstructionSku, isDiyWorld, isHangingShell, isStudioKind, kindOfWorld, usesChildBuild } from './game/world/kinds';
+import { isConstructionSku, isDiyWorld, isHangingShell, isRetiredWorld, isStudioKind, kindOfWorld, usesChildBuild } from './game/world/kinds';
 import { childCatalogForShell } from './game/world/layoutCatalog';
 import { saveLayout, type AuthoredProp } from './game/world/layoutAuthored';
 import { WalkPad } from './ui/WalkPad';
@@ -75,6 +75,7 @@ import { CareHud } from './ui/CareHud';
 import { HudIcon } from './ui/HudIcon';
 import { FirstDrawPrompt } from './ui/FirstDrawPrompt';
 import { DiscoverySheet } from './ui/DiscoverySheet';
+import { ZufikRun } from './ui/ZufikRun';
 import { FriendInvite } from './ui/FriendInvite';
 import { StillHint } from './ui/StillHint';
 import { WaitingFriend } from './ui/WaitingFriend';
@@ -175,11 +176,13 @@ import {
   localGardenMounds,
   refillGardenMounds,
   PLAZA_FIND_MS,
+  runPlinthForWorld,
   type PlazaMound,
   type PlazaTicket,
 } from './game/plaza/plazaDig';
 import { digGardenCrystal, fetchGardenCrystals } from './game/garden/gardenApi';
 import { fetchGardenChest, openGardenChest, type GardenChestFact } from './game/garden/chestApi';
+import { RUN_IMG } from './game/run/runAssets';
 import { ownVitrineRemountsGarden, vitrineCoversWorlds } from './game/visits/vitrineSort';
 import { InstallHint } from './ui/InstallHint';
 
@@ -268,13 +271,16 @@ const HOME_WORLD_KEY = 'chudiki.homeWorld';
 
 function readHomeWorld(): string | null {
   try {
-    return sessionStorage.getItem(HOME_WORLD_KEY) || localStorage.getItem(HOME_WORLD_KEY);
+    const id = sessionStorage.getItem(HOME_WORLD_KEY) || localStorage.getItem(HOME_WORLD_KEY);
+    if (id && isRetiredWorld(id)) return null;
+    return id;
   } catch {
     return null;
   }
 }
 
 function writeHomeWorld(id: string): void {
+  if (isRetiredWorld(id)) return;
   try {
     sessionStorage.setItem(HOME_WORLD_KEY, id);
     localStorage.setItem(HOME_WORLD_KEY, id);
@@ -373,6 +379,7 @@ export function App() {
   const [joy, setJoy] = useState(0.42);
   const [feeding, setFeeding] = useState(false);
   const [offerSpec, setOfferSpec] = useState<ChudikSpec | null>(null);
+  const [offerPulse, setOfferPulse] = useState(0);
   const [driving, setDriving] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [cinema, setCinema] = useState(false);
@@ -527,6 +534,15 @@ export function App() {
   const [chestFact, setChestFact] = useState<GardenChestFact | null>(null);
   const chestOpening = useRef(false);
   const chestHinted = useRef<string | null>(null);
+  const [nearRun, setNearRun] = useState<string | null>(null);
+  const [runOpen, setRunOpen] = useState(() => {
+    try {
+      return import.meta.env.DEV && new URLSearchParams(window.location.search).has('run');
+    } catch {
+      return false;
+    }
+  });
+  const runHinted = useRef<string | null>(null);
   const [soundOpen, setSoundOpen] = useState(false);
   const [moveDest, setMoveDest] = useState<string | null>(null);
   const [moveFrom, setMoveFrom] = useState<ChudikSpec[]>([]);
@@ -568,7 +584,14 @@ export function App() {
     })();
   }, [refreshQuota]);
 
-  const pickerWorlds = withFreeArcadeGarden(quota?.worlds);
+  const pickerWorlds = withFreeArcadeGarden(
+    (quota?.worlds ?? []).filter((item) => !isRetiredWorld(item.id, item.sku)),
+  );
+
+  useEffect(() => {
+    if (guestVisit || isAuthoringStudio()) return;
+    if (world && isRetiredWorld(world)) setWorld(null);
+  }, [guestVisit, world]);
 
   useEffect(() => {
     if (!world || guestVisit) {
@@ -838,6 +861,16 @@ export function App() {
             }
             if (!id) chestHinted.current = null;
           },
+          onNearRun: (id) => {
+            setNearRun(id);
+            if (id && runHinted.current !== id) {
+              runHinted.current = id;
+              const audio = getIslandAudio();
+              void audio.unlock();
+              void audio.playCue('plaza_dig');
+            }
+            if (!id) runHinted.current = null;
+          },
         });
       } catch (error) {
         console.error('[world] webgl failed', error);
@@ -893,7 +926,7 @@ export function App() {
     if (!offerSpec || cardSpec) return;
     const timer = window.setTimeout(() => setOfferSpec(null), 16000);
     return () => window.clearTimeout(timer);
-  }, [offerSpec, cardSpec]);
+  }, [offerSpec, cardSpec, offerPulse]);
 
   const speak = useCallback((id: CueId) => {
     const audio = getIslandAudio();
@@ -986,12 +1019,23 @@ export function App() {
     chestOpening.current = false;
     chestHinted.current = null;
     gameRef.current?.setChest(null);
+    setNearRun(null);
+    runHinted.current = null;
+    gameRef.current?.setRunPlinth(null);
+    try {
+      if (!(import.meta.env.DEV && new URLSearchParams(window.location.search).has('run'))) {
+        setRunOpen(false);
+      }
+    } catch {
+      setRunOpen(false);
+    }
   }, [world]);
 
   useEffect(() => {
     if (!ready || !world || guestOn || arcadeBuilding) {
       gameRef.current?.setCrystalMounds([]);
       gameRef.current?.setChest(null);
+      gameRef.current?.setRunPlinth(null);
       return;
     }
     let dead = false;
@@ -1031,6 +1075,20 @@ export function App() {
       dead = true;
     };
   }, [arcadeBuilding, guestOn, ready, world]);
+
+  useEffect(() => {
+    if (!ready || !world || guestOn || arcadeBuilding) {
+      setNearRun(null);
+      gameRef.current?.setRunPlinth(null);
+      return;
+    }
+    gameRef.current?.setRunPlinth(runPlinthForWorld(world, guestOn));
+  }, [arcadeBuilding, guestOn, ready, world]);
+
+  useEffect(() => {
+    gameRef.current?.setHeld(runOpen);
+    return () => gameRef.current?.setHeld(false);
+  }, [runOpen]);
 
   const clearVisitUrl = useCallback(() => {
     try {
@@ -1973,6 +2031,26 @@ export function App() {
     })();
   }, [chestFact, diyBuild, nearChest, world]);
 
+  const openGardenRun = useCallback(() => {
+    if (!nearRun || !world || diyBuild || runOpen) return;
+    setRunOpen(true);
+    void getIslandAudio().unlock();
+    trackAction('world.run', { world_id: world });
+  }, [diyBuild, nearRun, runOpen, world]);
+
+  const closeGardenRun = useCallback(() => {
+    setRunOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const w = window as Window & { openZufikRun?: () => void };
+    w.openZufikRun = () => setRunOpen(true);
+    return () => {
+      delete w.openZufikRun;
+    };
+  }, []);
+
   const drawAnotherFromHatch = useCallback(() => {
     if (!canCreate()) return;
     hatchLookRef.current = null;
@@ -2790,7 +2868,8 @@ export function App() {
     plazaToyShop ||
     crystalFound ||
     crystalFinding ||
-    Boolean(chestFact);
+    Boolean(chestFact) ||
+    runOpen;
 
   return (
     <div className={cinema ? 'app is-cinema' : 'app'} ref={appRef}>
@@ -3043,7 +3122,7 @@ export function App() {
             />
           ) : null}
 
-          {offerSpec || cardSpec || pickFrom || arcadeBuilding || arcadeSettle || chestFact ? null : (
+          {offerSpec || cardSpec || pickFrom || arcadeBuilding || arcadeSettle || chestFact || runOpen ? null : (
             <WalkPad onWalk={walkPad} />
           )}
 
@@ -3055,6 +3134,7 @@ export function App() {
           !arcadeBuilding &&
           !arcadeSettle &&
           !chestFact &&
+          !runOpen &&
           !crystalFound &&
           !crystalFinding &&
           !offerSpec &&
@@ -3065,8 +3145,34 @@ export function App() {
             </button>
           ) : null}
 
+          {nearRun &&
+          !nearChest &&
+          !guestOn &&
+          !diyBuild &&
+          !isAuthoringStudio() &&
+          !diyPicking &&
+          !arcadeBuilding &&
+          !arcadeSettle &&
+          !chestFact &&
+          !runOpen &&
+          !crystalFound &&
+          !crystalFinding &&
+          !offerSpec &&
+          !cardSpec &&
+          !showDrawPrompt ? (
+            <button
+              className="plaza-dig garden-dig garden-run"
+              type="button"
+              aria-label="Играть"
+              onClick={openGardenRun}
+            >
+              <img src={RUN_IMG.flower} alt="" />
+            </button>
+          ) : null}
+
           {nearCrystal &&
           !nearChest &&
+          !nearRun &&
           !guestOn &&
           !diyBuild &&
           !isAuthoringStudio() &&
@@ -3076,6 +3182,7 @@ export function App() {
           !crystalFound &&
           !crystalFinding &&
           !chestFact &&
+          !runOpen &&
           !offerSpec &&
           !cardSpec &&
           !showDrawPrompt ? (
@@ -3158,7 +3265,7 @@ export function App() {
               }
               onTeleport={
                 !isParkResidentId(offerSpec.id) &&
-                moveDestinations(world, quota?.worlds ?? []).length > 0
+                moveDestinations(world, pickerWorlds).length > 0
                   ? () => {
                       setPickFrom([offerSpec]);
                       setOfferSpec(null);
@@ -3166,6 +3273,11 @@ export function App() {
                   : null
               }
               onDismiss={() => setOfferSpec(null)}
+              onEmote={(kind) => {
+                setOfferPulse((n) => n + 1);
+                trackAction('garden.emote', { kind, id: offerSpec.id });
+                gameRef.current?.playEmote(offerSpec.id, kind);
+              }}
             />
           )}
 
@@ -3406,6 +3518,8 @@ export function App() {
         )
       ) : null}
 
+      {runOpen ? <ZufikRun onClose={closeGardenRun} /> : null}
+
       {careSpec ? (
         <CareRoom
           spec={careSpec}
@@ -3541,7 +3655,7 @@ export function App() {
 
       {moveDest && moveFrom.length > 0 ? (
         <MoveCreaturesSheet
-          destTitle={gardenTitle(moveDest, quota?.worlds ?? [])}
+          destTitle={gardenTitle(moveDest, pickerWorlds)}
           specs={moveFrom}
           onLater={() => {
             setMoveDest(null);
@@ -3556,7 +3670,7 @@ export function App() {
           spec={pickFrom[0]}
           pic={faceOf(pickFrom[0], rosterThumbs)}
           currentId={transferPreviewWorlds()?.currentId ?? world ?? WORLD_AUTHORED}
-          worlds={transferPreviewWorlds()?.worlds ?? quota?.worlds ?? []}
+          worlds={transferPreviewWorlds()?.worlds ?? pickerWorlds}
           onCancel={() => setPickFrom(null)}
           onMove={(dest) => {
             const specs = pickFrom;
@@ -3573,7 +3687,7 @@ export function App() {
       {fullOpen ? (
         <WorldFullPrompt
           currentId={world ?? WORLD_AUTHORED}
-          worlds={quota?.worlds ?? []}
+          worlds={pickerWorlds}
           onClose={() => setFullOpen(false)}
           onBuy={() => {
             setFullOpen(false);

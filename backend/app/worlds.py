@@ -1,8 +1,9 @@
 """Island kinds: one authored lawn plus a repeatable construction SKU.
 
 A new biome is a new IslandKind row plus assets — not a new checkout path
-(D-021). Garden stays `world_diy_garden`. Meadow is `world_diy_meadow`.
-Grove is `world_diy_grove` (Куболесье).
+(D-021). The free ready world is garden. Meadow and grove stay as paid
+construction SKUs. Old free hanging ids stay so rows resolve, then Zufiks
+move off those lawns onto a garden or a bought copy.
 """
 
 from __future__ import annotations
@@ -67,11 +68,17 @@ GROVE = IslandKind(
     price_rub=59,
 )
 
-ISLAND_KINDS: tuple[IslandKind, ...] = (GARDEN, MEADOW, GROVE)
+FREE_ISLAND_KINDS: tuple[IslandKind, ...] = (GARDEN,)
+PUBLIC_ISLAND_KINDS: tuple[IslandKind, ...] = (GARDEN, MEADOW, GROVE)
+ISLAND_KINDS: tuple[IslandKind, ...] = PUBLIC_ISLAND_KINDS
 _KINDS_BY_SKU = {item.construction_sku: item for item in ISLAND_KINDS}
 _KINDS_BY_AUTHORED = {item.authored_id: item for item in ISLAND_KINDS}
+_PUBLIC_SKUS = {item.construction_sku for item in PUBLIC_ISLAND_KINDS}
+_HIDDEN_AUTHORED = {MEADOW.authored_id, GROVE.authored_id}
 
-DEFAULT_WORLDS = tuple((item.construction_sku, 0, item.price_rub, False) for item in ISLAND_KINDS)
+DEFAULT_WORLDS = tuple(
+    (item.construction_sku, 0, item.price_rub, False) for item in PUBLIC_ISLAND_KINDS
+)
 WORLD_TITLES = {item.construction_sku: item.construction_title for item in ISLAND_KINDS}
 
 
@@ -81,6 +88,16 @@ def is_world_sku(pack_id: str) -> bool:
 
 def is_construction_sku(pack_id: str) -> bool:
     return pack_id in _KINDS_BY_SKU
+
+
+def is_public_construction_sku(pack_id: str) -> bool:
+    return pack_id in _PUBLIC_SKUS
+
+
+def is_retired_world(world_id: str, sku: str | None = None) -> bool:
+    """True for the old free hanging lawns. Paid meadow and grove copies stay."""
+    del sku
+    return (world_id or "").strip() in _HIDDEN_AUTHORED
 
 
 def kind_for_sku(sku: str) -> IslandKind:
@@ -121,7 +138,7 @@ def is_diy_instance(world_id: str) -> bool:
 def is_crystal_world(world_id: str) -> bool:
     """True for a free authored lawn or a construction copy the family can hunt."""
     value = (world_id or "").strip()
-    if not value:
+    if not value or is_retired_world(value):
         return False
     if value in _KINDS_BY_AUTHORED or value in _KINDS_BY_SKU:
         return True
@@ -130,13 +147,15 @@ def is_crystal_world(world_id: str) -> bool:
 
 def home_world_id(world_id: str | None) -> str:
     """Creatures without a world live on the free garden lawn."""
-    value = (world_id or "").strip()
-    return value or WORLD_AUTHORED
+    value = (world_id or "").strip() or WORLD_AUTHORED
+    if is_retired_world(value):
+        return WORLD_AUTHORED
+    return value
 
 
 def lawn_cover(world_id: str, sku: str | None = None) -> str:
     """Island still for the vitrine card. Not a Zufik portrait."""
-    home = home_world_id(world_id)
+    home = (world_id or "").strip() or WORLD_AUTHORED
     kind = kind_for_world_id(home, sku)
     if is_diy_instance(home):
         if kind.id == "meadow":
@@ -153,7 +172,7 @@ def lawn_cover(world_id: str, sku: str | None = None) -> str:
 
 def lawn_title(world_id: str, sku: str | None = None) -> str:
     """Authored lawn or construction copy caption for CRM tiles."""
-    home = home_world_id(world_id)
+    home = (world_id or "").strip() or WORLD_AUTHORED
     kind = kind_for_world_id(home, sku)
     if is_diy_instance(home):
         return kind.construction_title

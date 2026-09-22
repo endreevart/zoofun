@@ -85,8 +85,10 @@ Unity iteration 01 stays 2.5D fixtures. D-015 is Chudiki only.
 | Kind | Authored (free) | DIY SKU | Seed price |
 |------|-----------------|---------|------------|
 | garden | Волшебный остров (`authored`) | `world_diy_garden` | 1190 ₽ |
-| meadow | Висячий луг (`authored_meadow`) | `world_diy_meadow` | 59 ₽ |
-| grove | Куболесье (`authored_grove`) | `world_diy_grove` | 59 ₽ |
+| meadow | — (no free lawn) | `world_diy_meadow` | 59 ₽ |
+| grove | — (no free lawn) | `world_diy_grove` | 59 ₽ |
+
+Free hanging `authored_meadow` / `authored_grove` left the picker (D-021, 2026-09-22). Shop SKUs stay. `GET /v1/auth/me` moves Zufiks off those free lawns onto the garden, then a bought copy (including meadow/grove DIY). Creatures already on a paid copy stay. Studio `?studio=1&kind=meadow|grove` still authors those shells locally.
 
 DIY copies are repeatable and auto-named. The first garden is granted free on `GET /v1/auth/me` (D-027); extra copies stay paid. Cap 20 creatures per world, 258 DIY props. Grass stamps stay out of the child catalog. Move between worlds is offered, never automatic.
 
@@ -94,7 +96,7 @@ Arcade (D-027): built, hidden on prod (`ARCADE_PUBLIC = false`). First garden is
 
 Guest visits (D-028): `GET /v1/public/zoos`, `?visit=`, hearts on garden and Zufiks, joy lighting + air, vitrine. No original drawings, no guest download. A guest walk does not write host toys into the visitor's zoo; `PUT /v1/zoo` drops a mesh whose stylize job belongs to another family.
 
-Shared lawn (D-029 / ADR-0029, D-030 / ADR-0030, D-032 / ADR-0032): APIs stay; «Общий зоопарк» is hidden from the worlds picker (`PLAZA_PUBLIC=false`). Personal drawing-toys (`plaza_toy_1` 59 ₽, tray «Моё») are owner-only objects in purchased DIY construction zoos: OpenRouter still, then Tripo GLB, cap 10 purchased toys per family; a toy in «Моё» stays pickable and may be stamped many times in that garden layout. Paint preview is free; «Разместить за 59 ₽» always opens the parent gate, then T-Bank (or a local `granted` slot). After pay the island commits the standee, puts it in «Моё», holds a preparing ghost in the garden, and grows the mesh. Local `ENVIRONMENT=development` grants that slot without T-Bank so paint → gift → Tripo can be tested in a DIY zoo. Guest walks and the heart vitrine are D-028. A tap on your own vitrine card must not remount that garden or wait forever on layout GET. Family islands (authored and owned DIY) keep five smashable crystals; two 3D credits a day per zoo (`GET/POST /v1/zoo/crystals`, table `world_tickets`). A find shows `ticket.png` on the grass, then the draw pad. The hunt lives until Moscow midnight so a walk still pays. Guests do not smash. Arcade and DIY-build hide the hammer.
+Shared lawn (D-029 / ADR-0029, D-030 / ADR-0030, D-032 / ADR-0032): APIs stay; «Общий зоопарк» is hidden from the worlds picker (`PLAZA_PUBLIC=false`). Personal drawing-toys (`plaza_toy_1` 59 ₽, tray «Моё») are owner-only objects in purchased DIY construction zoos: OpenRouter still, then Tripo GLB, cap 10 purchased toys per family; a toy in «Моё» stays pickable and may be stamped many times in that garden layout. Paint preview is free; «Разместить за 59 ₽» always opens the parent gate, then T-Bank (or a local `granted` slot). After pay the island commits the standee, puts it in «Моё», holds a preparing ghost in the garden, and grows the mesh. Local `ENVIRONMENT=development` grants that slot without T-Bank so paint → gift → Tripo can be tested in a DIY zoo. Guest walks and the heart vitrine are D-028. A tap on your own vitrine card must not remount that garden or wait forever on layout GET. Family islands (authored and owned DIY) plant five smashable crystals on one random zoo each Moscow day; two 3D credits a day for the family (`GET/POST /v1/zoo/crystals`, table `world_tickets`). A find shows `ticket.png` on the grass, then the draw pad. The hunt lives until Moscow midnight so a walk still pays. Guests do not smash. Arcade and DIY-build hide the hammer.
 
 Chudiki still has a local **cove** mock (`world_diy_cove`) that is **not** in `backend/app/worlds.py` and must not be sold (D-021).
 
@@ -186,7 +188,8 @@ Clients must never hold provider, T-Bank, SMTP, or operator secrets.
 
 ## Recent closed work (local tree, not necessarily committed)
 
-- Meadow + grove authored worlds and DIY copies
+- Meadow + grove stay in the shop; free hanging lawns leave the picker
+- Garden jump-run plinth hidden (`RUN_PUBLIC`)
 - World picker, transfer, DIY hammer mode
 - Promo field on site and island
 - Landing rewrite (hero magic, How / Worlds / Zufiki)

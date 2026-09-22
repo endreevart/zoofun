@@ -26,6 +26,7 @@ import {
   PLAZA_PLANE,
   PLAZA_SHADOW_R,
   PLAZA_WALK,
+  plazaEmoteSrc,
   plazaLoadRadius,
   plazaViewCellSize,
   plazaWalkSpeed,
@@ -273,10 +274,6 @@ function makeGround(): THREE.Group {
     }
   }
   return group;
-}
-
-function emoteSrc(kind: string): string {
-  return PLAZA_EMOTES.find((item) => item.id === kind)?.src ?? PLAZA_EMOTES[0].src;
 }
 
 const PEER_COLORS = ['#f2c14e', '#7ec8e3', '#e07a5f', '#81b29a', '#f4a261', '#9b8ec4', '#e9c46a', '#2a9d8f'];
@@ -716,7 +713,7 @@ export function PlazaGlb({
         then(ready);
         return;
       }
-      textureLoader.load(assetUrl(emoteSrc(kind)), (texture) => {
+      textureLoader.load(assetUrl(plazaEmoteSrc(kind)), (texture) => {
         if (stop) return;
         texture.colorSpace = THREE.SRGBColorSpace;
         emoteMaps.set(kind, texture);

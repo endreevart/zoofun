@@ -12,4 +12,4 @@ assert.equal(readLayoutPreview('?ui=paint', true), 'paint');
 assert.equal(readLayoutPreview('?ui=pick', false), null);
 assert.equal(PREVIEW_TOYS.length >= 4, true);
 assert.equal(previewMoveSpecs().length, 10);
-assert.equal(PREVIEW_FULL_WORLDS.length, 4);
+assert.equal(PREVIEW_FULL_WORLDS.length, 2);

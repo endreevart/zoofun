@@ -16,3 +16,4 @@ Rejected. Remove the plinth, overlay, profile-sprite job, `run_wallets` / `run_s
 
 - D-034 and D-035 are rejected.
 - Do not put a second WebGL loop or a clipart trail on the live lawn in place of this overlay.
+- A later full-screen jumper without credits is ADR-0037, not a revival of this overlay.

@@ -18,6 +18,15 @@ export function isDiyWorld(id: string | null | undefined): boolean {
   return Boolean(id && id !== WORLD_AUTHORED && (id === WORLD_DIY_SKU || id.startsWith('world_diy_')));
 }
 
+function isHiddenAuthoredLawn(id: string): boolean {
+  return id === WORLD_AUTHORED_MEADOW || id === WORLD_AUTHORED_GROVE;
+}
+
+/** Owned copies. Free hanging meadow/grove never appear as move targets. */
+export function publicGardens(gardens: readonly GardenWorld[]): GardenWorld[] {
+  return gardens.filter((item) => !isHiddenAuthoredLawn(item.id));
+}
+
 export function creatureWorldId(worldId: string | null | undefined): string {
   if (!worldId || worldId === WORLD_AUTHORED) return WORLD_AUTHORED;
   return worldId;
@@ -53,21 +62,20 @@ export function worldIsFull(count: number): boolean {
   return count >= WORLD_CREATURE_CAP;
 }
 
-const FREE_LAWNS: GardenWorld[] = [
-  { id: WORLD_AUTHORED, title: AUTHORED_TITLE },
-  { id: WORLD_AUTHORED_MEADOW, title: AUTHORED_MEADOW_TITLE },
-  { id: WORLD_AUTHORED_GROVE, title: AUTHORED_GROVE_TITLE },
-];
+const FREE_LAWNS: GardenWorld[] = [{ id: WORLD_AUTHORED, title: AUTHORED_TITLE }];
 
-/** Lawns a creature can move to from the open world. Free authored lawns are always options. */
+/** Lawns a creature can move to from the open world. Free hanging lawns stay out. */
 export function moveDestinations(
   current: string | null | undefined,
   gardens: readonly GardenWorld[],
 ): GardenWorld[] {
   const here = creatureWorldId(current);
   const dests: GardenWorld[] = FREE_LAWNS.filter((item) => item.id !== here);
-  for (const garden of gardens) {
-    if (garden.id !== here) dests.push(garden);
+  const seen = new Set(dests.map((item) => item.id));
+  for (const garden of publicGardens(gardens)) {
+    if (garden.id === here || seen.has(garden.id)) continue;
+    seen.add(garden.id);
+    dests.push(garden);
   }
   return dests;
 }

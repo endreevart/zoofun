@@ -94,6 +94,9 @@ export const GROVE_KIND: IslandKind = {
 };
 
 export const ISLAND_KINDS: readonly IslandKind[] = [GARDEN_KIND, MEADOW_KIND, GROVE_KIND];
+export const SHOP_ISLAND_KINDS: readonly IslandKind[] = ISLAND_KINDS;
+export const FREE_ISLAND_KINDS: readonly IslandKind[] = [GARDEN_KIND];
+export const PUBLIC_ISLAND_KINDS: readonly IslandKind[] = SHOP_ISLAND_KINDS;
 
 const BY_SKU = new Map(ISLAND_KINDS.map((item) => [item.constructionSku, item]));
 const BY_AUTHORED = new Map(ISLAND_KINDS.map((item) => [item.authoredId, item]));
@@ -132,6 +135,10 @@ export function kindOfWorld(id: string, sku?: string | null): IslandKind {
   return kindForSku(skuFromWorldId(id, sku));
 }
 
+export function isRetiredWorld(id: string | null | undefined, _sku?: string | null): boolean {
+  return id === WORLD_AUTHORED_MEADOW || id === WORLD_AUTHORED_GROVE;
+}
+
 export function nextInstanceTitle(prefix: string, existing: readonly string[]): string {
   const taken = new Set(existing);
   let n = 1;
@@ -152,7 +159,7 @@ export type OwnedKindRow = {
 
 export function ownedKindRows(
   worlds: Array<{ id: string; title: string; sku?: string }>,
-  kinds: readonly IslandKind[] = ISLAND_KINDS,
+  kinds: readonly IslandKind[] = SHOP_ISLAND_KINDS,
 ): OwnedKindRow[] {
   return kinds
     .map((kind) => ({
@@ -161,7 +168,10 @@ export function ownedKindRows(
         (item) => (item.sku ?? skuFromWorldId(item.id)) === kind.constructionSku,
       ),
     }))
-    .filter((row) => row.kind.authoredAccess === 'free' || row.instances.length > 0);
+    .filter(
+      (row) =>
+        row.instances.length > 0 || FREE_ISLAND_KINDS.some((item) => item.id === row.kind.id),
+    );
 }
 
 /** Studio switcher still authors meadow locally (`?studio=1&kind=meadow`). */
@@ -193,7 +203,11 @@ export const PREVIEW_COVE_KIND: IslandKind = {
 };
 
 export function pickerKinds(preview: boolean): IslandKind[] {
-  return preview ? [...ISLAND_KINDS, PREVIEW_COVE_KIND] : [...ISLAND_KINDS];
+  return preview ? [...FREE_ISLAND_KINDS, PREVIEW_COVE_KIND] : [...FREE_ISLAND_KINDS];
+}
+
+export function shopKinds(preview: boolean): IslandKind[] {
+  return preview ? [...SHOP_ISLAND_KINDS, PREVIEW_COVE_KIND] : [...SHOP_ISLAND_KINDS];
 }
 
 export type PickerPreview = 'off' | 'kinds' | 'empty';
@@ -214,14 +228,12 @@ export function worldsForPicker(
   worlds: Array<{ id: string; title: string; sku?: string }>,
   preview: PickerPreview,
 ): Array<{ id: string; title: string; sku?: string }> {
+  const live = worlds.filter((item) => !isRetiredWorld(item.id, item.sku));
   if (preview === 'empty') return [];
-  if (preview !== 'kinds') return worlds;
+  if (preview !== 'kinds') return live;
   const sku = PREVIEW_COVE_KIND.constructionSku;
-  if (worlds.some((item) => (item.sku ?? skuFromWorldId(item.id)) === sku)) return worlds;
-  return [
-    ...worlds,
-    { id: sku, title: `${PREVIEW_COVE_KIND.instancePrefix} 1`, sku },
-  ];
+  if (live.some((item) => (item.sku ?? skuFromWorldId(item.id)) === sku)) return live;
+  return [...live, { id: sku, title: `${PREVIEW_COVE_KIND.instancePrefix} 1`, sku }];
 }
 
 export type OwnedConstruction = {
@@ -233,7 +245,7 @@ export type OwnedConstruction = {
 
 export function ownedConstruction(
   worlds: Array<{ id: string; title: string; sku?: string }>,
-  kinds: readonly IslandKind[] = ISLAND_KINDS,
+  kinds: readonly IslandKind[] = SHOP_ISLAND_KINDS,
 ): OwnedConstruction[] {
   return worlds.flatMap((item) => {
     const sku = item.sku ?? skuFromWorldId(item.id);

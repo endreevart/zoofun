@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import {
   gardenSmashId,
   gardenChestId,
+  gardenRunId,
+  runPlinthForWorld,
+  GARDEN_RUN_PLINTH,
+  RUN_PUBLIC,
   localPlazaMounds,
   localGardenMounds,
   moundsFromRoom,
@@ -72,5 +76,15 @@ assert.ok(GARDEN_DIG_MAX_CAMERA < 40);
 assert.equal(gardenChestId(garden[0].x, garden[0].z, 8, garden[0]), garden[0].id);
 assert.equal(gardenChestId(garden[0].x, garden[0].z, 46, garden[0]), null);
 assert.equal(gardenChestId(0, -5, 8, garden[0]), null);
+assert.equal(RUN_PUBLIC, false);
+assert.equal(runPlinthForWorld('authored'), null);
+assert.equal(runPlinthForWorld('authored', true), null);
+assert.equal(runPlinthForWorld('authored_meadow'), null);
+assert.equal(runPlinthForWorld('world_diy_garden'), null);
+assert.equal(
+  gardenRunId(GARDEN_RUN_PLINTH.x, GARDEN_RUN_PLINTH.z, 8, GARDEN_RUN_PLINTH),
+  GARDEN_RUN_PLINTH.id,
+);
+assert.equal(gardenRunId(GARDEN_RUN_PLINTH.x, GARDEN_RUN_PLINTH.z, 46, GARDEN_RUN_PLINTH), null);
 const gardenLeft = garden.slice(0, 2);
 assert.equal(refillGardenMounds(gardenLeft).length, GARDEN_CRYSTAL_COUNT);

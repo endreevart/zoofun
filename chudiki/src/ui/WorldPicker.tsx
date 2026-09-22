@@ -13,6 +13,7 @@ import {
   ownedConstruction,
   pickerKinds,
   pickerPreview,
+  shopKinds,
   worldsForPicker,
   emptyIslandLead,
   newIslandHint,
@@ -86,7 +87,8 @@ function payLabel(deal: MoneyDeal): string {
 
 export function WorldPicker({ worlds, onOpen, onError, onVitrine, onPlaza }: Props) {
   const preview = previewFromWindow();
-  const kinds = pickerKinds(preview === 'kinds');
+  const freeKinds = pickerKinds(preview === 'kinds');
+  const kinds = shopKinds(preview === 'kinds');
   const listed = worldsForPicker(worlds, preview);
   const playable = preview === 'empty' ? listed : withFreeArcadeGarden(listed);
   const construction = ownedConstruction(playable, kinds);
@@ -111,6 +113,7 @@ export function WorldPicker({ worlds, onOpen, onError, onVitrine, onPlaza }: Pro
   const paying = useRef(false);
   const checkout = useRef(createCheckoutPrefetch());
   const empty = extraIslands.length === 0;
+  const manyFree = freeKinds.length > 1;
   const manyReady = kinds.length > 1;
   const showTopBuy = manyReady && !empty;
   const deal = buyDeal(kinds, offers, quotes);
@@ -282,17 +285,17 @@ export function WorldPicker({ worlds, onOpen, onError, onVitrine, onPlaza }: Pro
             <header className="worlds-head">
               <img className="worlds-head-icon" src={assetUrl('/ui/worlds/compass.png')} alt="" />
               <div>
-                <h2 className="worlds-title">{manyReady ? 'Готовые миры' : 'Готовый мир'}</h2>
+                <h2 className="worlds-title">{manyFree ? 'Готовые миры' : 'Готовый мир'}</h2>
                 <p className="worlds-lead">
-                  {manyReady ? 'Бесплатные приключения' : 'Бесплатное приключение'}
+                  {manyFree ? 'Бесплатные приключения' : 'Бесплатное приключение'}
                 </p>
               </div>
             </header>
-            <div className={`worlds-ready${manyReady ? ' is-many' : ''}${kinds.length >= 3 ? ' is-three' : ''}`}>
-              {kinds.map((kind) => (
+            <div className={`worlds-ready${manyFree ? ' is-many' : ''}${freeKinds.length >= 3 ? ' is-three' : ''}`}>
+              {freeKinds.map((kind) => (
                 <button
                   key={kind.id}
-                  className={`worlds-ready-card${manyReady ? '' : ' is-wide'}`}
+                  className={`worlds-ready-card${manyFree ? '' : ' is-wide'}`}
                   type="button"
                   onClick={() => openWorld(kind.authoredId || WORLD_AUTHORED, isPreviewKind(kind))}
                 >

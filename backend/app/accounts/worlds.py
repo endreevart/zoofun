@@ -17,6 +17,7 @@ from app.worlds import (
     GRASS_MODELS,
     WORLD_DIY_GARDEN,
     is_diy_instance,
+    is_retired_world,
     is_world_sku,
     kind_for_sku,
     mint_instance_id,
@@ -100,7 +101,13 @@ def worlds_of_parent(parent: ParentRow) -> list[GardenWorld]:
     return garden_worlds_of(parent.owned_worlds)
 
 
+def public_worlds_of_parent(parent: ParentRow) -> list[GardenWorld]:
+    return [item for item in worlds_of_parent(parent) if not is_retired_world(item.id, item.sku)]
+
+
 def parent_owns_world(parent: ParentRow, world_id: str) -> bool:
+    if is_retired_world(world_id):
+        return False
     return any(item.id == world_id for item in worlds_of_parent(parent))
 
 

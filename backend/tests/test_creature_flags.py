@@ -31,7 +31,7 @@ def test_meadow_flags_and_still() -> None:
             "lastPosition": {"x": 1.5, "z": -3.0},
         }
     )
-    assert flags["world_id"] == WORLD_AUTHORED_MEADOW
+    assert flags["world_id"] == WORLD_AUTHORED
     assert flags["kind_id"] == "critter"
     assert flags["origin"] == "drawing"
     assert flags["hatch_job_id"] == "job-1"
@@ -71,7 +71,7 @@ def test_persist_writes_still_file() -> None:
 def test_apply_creature_flags_sets_row() -> None:
     row = SimpleNamespace(payload={"spec": {"id": "x", "worldId": WORLD_AUTHORED_MEADOW}})
     apply_creature_flags(row)
-    assert row.world_id == WORLD_AUTHORED_MEADOW
+    assert row.world_id == WORLD_AUTHORED
     assert row.painted is False
     assert row.has_still is False
 

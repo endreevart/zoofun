@@ -16,7 +16,10 @@ import { LayoutStudio, type LayoutKind } from './interaction/LayoutStudio';
 import { PostFx } from './render/PostFx';
 import { lookForShell, quality } from './render/quality';
 import { Sparkles } from './effects/Sparkles';
+import { EmotePuff } from './effects/EmotePuff';
 import { getIslandAudio } from './audio/AudioBus';
+import { assetUrl } from '../assetUrl';
+import { PLAZA_EMOTES, plazaEmoteSrc, type PlazaEmoteId } from './plaza/plazaCopy';
 import { claimCueOnce } from './audio/mix';
 import { renderCatalogThumbs } from './assets/catalogThumbs';
 import { captureRosterThumbs } from './assets/rosterThumbs';
@@ -44,7 +47,8 @@ import { joyFromHearts } from './visits/joy';
 import { mayWriteFamilyZoo } from './visits/guestPersist';
 import { CrystalField } from './garden/crystalField';
 import { ChestField } from './garden/chestField';
-import { gardenChestId, gardenSmashId, type PlazaMound, type PlazaTicket } from './plaza/plazaDig';
+import { RunPlinthField } from './garden/runPlinth';
+import { gardenChestId, gardenRunId, gardenSmashId, type PlazaMound, type PlazaTicket } from './plaza/plazaDig';
 
 export type CareState = {
   joy: number;
@@ -63,6 +67,8 @@ export type GameCallbacks = {
   onNearCrystal?(id: string | null): void;
   /** Close enough to open the daily ЗУФАН chest. */
   onNearChest?(id: string | null): void;
+  /** Close enough to start the lawn jump-run. */
+  onNearRun?(id: string | null): void;
 };
 
 export type GameStartOptions = {
@@ -104,6 +110,9 @@ export class Game {
   private planetBackdrop: THREE.Object3D | null = null;
   private postFx!: PostFx;
   private sparkles = new Sparkles();
+  private emotePuff = new EmotePuff();
+  private emoteMaps = new Map<string, THREE.Texture>();
+  private emoteLoader = new THREE.TextureLoader();
   private feeding = new FeedingDirector();
   private lastJoy = -1;
   private lastFeeding = false;
@@ -117,6 +126,9 @@ export class Game {
   private chests: ChestField | null = null;
   private chest: PlazaMound | null = null;
   private lastNearChest: string | null | undefined;
+  private runPlinths: RunPlinthField | null = null;
+  private runMound: PlazaMound | null = null;
+  private lastNearRun: string | null | undefined;
   private held = false;
 
   private creatures = new Map<string, Chudik>();
@@ -192,6 +204,7 @@ export class Game {
     // 46 degrees is the 24 mm lens the reviewed Cycles frame was composed on.
     this.camera = new THREE.PerspectiveCamera(HERO_FOV, 1, 0.4, 1400);
     this.scene.add(this.sparkles.mesh);
+    this.preloadEmotes();
 
     this.nameplate = document.createElement('div');
     this.nameplate.className = 'nameplate';
@@ -310,6 +323,9 @@ export class Game {
     this.chests = new ChestField((x, z) => this.world.heightAt(x, z));
     this.world.root.add(this.chests.group);
     if (this.chest) this.chests.setChest(this.chest);
+    this.runPlinths = new RunPlinthField((x, z) => this.world.heightAt(x, z));
+    this.world.root.add(this.runPlinths.group);
+    if (this.runMound) this.runPlinths.setMound(this.runMound);
     this.scene.add(this.world.root);
     this.scene.fog = this.world.root.userData.fog as THREE.FogExp2;
     this.planetCore = this.world.root.getObjectByName('planet-core') ?? null;
@@ -982,6 +998,52 @@ export class Game {
     this.rig.setWalk(forward, right);
   }
 
+  /** Same pictograms as the shared lawn. Local puff only — no plaza post. */
+  playEmote(id: string, kind: PlazaEmoteId): void {
+    const chudik = this.creatures.get(id);
+    if (!chudik || chudik.isHatching) return;
+    chudik.react();
+    this.audio.playSfx(kind);
+    this.withEmoteMap(kind, (map) => {
+      const live = this.creatures.get(id);
+      if (!live) return;
+      const origin = live.position.clone();
+      origin.y += live.height * 0.95;
+      const power = THREE.MathUtils.clamp(live.height / 1.5, 0.55, 1.25);
+      this.emotePuff.burst(this.scene, map, origin, power);
+    });
+  }
+
+  private preloadEmotes() {
+    for (const item of PLAZA_EMOTES) {
+      this.emoteLoader.load(assetUrl(item.src), (texture) => {
+        if (this.disposed) {
+          texture.dispose();
+          return;
+        }
+        texture.colorSpace = THREE.SRGBColorSpace;
+        this.emoteMaps.set(item.id, texture);
+      });
+    }
+  }
+
+  private withEmoteMap(kind: PlazaEmoteId, then: (map: THREE.Texture) => void) {
+    const ready = this.emoteMaps.get(kind);
+    if (ready) {
+      then(ready);
+      return;
+    }
+    this.emoteLoader.load(assetUrl(plazaEmoteSrc(kind)), (texture) => {
+      if (this.disposed) {
+        texture.dispose();
+        return;
+      }
+      texture.colorSpace = THREE.SRGBColorSpace;
+      this.emoteMaps.set(kind, texture);
+      then(texture);
+    });
+  }
+
   /** Makes a creature react and speak, as if tapped. */
   poke(id: string): void {
     const chudik = this.creatures.get(id);
@@ -1042,6 +1104,13 @@ export class Game {
     this.chests?.setChest(this.chest);
     this.lastNearChest = undefined;
     this.emitNearChest();
+  }
+
+  setRunPlinth(mound: PlazaMound | null) {
+    this.runMound = mound;
+    this.runPlinths?.setMound(this.runMound);
+    this.lastNearRun = undefined;
+    this.emitNearRun();
   }
 
   lookAtChest() {
@@ -1196,9 +1265,11 @@ export class Game {
     this.rig.update(dt);
     this.world.update(this.elapsed);
     this.sparkles.update(dt);
+    this.emotePuff.update(dt);
     this.joyAir?.update(dt);
     this.crystals?.update(this.elapsed);
     this.chests?.update(this.elapsed);
+    this.runPlinths?.update(this.elapsed);
 
     // The stylized shading and the light shafts both need the key light
     // expressed relative to this frame's camera.
@@ -1245,6 +1316,7 @@ export class Game {
     this.emitCare();
     this.emitNearCrystal();
     this.emitNearChest();
+    this.emitNearRun();
 
     this.updateNameplate(dt);
     if (this.mobileShadowCadence > 0) {
@@ -1315,6 +1387,29 @@ export class Game {
     if (id === this.lastNearChest) return;
     this.lastNearChest = id;
     this.callbacks.onNearChest?.(id);
+  }
+
+  private emitNearRun() {
+    if (!this.rig || !this.runMound) {
+      if (this.lastNearRun) {
+        this.lastNearRun = null;
+        this.callbacks.onNearRun?.(null);
+      }
+      return;
+    }
+    let x = this.rig.lookX;
+    let z = this.rig.lookZ;
+    if (this.drivenId) {
+      const driver = this.creatures.get(this.drivenId);
+      if (driver) {
+        x = driver.position.x;
+        z = driver.position.z;
+      }
+    }
+    const id = gardenRunId(x, z, this.rig.orbitDistance, this.runMound);
+    if (id === this.lastNearRun) return;
+    this.lastNearRun = id;
+    this.callbacks.onNearRun?.(id);
   }
 
   private emitCare(force = false) {
@@ -1482,11 +1577,16 @@ export class Game {
     this.creatures.clear();
     this.album.clear();
     this.sparkles.dispose();
+    this.emotePuff.dispose();
+    for (const map of this.emoteMaps.values()) map.dispose();
+    this.emoteMaps.clear();
     this.joyAir?.dispose();
     this.crystals?.dispose();
     this.crystals = null;
     this.chests?.dispose();
     this.chests = null;
+    this.runPlinths?.dispose();
+    this.runPlinths = null;
     this.world?.dispose();
     this.stopTvFeed();
     this.audio.setGardenPaused(true);

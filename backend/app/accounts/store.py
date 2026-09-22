@@ -24,7 +24,7 @@ from app.accounts.creatures import (
 )
 from app.accounts.passwords import hash_password, verify_password
 from app.accounts.stills import still_quota, still_remaining
-from app.accounts.worlds import GardenWorld, worlds_of_parent
+from app.accounts.worlds import GardenWorld
 from app.ops.log import write_log
 from app.persistence.db import session
 from app.persistence.models import (
@@ -37,7 +37,12 @@ from app.persistence.models import (
     WorldRow,
     WorldTicketRow,
 )
-from app.plaza.tickets import TICKETS_PER_DAY, WORLD_TICKETS_PER_DAY, plaza_day
+from app.plaza.tickets import (
+    FAMILY_TICKET_WORLD,
+    TICKETS_PER_DAY,
+    WORLD_TICKETS_PER_DAY,
+    plaza_day,
+)
 
 _CHILDREN = selectinload(ParentRow.children)
 
@@ -130,7 +135,9 @@ def _nickname_from_email(email: str) -> str:
 
 def _parent_from_row(row: ParentRow) -> ParentAccount:
     children = [ChildProfile(id=child.id, nickname=child.nickname) for child in row.children]
-    worlds = worlds_of_parent(row)
+    from app.accounts.worlds import public_worlds_of_parent
+
+    worlds = public_worlds_of_parent(row)
     return ParentAccount(
         id=row.id,
         email=row.email,
@@ -145,6 +152,11 @@ def _parent_from_row(row: ParentRow) -> ParentAccount:
         owned_worlds=[item.id for item in worlds],
         worlds=worlds,
     )
+
+
+def _family_tickets_used(db, parent_id: str, day: str) -> int:
+    rows = db.scalars(select(WorldTicketRow).where(WorldTicketRow.parent_id == parent_id)).all()
+    return sum(int(row.ticket_used or 0) for row in rows if (row.ticket_day or "") == day)
 
 
 class AccountStore:
@@ -165,12 +177,14 @@ class AccountStore:
 
     def ensure_arcade_garden(self, parent_id: str) -> ParentAccount | None:
         from app.accounts.worlds import ensure_arcade_garden
+        from app.garden.retire import evacuate_retired_worlds
 
         with session() as db:
             row = db.get(ParentRow, parent_id, options=[_CHILDREN])
             if row is None:
                 return None
             ensure_arcade_garden(row)
+            evacuate_retired_worlds(row)
             db.flush()
             return _parent_from_row(row)
 
@@ -789,22 +803,33 @@ class AccountStore:
         )
         return account
 
-    def world_tickets_left(self, parent_id: str, world_id: str) -> int:
+    def world_tickets_left(self, parent_id: str, world_id: str | None = None) -> int:
+        del world_id
         day = plaza_day()
         with session() as db:
-            row = db.get(WorldTicketRow, (parent_id, world_id))
-            if row is None or (row.ticket_day or "") != day:
-                return WORLD_TICKETS_PER_DAY
-            return max(0, WORLD_TICKETS_PER_DAY - int(row.ticket_used or 0))
+            return max(0, WORLD_TICKETS_PER_DAY - _family_tickets_used(db, parent_id, day))
 
     def claim_world_credit(self, parent_id: str, world_id: str) -> ParentAccount | None:
         day = plaza_day()
         with session() as db:
-            row = db.get(WorldTicketRow, (parent_id, world_id), with_for_update=True)
+            parent = db.get(ParentRow, parent_id, with_for_update=True, options=[_CHILDREN])
+            if parent is None:
+                raise ValueError("missing_parent")
+            rows = db.scalars(
+                select(WorldTicketRow)
+                .where(WorldTicketRow.parent_id == parent_id)
+                .with_for_update()
+            ).all()
+            used = sum(
+                int(row.ticket_used or 0) for row in rows if (row.ticket_day or "") == day
+            )
+            if used >= WORLD_TICKETS_PER_DAY:
+                return None
+            row = next((item for item in rows if item.world_id == FAMILY_TICKET_WORLD), None)
             if row is None:
                 row = WorldTicketRow(
                     parent_id=parent_id,
-                    world_id=world_id,
+                    world_id=FAMILY_TICKET_WORLD,
                     ticket_day=day,
                     ticket_used=0,
                 )
@@ -813,11 +838,6 @@ class AccountStore:
             if (row.ticket_day or "") != day:
                 row.ticket_day = day
                 row.ticket_used = 0
-            if int(row.ticket_used or 0) >= WORLD_TICKETS_PER_DAY:
-                return None
-            parent = db.get(ParentRow, parent_id, with_for_update=True, options=[_CHILDREN])
-            if parent is None:
-                raise ValueError("missing_parent")
             row.ticket_used = int(row.ticket_used or 0) + 1
             parent.plaza_credit_at = time.time()
             parent.quota_total += 1

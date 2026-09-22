@@ -12,7 +12,7 @@ Families asked to put a child's own drawing onto the lawn, not only catalog GLBs
 ## Decision
 
 1. **SKU** `plaza_toy_1`, seed **59 ₽**, T-Bank, parent-session only. Not a generation pack (D-024), not a world (D-020 / D-021). Settlement increments `plaza_toy_quota` by one. It must not raise `quota_total` or `still_used`.
-2. **Result** is a garden object: OpenRouter still first, then Tripo GLB (same 3.0 → 2.5 → Meshy 7 chain as a Zufik). No creature row, no Revive. Placement is the family's DIY layout JSON (`world_diy_garden` / meadow / grove), not the shared lawn while `PLAZA_PUBLIC` is false.
+2. **Result** is a garden object: OpenRouter still first, then Tripo GLB (same 3.0 → 2.5 → Meshy 7 chain as a Zufik). No creature row, no Revive. Placement is the family's DIY layout JSON (`world_diy_garden`), not the shared lawn while `PLAZA_PUBLIC` is false.
 3. **One purchase = one toy** in the family tray «Моё». The child may place as many copies of that toy as the DIY prop cap allows. Delete of a stamp does not refund the 59 ₽.
 4. **Caps.** Ten toys per family (`plaza_toy_used` ≤ 10). Copies count toward the DIY garden cap **258**. Checkout is refused at ten purchased slots.
 5. **Who edits.** Catalog stamps in a DIY garden stay child-owned. A `toy_*` stamp is that family's.

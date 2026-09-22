@@ -13,7 +13,7 @@ from app.accounts.creatures import is_seeded_resident
 from app.accounts.worlds import parent_owns_world, read_diy_layout
 from app.persistence.db import session
 from app.persistence.models import ChildRow, CreatureRow, WorldRow, ZooHeartRow, ZooShareRow
-from app.worlds import home_world_id, is_diy_instance, lawn_cover, lawn_title
+from app.worlds import home_world_id, is_diy_instance, is_retired_world, lawn_cover, lawn_title
 
 _VISITOR = re.compile(r"^[A-Za-z0-9_-]{8,80}$")
 _SHARE = re.compile(r"^[A-Za-z0-9_-]{6,24}$")
@@ -219,12 +219,13 @@ def snapshot(share_id: str) -> dict[str, Any] | None:
     share = find_share(token)
     if share is None:
         return None
-    rows = _creatures_on_lawn(share.parent_id, share.world_id)
+    home = _home(share.world_id)
+    rows = _creatures_on_lawn(share.parent_id, home)
     zoo_hearts, creature_hearts, joy = _counts(share.id)
     props: list[dict[str, Any]] = []
-    if is_diy_instance(share.world_id):
+    if is_diy_instance(home):
         try:
-            layout = read_diy_layout(share.parent_id, share.world_id)
+            layout = read_diy_layout(share.parent_id, home)
             raw = layout.get("props")
             if isinstance(raw, list):
                 props = [item for item in raw if isinstance(item, dict)]
@@ -241,9 +242,9 @@ def snapshot(share_id: str) -> dict[str, Any] | None:
     return {
         "id": share.id,
         "code": int(share.code or 0),
-        "world_id": share.world_id,
-        "title": _title(share.parent_id, share.world_id),
-        "diy": is_diy_instance(share.world_id),
+        "world_id": home,
+        "title": _title(share.parent_id, home),
+        "diy": is_diy_instance(home),
         "props": props,
         "postcard": postcard,
         "hearts": zoo_hearts,
@@ -277,6 +278,8 @@ def _vitrine_fresh() -> list[dict[str, Any]]:
         living[key] = living.get(key, 0) + 1
     cards: list[dict[str, Any]] = []
     for share in shares:
+        if is_retired_world(share.world_id):
+            continue
         home = _home(share.world_id)
         key = (share.parent_id, home)
         beasts = living.get(key, 0)

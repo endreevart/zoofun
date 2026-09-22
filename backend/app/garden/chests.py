@@ -13,8 +13,8 @@ from typing import Any
 
 from sqlalchemy import select
 
-from app.accounts.worlds import owned_worlds_of
 from app.garden import crystals
+from app.garden.islands import family_islands
 from app.persistence.db import session
 from app.persistence.models import (
     ParentRow,
@@ -23,7 +23,6 @@ from app.persistence.models import (
     ZufanDiscoveryRow,
 )
 from app.plaza.tickets import plaza_day
-from app.worlds import ISLAND_KINDS, is_crystal_world
 
 logger = logging.getLogger(__name__)
 
@@ -92,18 +91,7 @@ def seed_catalog(db) -> None:
 
 
 def hunt_worlds(parent: ParentRow | None) -> list[str]:
-    worlds: list[str] = []
-    seen: set[str] = set()
-    for kind in ISLAND_KINDS:
-        if kind.authored_id not in seen:
-            seen.add(kind.authored_id)
-            worlds.append(kind.authored_id)
-    if parent is not None:
-        for world_id in owned_worlds_of(parent.owned_worlds):
-            if world_id not in seen and is_crystal_world(world_id):
-                seen.add(world_id)
-                worlds.append(world_id)
-    return worlds
+    return family_islands(None if parent is None else parent.owned_worlds)
 
 
 def pick_world(worlds: list[str]) -> str:

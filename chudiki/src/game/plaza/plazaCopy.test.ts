@@ -29,6 +29,7 @@ import {
   PLAZA_TOY_WAIT,
   PLAZA_WALK,
   plazaEnterLabel,
+  plazaEmoteSrc,
   plazaLoadRadius,
   plazaOnlineLabel,
   plazaPickMode,
@@ -108,6 +109,8 @@ assert.deepEqual(
   PLAZA_EMOTES.map((item) => item.id),
   ['hello', 'hooray', 'wow', 'love', 'laugh', 'play'],
 );
+assert.equal(plazaEmoteSrc('love'), '/plaza/reactions/love.png');
+assert.equal(plazaEmoteSrc('nope'), PLAZA_EMOTES[0].src);
 
 assert.equal(PLAZA_PICK_TITLE, 'С кем пойдёшь гулять?');
 assert.equal(PLAZA_TOY_WAIT, 'Красим штуку');

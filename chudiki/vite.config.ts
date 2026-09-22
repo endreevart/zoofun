@@ -35,6 +35,9 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: true,
     hmr: false,
+    headers: {
+      'Cache-Control': 'no-store',
+    },
     watch: {
       ignored: ['**/public/models/**', '**/*.glb'],
     },

@@ -1,4 +1,4 @@
-"""Personal crystals on a family island. Which ones pay is never sent to the client (D-030)."""
+"""Personal crystals on one random family island. Tickets are per family (D-030)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import random
+import secrets
 import threading
 import time
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from typing import Any
 
 from app.plaza.tickets import plaza_day
 from app.settings import get_settings
+from app.worlds import WORLD_AUTHORED
 
 COUNT = 5
 PRIZE_COUNT = 2
@@ -30,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _hunts: dict[str, Hunt] = {}
+_hosts: dict[str, str] = {}
 _redis = None
 
 
@@ -54,10 +57,12 @@ def reset_crystals() -> None:
     global _redis
     with _lock:
         _hunts.clear()
+        _hosts.clear()
     if get_settings().use_celery:
         try:
             client = _redis_client()
             keys = list(client.scan_iter("garden:hunt:*"))
+            keys.extend(client.scan_iter("garden:host:*"))
             if keys:
                 client.delete(*keys)
         except Exception:
@@ -91,6 +96,50 @@ def hunt_ttl_seconds(now: float | None = None) -> int:
 
 def hunt_key(parent_id: str, world_id: str, day: str | None = None) -> str:
     return f"{parent_id}:{world_id}:{(day or plaza_day())}"
+
+
+def host_key(parent_id: str, day: str | None = None) -> str:
+    return f"{parent_id}:{(day or plaza_day())}"
+
+
+def _redis_host_name(key: str) -> str:
+    return f"garden:host:{key}"
+
+
+def _load_host(key: str) -> str | None:
+    if _use_redis():
+        try:
+            value = _redis_client().get(_redis_host_name(key))
+        except Exception:
+            logger.warning("garden host redis get failed")
+            return None
+        return str(value) if value else None
+    with _lock:
+        return _hosts.get(key)
+
+
+def _save_host(key: str, world_id: str) -> None:
+    if _use_redis():
+        try:
+            _redis_client().set(_redis_host_name(key), world_id, ex=hunt_ttl_seconds())
+        except Exception:
+            logger.warning("garden host redis set failed")
+        return
+    with _lock:
+        _hosts[key] = world_id
+
+
+def hunt_host(parent_id: str, worlds: list[str]) -> str:
+    """One random family island for today's crystal hunt. Stable until Moscow midnight."""
+    if not worlds:
+        return WORLD_AUTHORED
+    key = host_key(parent_id)
+    stored = _load_host(key)
+    if stored in worlds:
+        return stored
+    picked = secrets.choice(worlds)
+    _save_host(key, picked)
+    return picked
 
 
 def _point(rng: random.Random) -> tuple[float, float]:

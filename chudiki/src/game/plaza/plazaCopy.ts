@@ -14,6 +14,10 @@ export const PLAZA_EMOTES = [
 
 export type PlazaEmoteId = (typeof PLAZA_EMOTES)[number]['id'];
 
+export function plazaEmoteSrc(kind: string): string {
+  return PLAZA_EMOTES.find((item) => item.id === kind)?.src ?? PLAZA_EMOTES[0].src;
+}
+
 /** Walkable radius and the grass disk diameter, in metres. */
 export const PLAZA_WALK = 280;
 export const PLAZA_PLANE = 960;

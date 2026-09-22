@@ -17,6 +17,7 @@ from app.crm.queries import creature_image, creature_model_bytes
 from app.crm.queries import creature_postcard as postcard_bytes
 from app.garden import chests as garden_chests
 from app.garden import crystals as garden_crystals
+from app.garden.islands import family_islands
 from app.persistence.db import session
 from app.persistence.models import ParentRow
 from app.worlds import WORLD_AUTHORED, WORLD_DIY_GARDEN, is_crystal_world, kind_for_world_id
@@ -72,6 +73,10 @@ class CrystalDigIn(BaseModel):
 class ChestOpenIn(BaseModel):
     world_id: str = WORLD_AUTHORED
     id: str = Field(min_length=1, max_length=32)
+
+
+def _family_crystal_host(parent: ParentAccount) -> str:
+    return garden_crystals.hunt_host(parent.id, family_islands(parent.owned_worlds))
 
 
 def _crystal_hunt_world(parent_id: str, world_id: str) -> str:
@@ -269,9 +274,13 @@ async def read_world_crystals(
 ) -> dict:
     parent, _child = pair
     dest = _crystal_hunt_world(parent.id, world_id)
-    left = store.world_tickets_left(parent.id, dest)
+    left = store.world_tickets_left(parent.id)
+    host = _family_crystal_host(parent)
+    mounds: list[dict[str, Any]] = []
+    if dest == host:
+        mounds = garden_crystals.public_mounds(parent.id, dest, allow_prize=left > 0)
     return {
-        "mounds": garden_crystals.public_mounds(parent.id, dest, allow_prize=left > 0),
+        "mounds": mounds,
         "tickets_left": left,
     }
 
@@ -283,7 +292,10 @@ async def dig_world_crystal(
 ) -> dict:
     parent, child = pair
     dest = _crystal_hunt_world(parent.id, body.world_id)
-    left = store.world_tickets_left(parent.id, dest)
+    host = _family_crystal_host(parent)
+    if dest != host:
+        raise HTTPException(status_code=404, detail="no_mound")
+    left = store.world_tickets_left(parent.id)
     kind, mounds, x, z = garden_crystals.smash(
         parent.id, dest, body.id, allow_prize=left > 0
     )
@@ -309,7 +321,7 @@ async def dig_world_crystal(
         "remaining": remaining,
         "mounds": mounds,
         "ticket": ticket,
-        "tickets_left": store.world_tickets_left(parent.id, dest),
+        "tickets_left": store.world_tickets_left(parent.id),
     }
 
 

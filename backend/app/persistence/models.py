@@ -514,6 +514,7 @@ class PlazaMetaRow(Base):
 
 
 class WorldTicketRow(Base):
+    """Family crystal tickets for one Moscow day. `world_id` `*` is the family pool (D-030)."""
     __tablename__ = "world_tickets"
 
     parent_id: Mapped[str] = mapped_column(String(32), primary_key=True)

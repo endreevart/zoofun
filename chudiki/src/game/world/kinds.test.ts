@@ -5,6 +5,7 @@ import {
   ISLAND_KINDS,
   MEADOW_KIND,
   WORLD_AUTHORED,
+  WORLD_AUTHORED_MEADOW,
   WORLD_DIY_GROVE,
   WORLD_DIY_MEADOW,
   WORLD_DIY_SKU,
@@ -21,6 +22,7 @@ import {
   PREVIEW_COVE_KIND,
   pickerKinds,
   pickerPreview,
+  shopKinds,
   worldsForPicker,
   ownedConstruction,
   newIslandHint,
@@ -29,6 +31,7 @@ import {
   STUDIO_MEADOW_KIND,
   islandModelForShell,
   isStudioKind,
+  isRetiredWorld,
   usesChildBuild,
 } from './kinds.ts';
 
@@ -66,16 +69,14 @@ assert.equal(nextInstanceTitle('Бухта', ['Бухта 1', 'Бухта 3']), 
 const rows = ownedKindRows([
   { id: WORLD_DIY_SKU, title: 'Сад 1', sku: WORLD_DIY_SKU },
 ]);
-assert.equal(rows.length, 3);
+assert.equal(rows.length, 1);
 assert.equal(rows[0].kind.id, GARDEN_KIND.id);
 assert.equal(rows[0].instances[0].title, 'Сад 1');
-assert.equal(rows[1].kind.id, MEADOW_KIND.id);
-assert.equal(rows[1].instances.length, 0);
-assert.equal(rows[2].kind.id, GROVE_KIND.id);
-assert.equal(rows[2].instances.length, 0);
 
-assert.equal(pickerKinds(false).length, 3);
-assert.equal(pickerKinds(true).map((item) => item.id).join(','), 'garden,meadow,grove,cove');
+assert.equal(pickerKinds(false).length, 1);
+assert.equal(pickerKinds(true).map((item) => item.id).join(','), 'garden,cove');
+assert.equal(shopKinds(false).map((item) => item.id).join(','), 'garden,meadow,grove');
+assert.equal(shopKinds(true).map((item) => item.id).join(','), 'garden,meadow,grove,cove');
 const previewRows = ownedKindRows(
   [
     { id: WORLD_DIY_SKU, title: 'Сад 1', sku: WORLD_DIY_SKU },
@@ -83,9 +84,9 @@ const previewRows = ownedKindRows(
   ],
   pickerKinds(true),
 );
-assert.equal(previewRows.length, 4);
-assert.equal(previewRows[3].kind.id, 'cove');
-assert.equal(previewRows[3].instances[0].title, 'Бухта 1');
+assert.equal(previewRows.length, 2);
+assert.equal(previewRows[1].kind.id, 'cove');
+assert.equal(previewRows[1].instances[0].title, 'Бухта 1');
 
 assert.equal(GARDEN_KIND.styleTitle, 'Волшебный лес');
 assert.equal(pickerPreview('?preview=kinds'), 'kinds');
@@ -130,8 +131,13 @@ assert.equal(usesChildBuild(WORLD_DIY_MEADOW), true);
 assert.equal(usesChildBuild(WORLD_DIY_GROVE), true);
 assert.equal(usesChildBuild(STUDIO_MEADOW_KIND.authoredId), false);
 assert.equal(usesChildBuild(WORLD_AUTHORED), false);
-assert.equal(pickerKinds(false).some((item) => item.id === 'meadow'), true);
-assert.equal(pickerKinds(false).some((item) => item.id === 'grove'), true);
+assert.equal(pickerKinds(false).some((item) => item.id === 'meadow'), false);
+assert.equal(pickerKinds(false).some((item) => item.id === 'grove'), false);
+assert.equal(shopKinds(false).some((item) => item.id === 'meadow'), true);
+assert.equal(shopKinds(false).some((item) => item.id === 'grove'), true);
+assert.equal(isRetiredWorld(WORLD_AUTHORED_MEADOW), true);
+assert.equal(isRetiredWorld(WORLD_DIY_GROVE), false);
+assert.equal(isRetiredWorld(WORLD_DIY_SKU), false);
 assert.equal(isConstructionSku(GROVE_KIND.constructionSku), true);
 assert.equal(kindOfWorld(GROVE_KIND.authoredId).id, 'grove');
 assert.equal(kindOfWorld(GROVE_KIND.authoredId).shell, 'grove');

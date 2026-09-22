@@ -24,13 +24,13 @@ The active **product** target is the public web zoo. Unity iteration gates in `d
 
 ## Explicitly excluded from this pilot
 
-- Subscriptions, StoreKit, App Store IAP, advertising (worlds: D-020 / D-021 construction copies, bought as many times as the parent wants). Garden, meadow, and grove (Куболесье) are the shipped kinds.
+- Subscriptions, StoreKit, App Store IAP, advertising (worlds: D-020 / D-021 construction copies, bought as many times as the parent wants). Garden is the free ready world. Meadow and grove stay as paid copies.
 - Foreign acquiring and non-RUB prices (T-Bank / RUB only for now).
 - Friends, visits, gifting, leagues, public rankings, search, chat, comments, and public galleries.
 - Server-side social moderation workflows required only by user-to-user publishing.
 - Advertising, loot boxes, random paid rewards, and paid stat advantages.
-- Petting, general mini-games, quests, stories, and multi-character narratives.
-- Multiple biomes as player-sculpted terrain. Children may stamp catalog props on paid empty island shells (D-020 / D-021); they do not sculpt the ground. Garden, meadow, and grove are authored kinds. A later biome is a new kind with its own assets.
+- Petting, general mini-games, quests, stories, and multi-character narratives. Care wash/feed 2D scenes stay. One full-screen jump-run on the free garden (D-037) is the other exception; it is not a suite and does not grant credits. The public lawn hides that plinth for now (`RUN_PUBLIC`).
+- Multiple biomes as player-sculpted terrain. Children may stamp catalog props on paid empty island shells (D-020 / D-021); they do not sculpt the ground. Garden is the free authored kind. A later biome is a new kind with its own assets.
 - Full automatic 3D reconstruction, arbitrary skeletal auto-rigging, and generative video sprites.
 - Android, Windows, web, visionOS, and multiplayer infrastructure.
 

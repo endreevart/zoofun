@@ -12,12 +12,12 @@ Arcade is not a mini-game. It is the zoo: the child enters an empty «Собер
 
 ## Decision
 
-1. `GET /v1/auth/me` grants the first `world_diy_garden` if the parent has none. Extra garden copies, meadow, and grove stay paid. Register still returns an empty world list so existing tests and the shop SKU remain honest.
+1. `GET /v1/auth/me` grants the first `world_diy_garden` if the parent has none. Extra garden copies stay paid. Register still returns an empty world list so existing tests and the shop SKU remain honest.
 2. Arcade is one-time training on the first `world_diy_garden`, gated by `ARCADE_PUBLIC` (off for the first prod ship). While off, families get the free garden as a normal island and the picker. DEV `?arcade` still forces the quest. After the flag is on: an unfinished quest opens that garden; after `done` it is a normal island in «Мои острова». Later garden copies are not arcade. `?studio=1` does not run arcade unless DEV `?arcade`.
 3. First pass plants five different pretty trees (`sunlit-canopy`, `blossom-tree`, `whimsywood-tree`, `lantern-leaf-tree`, `giant-tree`), one `lotus-pond`, then two houses (`mossy-burrow`, `acorn-cottage`). The DIY tray and trash stay hidden. A failed stamp plays `arcade_wrong`. «В миры» or coach leave mid-build or at settle speaks `arcade_pause` and keeps the step. Closing the hatch sheet at settle stays on that lawn, marks the quest `done`, and uses the normal pad. Worlds are rooms of one zoo: arcade is the first empty garden, not a fourth kind.
 4. No `pack_2`. After settle, unused free credit uses the normal pad and hatch; a spent free credit uses D-026 (draw → waiting paper → PackSheet `pack_1` / `pack_5`). Stylize does not start without a credit.
 5. Arcade voice lines live in `cues.ts` as `arcade_*`. Missing MP3s stay silent. No child names, no prices in the child voice.
-6. Meadow, grove, and later garden copies are not arcade worlds.
+6. Later garden copies are not arcade worlds.
 
 ## Consequences
 

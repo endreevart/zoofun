@@ -1,4 +1,6 @@
 import { kindById, type ChudikSpec } from '../game/creatures/ChudikSpec';
+import { PLAZA_EMOTES, type PlazaEmoteId } from '../game/plaza/plazaCopy';
+import { assetUrl } from '../assetUrl';
 import { CreatureMenuIcon } from './CreatureMenuIcon';
 
 type Props = {
@@ -12,10 +14,12 @@ type Props = {
   onTeleport: (() => void) | null;
   onSettings: () => void;
   onDismiss: () => void;
+  onEmote: (kind: PlazaEmoteId) => void;
 };
 
 /**
  * After a tap: walk as them, wash them, feed them, or rebuild their portrait.
+ * The same six lawn pictograms sit on top so a pre-reader can mash an emotion.
  * The gear opens the same extra settings that used to live behind a long press.
  */
 export function PilotChoice({
@@ -28,10 +32,24 @@ export function PilotChoice({
   onTeleport,
   onSettings,
   onDismiss,
+  onEmote,
 }: Props) {
   const kind = kindById(spec.kindId);
   return (
     <div className="pilot-choice" role="dialog" aria-label={spec.name}>
+      <div className="pilot-emotes" role="group" aria-label="Эмоции">
+        {PLAZA_EMOTES.map((item) => (
+          <button
+            key={item.id}
+            className="pilot-emote"
+            type="button"
+            aria-label={item.label}
+            onClick={() => onEmote(item.id)}
+          >
+            <img src={assetUrl(item.src)} alt="" draggable={false} />
+          </button>
+        ))}
+      </div>
       <div className="pilot-choice-id">
         {pic ? (
           <img className="pilot-choice-face" src={pic} alt="" />

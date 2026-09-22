@@ -12,7 +12,7 @@ from app.accounts.worlds import grant_world
 from app.commerce.skus import is_plaza_toy_sku
 from app.persistence.db import seed_packs, session
 from app.persistence.models import OperatorSessionRow, PackRow, ParentRow, PaymentRow
-from app.worlds import ISLAND_KINDS, is_world_sku
+from app.worlds import PUBLIC_ISLAND_KINDS, is_world_sku
 
 OPERATOR_SESSION_TTL = 60 * 60 * 24 * 30
 PACK_SIZES = (1, 5, 10, 15, 20)
@@ -121,9 +121,10 @@ class CommerceStore:
             if not rows:
                 seed_packs(db)
                 rows = db.scalars(select(PackRow)).all()
-            order = {item.construction_sku: i for i, item in enumerate(ISLAND_KINDS)}
+            public = {item.construction_sku for item in PUBLIC_ISLAND_KINDS}
+            order = {item.construction_sku: i for i, item in enumerate(PUBLIC_ISLAND_KINDS)}
             return sorted(
-                (_pack(row) for row in rows if is_world_sku(row.id)),
+                (_pack(row) for row in rows if row.id in public),
                 key=lambda pack: order.get(pack.id, 99),
             )
 

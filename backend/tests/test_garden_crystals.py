@@ -1,4 +1,4 @@
-"""Crystals on every family island: 5 at once, 2 tickets a day (D-030)."""
+"""Crystals on one random family island: 5 at once, 2 tickets a day for the family (D-030)."""
 
 from __future__ import annotations
 
@@ -11,9 +11,13 @@ from httpx import ASGITransport, AsyncClient
 
 from app.accounts.store import store
 from app.garden import crystals
+from app.garden.islands import family_islands
 from app.main import app
 from app.plaza.tickets import WORLD_TICKETS_PER_DAY
-from app.worlds import WORLD_AUTHORED, WORLD_AUTHORED_MEADOW, WORLD_DIY_GARDEN
+from app.worlds import (
+    WORLD_AUTHORED,
+    WORLD_DIY_GARDEN,
+)
 
 
 async def _register(client: AsyncClient, email: str) -> str:
@@ -70,15 +74,26 @@ def test_hunt_ttl_covers_moscow_night() -> None:
     assert crystals.hunt_ttl_seconds(late) == 3600
 
 
-def test_world_tickets_are_per_island() -> None:
+def test_world_tickets_are_per_family() -> None:
     first = store.register("garden-a@example.com", "secret1")
-    second_world = WORLD_AUTHORED_MEADOW
     for _ in range(WORLD_TICKETS_PER_DAY):
         assert store.claim_world_credit(first.parent_id, WORLD_AUTHORED) is not None
     assert store.claim_world_credit(first.parent_id, WORLD_AUTHORED) is None
     assert store.world_tickets_left(first.parent_id, WORLD_AUTHORED) == 0
-    assert store.claim_world_credit(first.parent_id, second_world) is not None
-    assert store.world_tickets_left(first.parent_id, second_world) == WORLD_TICKETS_PER_DAY - 1
+    assert store.claim_world_credit(first.parent_id, WORLD_DIY_GARDEN) is None
+    assert store.world_tickets_left(first.parent_id, WORLD_DIY_GARDEN) == 0
+
+
+def test_crystal_host_stays_on_one_island() -> None:
+    crystals.reset_crystals()
+    worlds = family_islands([WORLD_DIY_GARDEN])
+    first = crystals.hunt_host("p-host", worlds)
+    assert first in worlds
+    assert crystals.hunt_host("p-host", worlds) == first
+    other = [item for item in worlds if item != first]
+    assert other
+    crystals._save_host(crystals.host_key("p-gone"), "missing")
+    assert crystals.hunt_host("p-gone", worlds) in worlds
 
 
 @pytest.mark.asyncio
@@ -87,19 +102,33 @@ async def test_zoo_crystal_dig_grants_two_then_empty() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         token = await _register(client, "garden-dig@example.com")
         head = {"Authorization": f"Bearer {token}"}
-        listed = await client.get(f"/v1/zoo/crystals?world_id={WORLD_AUTHORED}", headers=head)
-        assert listed.status_code == 200
-        mounds = listed.json()["mounds"]
-        assert len(mounds) == 5
-        assert listed.json()["tickets_left"] == WORLD_TICKETS_PER_DAY
         me = await client.get("/v1/auth/me", headers=head)
         start = me.json()["remaining"]
+        owned = me.json()["owned_worlds"][0]
+        islands = [
+            WORLD_AUTHORED,
+            owned,
+        ]
+        hunts: dict[str, list] = {}
+        for world_id in islands:
+            body = await client.get(f"/v1/zoo/crystals?world_id={world_id}", headers=head)
+            assert body.status_code == 200
+            hunts[world_id] = body.json()["mounds"]
+            assert body.json()["tickets_left"] == WORLD_TICKETS_PER_DAY
+        hosts = [world_id for world_id, mounds in hunts.items() if mounds]
+        assert len(hosts) == 1
+        host = hosts[0]
+        mounds = hunts[host]
+        assert len(mounds) == 5
+        for world_id, items in hunts.items():
+            if world_id != host:
+                assert items == []
         wins = 0
         for row in mounds:
             dug = await client.post(
                 "/v1/zoo/crystals/dig",
                 headers=head,
-                json={"world_id": WORLD_AUTHORED, "id": row["id"]},
+                json={"world_id": host, "id": row["id"]},
             )
             assert dug.status_code == 200
             body = dug.json()
@@ -115,15 +144,19 @@ async def test_zoo_crystal_dig_grants_two_then_empty() -> None:
         assert wins == WORLD_TICKETS_PER_DAY
         later = await client.get("/v1/auth/me", headers=head)
         assert later.json()["remaining"] == start + WORLD_TICKETS_PER_DAY
-        owned = later.json()["owned_worlds"][0]
-        diy = await client.get(f"/v1/zoo/crystals?world_id={owned}", headers=head)
-        assert diy.status_code == 200
-        assert len(diy.json()["mounds"]) == 5
-        meadow = await client.get(
-            f"/v1/zoo/crystals?world_id={WORLD_AUTHORED_MEADOW}",
+        leftover = await client.get(f"/v1/zoo/crystals?world_id={host}", headers=head)
+        assert leftover.status_code == 200
+        assert leftover.json()["tickets_left"] == 0
+        other = next(world_id for world_id in islands if world_id != host)
+        empty = await client.get(f"/v1/zoo/crystals?world_id={other}", headers=head)
+        assert empty.status_code == 200
+        assert empty.json()["mounds"] == []
+        missed = await client.post(
+            "/v1/zoo/crystals/dig",
             headers=head,
+            json={"world_id": other, "id": "g00000001"},
         )
-        assert meadow.status_code == 200
+        assert missed.status_code == 404
         forbidden = await client.get(
             f"/v1/zoo/crystals?world_id={WORLD_DIY_GARDEN}_nope",
             headers=head,

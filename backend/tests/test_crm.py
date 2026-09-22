@@ -534,16 +534,16 @@ async def test_crm_islands_packs_geo_and_payment_time(monkeypatch: pytest.Monkey
         assert usage.status_code == 200
         body = usage.json()
         lawns = {item["id"]: item for item in body["lawns"]}
-        assert lawns["garden"]["creatures"] >= 1
-        assert lawns["meadow"]["creatures"] >= 1
+        assert lawns["garden"]["creatures"] >= 2
+        assert lawns["meadow"]["creatures"] == 0
         assert lawns["garden"]["visits"] >= 1
-        assert lawns["meadow"]["visits"] >= 1
+        assert lawns["meadow"]["visits"] == 0
         assert lawns["garden"]["parents"] >= 1
-        assert lawns["meadow"]["parents"] >= 1
+        assert lawns["meadow"]["parents"] == 0
         assert body["island_parents"] >= 1
         assert any(item["email"] == "islands@example.com" for item in body["visitors"])
-        assert lawns["garden"]["time_sec"] >= 60
-        assert lawns["meadow"]["time_sec"] >= 30
+        assert lawns["garden"]["time_sec"] >= 90
+        assert lawns["meadow"]["time_sec"] == 0
         assert lawns["garden"]["leading"] is True
         assert lawns["meadow"]["leading"] is False
         assert lawns["grove"]["creatures"] == 0
@@ -581,7 +581,7 @@ async def test_crm_islands_packs_geo_and_payment_time(monkeypatch: pytest.Monkey
         gallery = await client.get("/v1/crm/creatures?period=0", headers=headers)
         by_spec = {item["spec_id"]: item for item in gallery.json()["items"]}
         assert by_spec["ch_garden"]["world_id"] == WORLD_AUTHORED
-        assert by_spec["ch_meadow"]["world_id"] == WORLD_AUTHORED_MEADOW
+        assert by_spec["ch_meadow"]["world_id"] == WORLD_AUTHORED
         assert by_spec["ch_diy"]["world_id"] == WORLD_DIY_GARDEN
 
         packs = await client.get("/v1/crm/packs?period=0", headers=headers)

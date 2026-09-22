@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   AUTHORED_TITLE,
   WORLD_AUTHORED,
+  WORLD_AUTHORED_MEADOW,
   WORLD_CREATURE_CAP,
   WORLD_DIY_SKU,
   countOnWorld,
@@ -41,15 +42,22 @@ assert.equal(worldIsFull(WORLD_CREATURE_CAP - 1), false);
 assert.equal(worldIsFull(WORLD_CREATURE_CAP), true);
 
 assert.deepEqual(moveDestinations(WORLD_AUTHORED, [{ id: WORLD_DIY_SKU, title: 'Сад 1' }]), [
-  { id: 'authored_meadow', title: 'Висячий луг' },
-  { id: 'authored_grove', title: 'Куболесье' },
   { id: WORLD_DIY_SKU, title: 'Сад 1' },
 ]);
 assert.deepEqual(moveDestinations(WORLD_DIY_SKU, [{ id: WORLD_DIY_SKU, title: 'Сад 1' }]), [
   { id: WORLD_AUTHORED, title: AUTHORED_TITLE },
-  { id: 'authored_meadow', title: 'Висячий луг' },
-  { id: 'authored_grove', title: 'Куболесье' },
 ]);
+assert.deepEqual(
+  moveDestinations(WORLD_AUTHORED, [
+    { id: WORLD_AUTHORED_MEADOW, title: 'Висячий луг' },
+    { id: 'world_diy_meadow', title: 'Луг 1', sku: 'world_diy_meadow' },
+    { id: WORLD_DIY_SKU, title: 'Сад 1' },
+  ]),
+  [
+    { id: 'world_diy_meadow', title: 'Луг 1', sku: 'world_diy_meadow' },
+    { id: WORLD_DIY_SKU, title: 'Сад 1' },
+  ],
+);
 assert.equal(gardenTitle(WORLD_AUTHORED, []), AUTHORED_TITLE);
 assert.equal(gardenTitle(WORLD_DIY_SKU, [{ id: WORLD_DIY_SKU, title: 'Сад 1' }]), 'Сад 1');
 assert.deepEqual(gardenById(WORLD_AUTHORED, [{ id: WORLD_DIY_SKU, title: 'Сад 1' }]), {

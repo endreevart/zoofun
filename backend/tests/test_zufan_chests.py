@@ -36,16 +36,17 @@ def test_catalog_seeds_approved_facts() -> None:
         rows = db.scalars(
             select(ZufanDiscoveryRow).where(ZufanDiscoveryRow.is_active.is_(True))
         ).all()
-    assert len(rows) >= 90
+    assert len(rows) >= 140
     assert all(row.body.strip() and row.title.strip() for row in rows)
     assert all(row.kind == "fact" for row in rows)
+    titles = {row.title for row in rows}
+    assert "Панда с «шестым пальцем»" in titles
+    assert "Цветы ждут дождя" in titles
 
 
 def test_hunt_worlds_include_authored_lawns() -> None:
     worlds = chests.hunt_worlds(None)
-    assert WORLD_AUTHORED in worlds
-    assert WORLD_AUTHORED_MEADOW in worlds
-    assert len(worlds) == 3
+    assert worlds == [WORLD_AUTHORED]
 
 
 @pytest.mark.asyncio
@@ -98,8 +99,7 @@ async def test_chest_unique_until_catalog_done(monkeypatch: pytest.MonkeyPatch) 
         assert still.json()["chest"]["id"] == chest["id"]
 
         meadow = await client.get(f"/v1/zoo/chest?world_id={WORLD_AUTHORED_MEADOW}", headers=head)
-        assert meadow.status_code == 200
-        assert meadow.json()["chest"] is None
+        assert meadow.status_code == 400
 
         opened = await client.post(
             "/v1/zoo/chest/open",
